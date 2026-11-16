@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="112" fill="#0E0E0E"/>
+  <rect x="24" y="24" width="464" height="464" rx="92" stroke="#262626" stroke-width="8"/>
+  <defs>
+    <linearGradient id="forgeGrad" x1="96" y1="96" x2="416" y2="416" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F97316"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+  </defs>
+  <path d="M152 140H360L336 196H212V240H316L294 294H212V380H152V140Z" fill="url(#forgeGrad)"/>
+  <circle cx="352" cy="340" r="36" fill="#EF4444"/>
+</svg>

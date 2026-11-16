@@ -1,0 +1,406 @@
+{
+  "entities": {
+    "UserAccountData": {
+      "title": "UserAccountData",
+      "description": "Stores the authenticated user profile, daily hydration, streak, Golden Rules, prayer check-ins, and schedule preferences.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the account owner",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name from Google Auth or profile settings",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "weightKg": {
+          "type": "number",
+          "description": "Body weight in kilograms"
+        },
+        "heightCm": {
+          "type": "number",
+          "description": "Height in centimeters"
+        },
+        "goal": {
+          "type": "string",
+          "description": "Primary fitness goal in Bahasa Indonesia",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "wakeTime": {
+          "type": "string",
+          "description": "Daily wake time HH:mm",
+          "minLength": 4,
+          "maxLength": 10
+        },
+        "sleepTime": {
+          "type": "string",
+          "description": "Daily sleep time HH:mm",
+          "minLength": 4,
+          "maxLength": 10
+        },
+        "city": {
+          "type": "string",
+          "description": "Indonesian city for Aladhan Kemenag RI prayer schedule",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "lat": {
+          "type": "number",
+          "description": "Latitude coordinate"
+        },
+        "lng": {
+          "type": "number",
+          "description": "Longitude coordinate"
+        },
+        "prayerMethod": {
+          "type": "number",
+          "description": "Aladhan prayer calculation method (20 for Kemenag RI)"
+        },
+        "dailyCalorieTarget": {
+          "type": "number",
+          "description": "Daily calorie intake target in kcal"
+        },
+        "dailyProteinTargetG": {
+          "type": "number",
+          "description": "Daily protein target in grams"
+        },
+        "dailyWaterTargetMl": {
+          "type": "number",
+          "description": "Daily water hydration target in milliliters"
+        },
+        "onboardingComplete": {
+          "type": "boolean",
+          "description": "Whether the user completed initial onboarding"
+        },
+        "guideDismissed": {
+          "type": "boolean",
+          "description": "Whether the user completed the interactive welcome guide"
+        },
+        "planMode": {
+          "type": "string",
+          "description": "Selected workout plan mode",
+          "enum": ["gym", "home"],
+          "minLength": 3,
+          "maxLength": 10
+        },
+        "waterMl": {
+          "type": "number",
+          "description": "Water consumed today in milliliters (starts at 0)"
+        },
+        "streakDays": {
+          "type": "number",
+          "description": "Consecutive Golden Rules streak days (starts at 0)"
+        },
+        "goldenRules": {
+          "type": "object",
+          "description": "Daily 5 Golden Rules completion state"
+        },
+        "prayersCompleted": {
+          "type": "object",
+          "description": "Daily 5 obligatory prayers completion state"
+        },
+        "scheduleConfig": {
+          "type": "object",
+          "description": "Wake alarm and silent notification schedule configuration"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp"
+        }
+      },
+      "required": [
+        "ownerId",
+        "displayName",
+        "weightKg",
+        "heightCm",
+        "goal",
+        "wakeTime",
+        "sleepTime",
+        "city",
+        "lat",
+        "lng",
+        "prayerMethod",
+        "dailyCalorieTarget",
+        "dailyProteinTargetG",
+        "dailyWaterTargetMl",
+        "onboardingComplete",
+        "guideDismissed",
+        "planMode",
+        "waterMl",
+        "streakDays",
+        "goldenRules",
+        "prayersCompleted",
+        "scheduleConfig",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "RunSessionDoc": {
+      "title": "RunSessionDoc",
+      "description": "A recorded GPS running session belonging to a specific user.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the runner",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Run session title",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "dateIso": {
+          "type": "string",
+          "description": "ISO date YYYY-MM-DD",
+          "minLength": 8,
+          "maxLength": 32
+        },
+        "distanceKm": {
+          "type": "number",
+          "description": "Total Haversine distance in kilometers"
+        },
+        "durationSec": {
+          "type": "number",
+          "description": "Total elapsed run duration in seconds"
+        },
+        "avgPaceSecPerKm": {
+          "type": "number",
+          "description": "Average pace in seconds per kilometer"
+        },
+        "caloriesBurned": {
+          "type": "number",
+          "description": "Estimated calories burned"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp"
+        }
+      },
+      "required": [
+        "ownerId",
+        "title",
+        "dateIso",
+        "distanceKm",
+        "durationSec",
+        "avgPaceSecPerKm",
+        "caloriesBurned",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "WorkoutLogDoc": {
+      "title": "WorkoutLogDoc",
+      "description": "A completed 3D Studio resistance or bodyweight workout session belonging to a user.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the athlete",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "exerciseId": {
+          "type": "string",
+          "description": "Exercise identifier from exerciseClipMap",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "exerciseName": {
+          "type": "string",
+          "description": "Human-readable exercise name",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "dayKey": {
+          "type": "string",
+          "description": "Day of week key (senin..minggu)",
+          "minLength": 3,
+          "maxLength": 20
+        },
+        "setsCompleted": {
+          "type": "number",
+          "description": "Number of sets completed"
+        },
+        "repsPerSet": {
+          "type": "string",
+          "description": "Repetitions per set string",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "volumeKg": {
+          "type": "number",
+          "description": "Total training volume in kilograms"
+        },
+        "durationSec": {
+          "type": "number",
+          "description": "Workout duration in seconds"
+        },
+        "dateIso": {
+          "type": "string",
+          "description": "ISO date YYYY-MM-DD",
+          "minLength": 8,
+          "maxLength": 32
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp"
+        }
+      },
+      "required": [
+        "ownerId",
+        "exerciseId",
+        "exerciseName",
+        "dayKey",
+        "setsCompleted",
+        "repsPerSet",
+        "volumeKg",
+        "durationSec",
+        "dateIso",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "NutritionLogDoc": {
+      "title": "NutritionLogDoc",
+      "description": "A logged meal with macro breakdown and AI feedback belonging to a user.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "mealName": {
+          "type": "string",
+          "description": "Meal or dish name",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "timeStr": {
+          "type": "string",
+          "description": "Time of meal HH:mm",
+          "minLength": 1,
+          "maxLength": 16
+        },
+        "dateIso": {
+          "type": "string",
+          "description": "ISO date YYYY-MM-DD",
+          "minLength": 8,
+          "maxLength": 32
+        },
+        "caloriesKcal": {
+          "type": "number",
+          "description": "Total meal calories in kcal"
+        },
+        "proteinG": {
+          "type": "number",
+          "description": "Protein in grams"
+        },
+        "carbsG": {
+          "type": "number",
+          "description": "Carbohydrates in grams"
+        },
+        "fatG": {
+          "type": "number",
+          "description": "Fat in grams"
+        },
+        "fiberG": {
+          "type": "number",
+          "description": "Dietary fiber in grams"
+        },
+        "healthScore": {
+          "type": "number",
+          "description": "Health score from 1 to 10"
+        },
+        "saran_AI": {
+          "type": "string",
+          "description": "Indonesian nutrition recommendation",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp"
+        }
+      },
+      "required": [
+        "ownerId",
+        "mealName",
+        "timeStr",
+        "dateIso",
+        "caloriesKcal",
+        "proteinG",
+        "carbsG",
+        "fatG",
+        "fiberG",
+        "healthScore",
+        "saran_AI",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserAccountData"
+      },
+      "description": "Root user account document containing profile, daily hydration, streak, Golden Rules, and prayer state."
+    },
+    "/users/{userId}/runs/{runId}": {
+      "schema": {
+        "$ref": "#/entities/RunSessionDoc"
+      },
+      "description": "User-owned subcollection of recorded GPS running sessions."
+    },
+    "/users/{userId}/workouts/{workoutId}": {
+      "schema": {
+        "$ref": "#/entities/WorkoutLogDoc"
+      },
+      "description": "User-owned subcollection of completed 3D Studio workout sessions."
+    },
+    "/users/{userId}/nutrition/{mealId}": {
+      "schema": {
+        "$ref": "#/entities/NutritionLogDoc"
+      },
+      "description": "User-owned subcollection of logged meals and AI nutrition analyses."
+    }
+  }
+}

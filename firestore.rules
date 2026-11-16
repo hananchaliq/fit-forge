@@ -1,0 +1,306 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1: Global Safety Net (Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core Primitives
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isParentUserValid(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+        get(/databases/$(database)/documents/users/$(userId)).data.ownerId == request.auth.uid;
+    }
+
+    // Nested Map Validation Helpers for UserAccountData
+    function isValidGoldenRules(rulesMap) {
+      return rulesMap is map &&
+        rulesMap.keys().hasAll(['highProtein', 'water3to4L', 'sleep7to9h', 'progressiveOverload', 'steps8to10k']) &&
+        rulesMap.keys().hasOnly(['highProtein', 'water3to4L', 'sleep7to9h', 'progressiveOverload', 'steps8to10k']) &&
+        rulesMap.highProtein is bool &&
+        rulesMap.water3to4L is bool &&
+        rulesMap.sleep7to9h is bool &&
+        rulesMap.progressiveOverload is bool &&
+        rulesMap.steps8to10k is bool;
+    }
+
+    function isValidPrayersMap(prayersMap) {
+      return prayersMap is map &&
+        prayersMap.keys().hasAll(['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya']) &&
+        prayersMap.keys().hasOnly(['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya']) &&
+        prayersMap.subuh is bool &&
+        prayersMap.dzuhur is bool &&
+        prayersMap.ashar is bool &&
+        prayersMap.maghrib is bool &&
+        prayersMap.isya is bool;
+    }
+
+    function isValidScheduleConfig(cfg) {
+      return cfg is map &&
+        cfg.keys().hasAll(['wakeAlarmEnabled', 'wakeAlarmTime', 'hydrationHourlyEnabled', 'startHour', 'endHour', 'prayerToggles']) &&
+        cfg.keys().hasOnly(['wakeAlarmEnabled', 'wakeAlarmTime', 'hydrationHourlyEnabled', 'startHour', 'endHour', 'prayerToggles']) &&
+        cfg.wakeAlarmEnabled is bool &&
+        cfg.wakeAlarmTime is string && cfg.wakeAlarmTime.size() >= 4 && cfg.wakeAlarmTime.size() <= 10 &&
+        cfg.hydrationHourlyEnabled is bool &&
+        cfg.startHour is number && cfg.startHour >= 0 && cfg.startHour <= 23 &&
+        cfg.endHour is number && cfg.endHour >= 0 && cfg.endHour <= 23 &&
+        isValidPrayersMap(cfg.prayerToggles);
+    }
+
+    // Pillar 2: Validation Blueprints (Anti-Update-Gap)
+    function isValidUserAccountData(data) {
+      return data.keys().hasAll([
+        'ownerId', 'displayName', 'weightKg', 'heightCm', 'goal',
+        'wakeTime', 'sleepTime', 'city', 'lat', 'lng', 'prayerMethod',
+        'dailyCalorieTarget', 'dailyProteinTargetG', 'dailyWaterTargetMl',
+        'onboardingComplete', 'guideDismissed', 'planMode',
+        'waterMl', 'streakDays', 'goldenRules', 'prayersCompleted', 'scheduleConfig',
+        'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'ownerId', 'displayName', 'weightKg', 'heightCm', 'goal',
+        'wakeTime', 'sleepTime', 'city', 'lat', 'lng', 'prayerMethod',
+        'dailyCalorieTarget', 'dailyProteinTargetG', 'dailyWaterTargetMl',
+        'onboardingComplete', 'guideDismissed', 'planMode',
+        'waterMl', 'streakDays', 'goldenRules', 'prayersCompleted', 'scheduleConfig',
+        'createdAt', 'updatedAt'
+      ]) &&
+      data.ownerId == request.auth.uid &&
+      isValidId(data.ownerId) &&
+      data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+      data.weightKg is number && data.weightKg >= 20 && data.weightKg <= 300 &&
+      data.heightCm is number && data.heightCm >= 80 && data.heightCm <= 250 &&
+      data.goal is string && data.goal.size() >= 1 && data.goal.size() <= 100 &&
+      data.wakeTime is string && data.wakeTime.size() >= 4 && data.wakeTime.size() <= 10 &&
+      data.sleepTime is string && data.sleepTime.size() >= 4 && data.sleepTime.size() <= 10 &&
+      data.city is string && data.city.size() >= 1 && data.city.size() <= 100 &&
+      data.lat is number && data.lat >= -90 && data.lat <= 90 &&
+      data.lng is number && data.lng >= -180 && data.lng <= 180 &&
+      data.prayerMethod is number && data.prayerMethod >= 0 && data.prayerMethod <= 99 &&
+      data.dailyCalorieTarget is number && data.dailyCalorieTarget >= 800 && data.dailyCalorieTarget <= 10000 &&
+      data.dailyProteinTargetG is number && data.dailyProteinTargetG >= 20 && data.dailyProteinTargetG <= 500 &&
+      data.dailyWaterTargetMl is number && data.dailyWaterTargetMl >= 500 && data.dailyWaterTargetMl <= 12000 &&
+      data.onboardingComplete is bool &&
+      data.guideDismissed is bool &&
+      data.planMode is string && data.planMode.size() >= 3 && data.planMode.size() <= 10 &&
+      (data.planMode == 'gym' || data.planMode == 'home') &&
+      data.waterMl is number && data.waterMl >= 0 && data.waterMl <= 20000 &&
+      data.streakDays is number && data.streakDays >= 0 && data.streakDays <= 36500 &&
+      isValidGoldenRules(data.goldenRules) &&
+      isValidPrayersMap(data.prayersCompleted) &&
+      isValidScheduleConfig(data.scheduleConfig) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidRunSessionDoc(data) {
+      return data.keys().hasAll([
+        'ownerId', 'title', 'dateIso', 'distanceKm', 'durationSec',
+        'avgPaceSecPerKm', 'caloriesBurned', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'ownerId', 'title', 'dateIso', 'distanceKm', 'durationSec',
+        'avgPaceSecPerKm', 'caloriesBurned', 'createdAt', 'updatedAt'
+      ]) &&
+      data.ownerId == request.auth.uid &&
+      isValidId(data.ownerId) &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
+      data.dateIso is string && data.dateIso.size() >= 8 && data.dateIso.size() <= 32 &&
+      data.distanceKm is number && data.distanceKm >= 0 && data.distanceKm <= 500 &&
+      data.durationSec is number && data.durationSec >= 0 && data.durationSec <= 864000 &&
+      data.avgPaceSecPerKm is number && data.avgPaceSecPerKm >= 0 && data.avgPaceSecPerKm <= 10000 &&
+      data.caloriesBurned is number && data.caloriesBurned >= 0 && data.caloriesBurned <= 50000 &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidWorkoutLogDoc(data) {
+      return data.keys().hasAll([
+        'ownerId', 'exerciseId', 'exerciseName', 'dayKey',
+        'setsCompleted', 'repsPerSet', 'volumeKg', 'durationSec', 'dateIso',
+        'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'ownerId', 'exerciseId', 'exerciseName', 'dayKey',
+        'setsCompleted', 'repsPerSet', 'volumeKg', 'durationSec', 'dateIso',
+        'createdAt', 'updatedAt'
+      ]) &&
+      data.ownerId == request.auth.uid &&
+      isValidId(data.ownerId) &&
+      data.exerciseId is string && data.exerciseId.size() >= 1 && data.exerciseId.size() <= 80 &&
+      data.exerciseName is string && data.exerciseName.size() >= 1 && data.exerciseName.size() <= 120 &&
+      data.dayKey is string && data.dayKey.size() >= 3 && data.dayKey.size() <= 20 &&
+      data.setsCompleted is number && data.setsCompleted >= 1 && data.setsCompleted <= 100 &&
+      data.repsPerSet is string && data.repsPerSet.size() >= 1 && data.repsPerSet.size() <= 30 &&
+      data.volumeKg is number && data.volumeKg >= 0 && data.volumeKg <= 500000 &&
+      data.durationSec is number && data.durationSec >= 0 && data.durationSec <= 86400 &&
+      data.dateIso is string && data.dateIso.size() >= 8 && data.dateIso.size() <= 32 &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidNutritionLogDoc(data) {
+      return data.keys().hasAll([
+        'ownerId', 'mealName', 'timeStr', 'dateIso',
+        'caloriesKcal', 'proteinG', 'carbsG', 'fatG', 'fiberG',
+        'healthScore', 'saran_AI', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'ownerId', 'mealName', 'timeStr', 'dateIso',
+        'caloriesKcal', 'proteinG', 'carbsG', 'fatG', 'fiberG',
+        'healthScore', 'saran_AI', 'createdAt', 'updatedAt'
+      ]) &&
+      data.ownerId == request.auth.uid &&
+      isValidId(data.ownerId) &&
+      data.mealName is string && data.mealName.size() >= 1 && data.mealName.size() <= 160 &&
+      data.timeStr is string && data.timeStr.size() >= 1 && data.timeStr.size() <= 16 &&
+      data.dateIso is string && data.dateIso.size() >= 8 && data.dateIso.size() <= 32 &&
+      data.caloriesKcal is number && data.caloriesKcal >= 0 && data.caloriesKcal <= 20000 &&
+      data.proteinG is number && data.proteinG >= 0 && data.proteinG <= 2000 &&
+      data.carbsG is number && data.carbsG >= 0 && data.carbsG <= 3000 &&
+      data.fatG is number && data.fatG >= 0 && data.fatG <= 2000 &&
+      data.fiberG is number && data.fiberG >= 0 && data.fiberG <= 1000 &&
+      data.healthScore is number && data.healthScore >= 0 && data.healthScore <= 10 &&
+      data.saran_AI is string && data.saran_AI.size() >= 1 && data.saran_AI.size() <= 600 &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // Collection 1: /users/{userId}
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+
+      allow create: if isOwner(userId) &&
+        isValidId(userId) &&
+        isValidUserAccountData(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isOwner(userId) &&
+        isValidId(userId) &&
+        isValidUserAccountData(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          // Action: Update Profile, Hydration, Golden Rules, Prayers, or Schedule
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'displayName', 'weightKg', 'heightCm', 'goal',
+            'wakeTime', 'sleepTime', 'city', 'lat', 'lng', 'prayerMethod',
+            'dailyCalorieTarget', 'dailyProteinTargetG', 'dailyWaterTargetMl',
+            'onboardingComplete', 'guideDismissed', 'planMode',
+            'waterMl', 'streakDays', 'goldenRules', 'prayersCompleted', 'scheduleConfig',
+            'updatedAt'
+          ])
+        );
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // Subcollection 1A: /users/{userId}/runs/{runId}
+      match /runs/{runId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(runId) && isParentUserValid(userId);
+        allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+
+        allow create: if isOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(runId) &&
+          isValidRunSessionDoc(incoming()) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isParentUserValid(userId);
+
+        allow update: if isOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(runId) &&
+          isValidRunSessionDoc(incoming()) &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'distanceKm', 'durationSec', 'avgPaceSecPerKm', 'caloriesBurned', 'updatedAt'
+          ]) &&
+          isParentUserValid(userId);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(runId) && isParentUserValid(userId);
+      }
+
+      // Subcollection 1B: /users/{userId}/workouts/{workoutId}
+      match /workouts/{workoutId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(workoutId) && isParentUserValid(userId);
+        allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+
+        allow create: if isOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(workoutId) &&
+          isValidWorkoutLogDoc(incoming()) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isParentUserValid(userId);
+
+        allow update: if isOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(workoutId) &&
+          isValidWorkoutLogDoc(incoming()) &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'setsCompleted', 'repsPerSet', 'volumeKg', 'durationSec', 'updatedAt'
+          ]) &&
+          isParentUserValid(userId);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(workoutId) && isParentUserValid(userId);
+      }
+
+      // Subcollection 1C: /users/{userId}/nutrition/{mealId}
+      match /nutrition/{mealId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(mealId) && isParentUserValid(userId);
+        allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+
+        allow create: if isOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(mealId) &&
+          isValidNutritionLogDoc(incoming()) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isParentUserValid(userId);
+
+        allow update: if isOwner(userId) &&
+          isValidId(userId) &&
+          isValidId(mealId) &&
+          isValidNutritionLogDoc(incoming()) &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'mealName', 'caloriesKcal', 'proteinG', 'carbsG', 'fatG', 'fiberG', 'healthScore', 'saran_AI', 'updatedAt'
+          ]) &&
+          isParentUserValid(userId);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(mealId) && isParentUserValid(userId);
+      }
+    }
+  }
+}

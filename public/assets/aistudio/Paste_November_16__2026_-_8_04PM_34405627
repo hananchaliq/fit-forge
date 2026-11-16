@@ -1,0 +1,461 @@
+# FITFORGE — PROJECT_SPEC.md (MASTER PROMPT / SOURCE OF TRUTH)
+
+> Taruh file ini di root repo. Jadikan konteks tetap di Claude Code / Cursor.
+> Taruh 3 gambar referensi di `/docs/reference/` dengan nama persis:
+> `ref-1-dashboard.png` (Quantro), `ref-2-landing.png` (AgentAI), `ref-3-plan-poster.png` (Weekly Workout Plan).
+> Cara pakai: lihat bagian **"CARA MENJALANKAN"** di paling bawah.
+
+---
+
+## 0. ATURAN KERJA UNTUK AI (WAJIB DIPATUHI)
+
+1. Kamu adalah Principal Full-Stack Engineer + Senior Product Designer.
+2. Dokumen ini adalah **satu-satunya sumber kebenaran**. Jika ada konflik dengan asumsimu, dokumen ini menang.
+3. Kerjakan **hanya tahap yang diminta** pada perintah. Jangan lompat tahap, jangan menulis ulang tahap yang sudah selesai kecuali diminta.
+4. **Tanpa placeholder.** Dilarang `TODO`, `// implement later`, `...`, atau komponen kosong. Jika sesuatu butuh aset yang belum ada, buat fallback yang berfungsi lalu catat di `ASSETS_NEEDED.md`.
+5. **Token desain terkunci.** Dilarang memakai warna, radius, bayangan, atau font di luar token pada bagian 3. Semua nilai lewat `tailwind.config.ts` + `globals.css`.
+6. **Setiap tahap selesai harus:** (a) `npm run build` lulus tanpa error TypeScript/ESLint, (b) `npm run dev` jalan tanpa error console, (c) ada data demo realistis sehingga halaman tidak terlihat kosong.
+7. Setelah selesai tiap tahap, tulis ringkasan singkat: file yang dibuat, hal yang belum bisa dilakukan (dan alasannya), dan apa yang perlu dites manual di HP.
+8. Jujur: jika tidak bisa memenuhi sebuah requirement, katakan jelas, jangan pura-pura selesai.
+9. Bahasa UI: **Bahasa Indonesia** (label, tips, pesan error). Kode, nama variabel, dan komentar: English.
+
+---
+
+## 1. REFERENSI VISUAL (HARUS DICOCOKKAN)
+
+| File | Dipakai untuk | Target kemiripan |
+|---|---|---|
+| `ref-1-dashboard.png` ("Quantro") | App shell + halaman Dashboard + komponen kartu/tabel/chart di semua halaman | ≥ 95% |
+| `ref-2-landing.png` ("AgentAI") | Landing, Login, Onboarding (gelap, glow merah, kartu kaca, hero 3D) | ≥ 90% |
+| `ref-3-plan-poster.png` ("Ultimate Weekly Workout Plan") | Halaman `/plan` (7 baris hari berwarna, anatomi, kartu latihan, Golden Rules) | ≥ 90% |
+
+Saat membandingkan, periksa: jarak/padding, radius, ukuran & berat font, warna, bayangan, ikon, urutan elemen, perilaku hover, dan proporsi kolom.
+
+---
+
+## 2. TECH STACK (TERKUNCI)
+
+- Next.js 14+ (App Router), TypeScript strict, Tailwind CSS, Shadcn/UI, Lucide React, Framer Motion
+- 3D: `three`, `@react-three/fiber`, `@react-three/drei`, `@react-three/postprocessing`
+- Peta: `react-leaflet` + tile CartoDB Positron (terang) / Dark Matter (gelap)
+- Chart: Recharts
+- AI: `@google/generative-ai`, model `gemini-2.5-flash`, JSON `responseSchema`
+- Backend: Supabase (Auth, Postgres, Storage, RLS aktif) + `idb` (IndexedDB)
+- PWA: `@serwist/next` (atau `next-pwa`), Web Push (`web-push`), Screen Wake Lock, Web Audio, Web Speech
+- Peta otot 2D (poster `/plan` + panel Studio 3D): `react-body-highlighter` (MIT) — lihat Bagian 10
+- Util: `zustand`, `date-fns`, `zod`, `html-to-image`, `clsx`, `tailwind-merge`
+- Font: `Plus Jakarta Sans` (UI), `Inter` (fallback), `Anton` atau `Bebas Neue` (judul poster `/plan`)
+
+---
+
+## 3. DESIGN TOKENS (TERKUNCI — Salin ke `tailwind.config.ts` & `globals.css`)
+
+```css
+:root {
+  /* Obsidian (sidebar, topbar, kartu hero, mode gelap) */
+  --obsidian-950:#0A0A0A; --obsidian-900:#0E0E0E; --obsidian-800:#161616;
+  --obsidian-700:#1E1E1E; --obsidian-600:#262626; --obsidian-500:#333333;
+
+  /* Alabaster (kanvas terang) */
+  --canvas:#F8F9FA; --card:#FFFFFF; --border-light:#EFEFEF; --muted:#6B7280; --ink:#111111;
+
+  /* Aksen */
+  --amber-500:#F59E0B; --orange-500:#F97316; --red-500:#EF4444; --red-glow:#FF2D1A;
+  --grad-accent: linear-gradient(135deg,#F97316 0%,#F59E0B 100%);
+
+  /* Semantik (pil status pastel) */
+  --emerald-bg:#D1FAE5; --emerald-fg:#047857;
+  --sky-bg:#E0F2FE;     --sky-fg:#0369A1;
+  --amber-bg:#FEF3C7;   --amber-fg:#B45309;
+  --rose-bg:#FFE4E6;    --rose-fg:#BE123C;
+
+  /* Warna hari (dari poster) */
+  --day-mon:#E11D2E; --day-tue:#16A34A; --day-wed:#F97316; --day-thu:#2563EB;
+  --day-fri:#7C3AED; --day-sat:#EAB308; --day-sun:#0D9488;
+
+  /* Bentuk */
+  --radius-card:16px;      /* rounded-2xl */
+  --radius-canvas:24px;    /* rounded-tl-3xl pada kanvas utama */
+  --radius-pill:9999px;
+  --shadow-card:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.06);
+  --shadow-tooltip:0 8px 24px rgba(0,0,0,.28);
+}
+```
+
+**Skala tipografi:** Judul halaman 28/36 bold · Judul kartu 14/20 semibold · Nilai KPI 32/38 bold `tabular-nums` · Label kecil 12/16 medium muted · Timer/HUD 56–72 bold `tabular-nums`.
+**Spasi:** kelipatan 4px; padding kartu 20px; gap grid 16–20px.
+**Mode gelap:** toggle manual + `prefers-color-scheme`; kanvas `#0E0E0E`, kartu `#161616`, border `#262626`.
+**Efek khusus:** grain halus pada permukaan obsidian (opacity 3–4%); border 1px `#262626`; glow merah hanya di landing & hero 3D.
+
+---
+
+## 4. APP SHELL (cocok dengan `ref-1`)
+
+- **Sidebar kiri 240px (obsidian):** logo "FitForge" + ikon, menu vertikal: Dashboard, Run, Workout 3D, Plan, Nutrisi, Jadwal, Analitik, Pengaturan. Item aktif = pil `#262626` + ikon oranye. Di bawah: kartu "Daily Golden Rules · Streak 🔥 N hari" dengan tombol amber "Check-in →".
+- **Kanvas utama:** `#F8F9FA`, `rounded-tl-3xl`, judul halaman + subjudul kiri atas, tombol CTA pil gelap (`#161616`, ikon amber) kanan atas.
+- **Top bar (obsidian):** search global (⌘K command palette: latihan, makanan, rute), pil rentang tanggal, lonceng + titik merah, pil profil.
+- **Mobile (<768px):** sidebar → bottom tab bar 5 item dengan FAB amber tengah "Mulai Lari" + drawer slide-over. Hormati safe-area (iOS notch / home indicator).
+- Animasi: stagger-in kartu, count-up angka KPI, transisi halaman halus. Hormati `prefers-reduced-motion`.
+
+---
+
+## 5. HALAMAN & FITUR
+
+### 5.1 Landing / Login / Onboarding (`/`, `/login`, `/onboarding`) — cocok `ref-2`
+- Latar hampir hitam + **glow merah volumetrik**; pill-nav (item aktif merah), tombol "Menu".
+- Hero: judul besar tracking rapat ("Tubuhmu. Datamu. Targetmu."), subjudul, 2 tombol (ghost + gradien merah), 3 kartu statistik kaca (`backdrop-blur`, border gradien dalam).
+- Objek 3D hero: **siluet torso/pelari berpijar merah** (R3F: emissive + bloom + partikel melayang), auto-rotate pelan + parallax mouse. Fallback gambar statis bila WebGL gagal.
+- Bagian bawah: kartu kaca fitur (Run, 3D Workout, AI Nutrisi, Sholat & Hidrasi), strip logo/teknologi, footer.
+- Auth Supabase (email + Google). Onboarding: berat, tinggi, tujuan, jam bangun, jam tidur, kota (via GPS), metode hitung sholat.
+
+### 5.2 Dashboard (`/dashboard`) — cocok `ref-1` PERSIS
+- **Baris 1 — 4 KPI card** (ikon dalam chip, nilai besar, ▲/▼ % vs periode lalu hijau/merah, sparkline amber):
+  1. **Kartu HERO gelap `#161616`**: Jarak Lari Mingguan (km)
+  2. Latihan Selesai (sesi + total volume/rep)
+  3. Kalori & Protein hari ini
+  4. Hidrasi & Skor Pemulihan
+- **Baris 2:** (65%) **Weekly Performance Overview**: area spline oranye/amber + gradien, tooltip gelap melayang dengan titik penanda, pil toggle `Jarak Lari | Kalori Terbakar | Volume Latihan`, dropdown "Minggu ini". (35%) **Donut makro** tebal, angka total di tengah, legenda kanan dengan persentase.
+- **Baris 3 (3 kolom, gaya tabel seperti ref-1):**
+  1. Rencana Latihan Hari Ini (daftar latihan, set×rep, ikon otot, tombol Mulai)
+  2. Aktivitas & Makanan Terbaru (pil: Selesai / Aktif / Target Tercapai)
+  3. Waktu Sholat (hitung mundur) + tombol `+250ml` + checklist 5 Golden Rules
+- Semua data dari store + Supabase; sediakan **seed data demo realistis**.
+
+### 5.3 Poster Rencana Latihan (`/plan`) — cocok `ref-3`
+- Judul "ULTIMATE WEEKLY WORKOUT PLAN" (font display miring tebal, hitam + gradien merah), subjudul "BUILD MUSCLE • BURN FAT • STAY STRONG".
+- **7 baris hari**, tiap baris: tab hari berwarna (kiri, dengan label otot) → figur anatomi depan/belakang dengan otot target menyala (SVG via `react-body-highlighter`, tint warna hari; lihat Bagian 10) → **kartu latihan bernomor** (badge nomor berwarna, nama, thumbnail, pil `4 SETS` + `8–12 REPS`). Mobile: accordion.
+- Toggle **[Mode Gym | Mode Rumah]**.
+- **Mode Gym (persis poster):**
+  - SENIN Chest & Triceps: Bench Press 4×8–12 · Incline Dumbbell Press 4×10–12 · Chest Fly 3×12–15 · Dips 3×10–15 · Tricep Pushdown 3×10–15 · Overhead Tricep Extension 3×12–15
+  - SELASA Back & Biceps: Pull-Ups 4×8–12 · Lat Pulldown 4×10–12 · Barbell Row 4×8–12 · Seated Cable Row 3×12–15 · Barbell Curl 4×10–12 · Hammer Curl 3×12–15
+  - RABU Legs: Squats 4×8–12 · Leg Press 4×10–12 · Romanian Deadlift 4×8–12 · Walking Lunges 3×12 (tiap kaki) · Leg Curl 3×12–15 · Calf Raises 4×15–20
+  - KAMIS Shoulders: Overhead Press 4×8–12 · Lateral Raises 4×10–12 · Front Raises 3×12–15 · Rear Delt Fly 3×15 · Shrugs 4×12–15
+  - JUMAT Arms: EZ Bar Curl 4×10–12 · Incline Curl 3×12–15 · Hammer Curl 3×12–15 · Skull Crushers 3×10–12 · Rope Pushdown 3×12–15 · Bench Dips 3×15
+  - SABTU Core & Cardio: Crunches 3×20 · Leg Raises 3×15 · Russian Twists 3×20 · Plank 3×60 dtk · Mountain Climbers 3×30 dtk · Running/Cycling 20 menit
+  - MINGGU Recovery: Stretching 15 mnt · Walking 30 mnt · Mobility Work 15 mnt · Recovery & Sleep
+- **Mode Rumah (tanpa alat), struktur set/rep sama:**
+  - Senin: Push-ups, Diamond Push-ups, Decline Push-ups, Chair Dips, Pike Push-ups
+  - Selasa: Doorframe/Table Rows, Superman Pulls, Reverse Snow Angels, Towel Bicep Curls
+  - Rabu: Bodyweight Squats, Bulgarian Split Squats, Walking Lunges, Glute Bridges, Calf Raises
+  - Kamis: Pike Press, Lateral Arm Raises, Front Raises, Rear Delt Flys, Plank-to-Downward-Dog
+  - Jumat: Close-Grip Push-ups, Bodyweight Tricep Extensions, Isometric Towel Curls, Bench Dips
+  - Sabtu: Crunches, Leg Raises, Russian Twists, Plank Hold, Mountain Climbers, Burpees
+  - Minggu: Full-Body Stretching, Brisk Walk, Mobility Flow, Target Tidur 7–9 jam
+- Klik latihan → buka Studio 3D di latihan itu.
+- **Footer GOLDEN RULES** (4–5 kolom ikon): Protein 1.6–2.2 g/kg · Air 3–4 L/hari · Tidur 7–9 jam · Progressive Overload · Langkah 8.000–10.000 + teks "Stay Consistent, Stay Disciplined, See The Results." Tiap aturan bisa dicentang harian (mengisi streak).
+- Tombol "Ekspor Poster (PNG)" via `html-to-image`.
+- Semua data latihan berada di `src/data/exercises.ts` & `src/data/weeklyPlan.ts` (satu sumber untuk `/plan`, `/workout`, Dashboard).
+
+### 5.4 Studio 3D (`/workout`)
+
+**Pipeline aset**
+> Sumber aset, library, dan lisensi yang dipilih ada di **Bagian 10**. Selalu baca `public/models/manifest.json` untuk nama file, mesh, dan clip yang sebenarnya; jangan menebak nama.
+
+- Model: `/public/models/trainer.glb` (skinned, kompres Draco/meshopt, skeleton kompatibel Mixamo). Animasi: clip bernama tepat `pushup, diamond_pushup, squat, lunge, plank, burpee, mountain_climber, crunch, glute_bridge, stretch_flow, idle`.
+- Muat dengan `useGLTF` (+ decoder Draco) dan `useAnimations`; `useGLTF.preload`. Crossfade 0.3 dtk; `timeScale` lewat slider 0.5×–1.5×.
+- Latihan tanpa clip khusus dipetakan lewat `src/data/exerciseClipMap.ts` (mis. decline_pushup → pushup).
+- **Jika `trainer.glb` tidak ada**, otomatis pakai manekin prosedural (capsule/sphere) agar aplikasi tidak crash; tulis ke `ASSETS_NEEDED.md`.
+
+**Sorotan otot**
+- Mask vertex-color/texture per grup: `chest, back_lats, shoulders, biceps, triceps, abs, glutes, quads, hamstrings, calves, forearms`.
+- Material kustom via `onBeforeCompile` (basis MeshStandardMaterial) dengan uniform `uActiveMuscles[]`, `uSecondaryMuscles[]`, `uTime`.
+  - Primer: emissive `#EF4444→#F97316`, pulse `sin(uTime*3)`, intensitas 1.0
+  - Sekunder: `#F59E0B` intensitas 0.4
+  - Non-aktif: slate `#475569`, roughness 0.8
+- Panel "Peta Otot" (SVG depan/belakang) yang ikut menyala real-time.
+- Tiap latihan di data: `id, name, clip, primaryMuscles[], secondaryMuscles[], sets, reps, restSec, formTips[3], commonMistakes[2], difficulty`.
+
+**Scene & performa**
+- Lantai obsidian, spotlight bulat lembut, rim light amber, bloom halus, `ContactShadows`, environment "city" intensitas rendah.
+- OrbitControls (damping, polar angle dibatasi, batas zoom) + preset kamera Depan/Samping/Belakang dengan tween.
+- `Canvas dpr={[1,1.75]}`, `frameloop="demand"` saat pause, dynamic import `ssr:false`, `<Suspense>` dengan skeleton ber-brand, `PerformanceMonitor` mematikan bloom/shadow bila FPS < 40. Target mobile ≥ 50 FPS.
+
+**Sesi latihan**
+- Counter set/rep, ring timer istirahat, chime Web Audio, suara "Berikutnya: Diamond Push-ups" via SpeechSynthesis, auto-lanjut latihan, pause/resume/skip, ganti Mode Gym/Rumah, wake lock aktif, catat volume ke Supabase saat selesai.
+
+### 5.5 GPS Run Tracker (`/run`)
+- `watchPosition({enableHighAccuracy:true, maximumAge:0, timeout:10000})`.
+- Filter: tolak fix dengan `accuracy > 20 m`, lonjakan kecepatan > 12 m/s, dan loncatan tak wajar; **Kalman 1D** untuk lat/lng; jarak via Haversine; auto-pause bila kecepatan < 0.5 m/s selama 8 dtk.
+- **Wake Lock** (ambil ulang saat `visibilitychange`). Simpan titik ke **IndexedDB tiap 1 dtk**; pemulihan crash ("Lanjutkan lari yang belum selesai?"); sinkron ke Supabase saat selesai dengan antrean retry.
+- HUD: durasi, jarak, pace saat ini, pace rata-rata, elevation gain, estimasi kalori (MET × berat), tabel split per km. Polyline `#F97316` dengan glow, titik lokasi berdenyut, tombol auto-follow.
+- **Voice coach:** umumkan tiap 1,0 km (jarak, pace, selisih dari split sebelumnya) via `speechSynthesis` bahasa Indonesia.
+- **Kartu bagikan:** PNG via Canvas (rute, jarak, pace, tanggal, branding) gaya obsidian + aksen amber; Web Share API.
+- Riwayat lari + halaman detail (peta, chart split, chart pace).
+
+### 5.6 Nutrisi AI (`/nutrisi`)
+- Kamera (`<input capture="environment">`) atau unggah; kompres klien ke ≤1024px JPEG.
+- `POST /api/analyze-food`: validasi `zod`, panggil `gemini-2.5-flash` dengan `responseMimeType:"application/json"` + `responseSchema`:
+  `food_name, portion_estimate, calories_kcal, protein_g, carbs_g, fat_g, fiber_g, health_score (1–10), local_indonesian_tips`.
+- Instruksikan Gemini mengenali makanan Indonesia (nasi goreng, soto, tempe, rendang, dll.) dan menjawab tips dalam Bahasa Indonesia. Tangani gambar non-makanan, rate limit, dan error. API key hanya di server.
+- Kartu hasil dengan ring makro animasi; "Tambah ke Log" memperbarui total harian; **sisa budget kalori otomatis menyesuaikan** (+ kalori lari hari itu); tampilkan "Sisa protein: X g → saran makanan".
+- Log harian (sarapan/siang/malam/camilan), edit/hapus, chart makro mingguan.
+
+### 5.7 Jadwal (`/jadwal`)
+- **Waktu sholat:** Aladhan `GET https://api.aladhan.com/v1/timings?latitude=..&longitude=..&method=20` (Kemenag; method dapat diubah), cache harian, hitung mundur sholat berikutnya, penanda "sudah sholat" + streak.
+- **Mode A — Alarm Bangun (keras):** looping synth Web Audio, volume naik bertahap, modal layar penuh snooze/matikan. Tampilkan peringatan batas browser di latar belakang.
+- **Mode B — Notifikasi Senyap (terpisah tegas):** sholat + pengingat air tiap jam (`+250ml` antara bangun–tidur) memakai **Web Push standar saja**, tidak pernah bunyi looping. Tombol aksi: "Sudah Sholat", "Minum 250ml". Service worker menangani aksi dan sinkron ke Supabase.
+- Toggle independen per pengingat (tiap sholat, interval hidrasi, alarm bangun), jam tenang, tombol tes notifikasi.
+
+---
+
+## 6. DATABASE (Supabase) — `supabase/schema.sql`
+
+```sql
+create extension if not exists "uuid-ossp";
+
+create table profiles (
+  id uuid primary key references auth.users on delete cascade,
+  display_name text, weight_kg numeric, height_cm numeric, goal text,
+  wake_time time default '04:30', sleep_time time default '22:00',
+  city text, lat double precision, lng double precision,
+  prayer_method int default 20, created_at timestamptz default now()
+);
+
+create table workouts (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  day_key text not null, mode text check (mode in ('gym','home')) default 'home',
+  started_at timestamptz default now(), finished_at timestamptz,
+  total_volume numeric default 0, total_reps int default 0
+);
+
+create table workout_sets (
+  id uuid primary key default uuid_generate_v4(),
+  workout_id uuid not null references workouts(id) on delete cascade,
+  user_id uuid not null references profiles(id) on delete cascade,
+  exercise_id text not null, set_index int not null,
+  reps int, weight_kg numeric, duration_sec int, created_at timestamptz default now()
+);
+
+create table run_sessions (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  started_at timestamptz not null, duration_sec int, distance_m numeric,
+  avg_pace_sec_km numeric, elevation_gain_m numeric, calories_kcal numeric,
+  polyline jsonb, splits jsonb, created_at timestamptz default now()
+);
+
+create table nutrition_logs (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  meal_type text check (meal_type in ('breakfast','lunch','dinner','snack')),
+  food_name text, portion_estimate text, calories_kcal numeric,
+  protein_g numeric, carbs_g numeric, fat_g numeric, fiber_g numeric,
+  health_score int, tips text, image_path text, logged_at timestamptz default now()
+);
+
+create table daily_habits (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  day date not null, water_ml int default 0, steps int default 0, sleep_hours numeric,
+  rules jsonb default '{"protein":false,"water":false,"sleep":false,"overload":false,"steps":false}',
+  prayers jsonb default '{"subuh":false,"dzuhur":false,"ashar":false,"maghrib":false,"isya":false}',
+  unique (user_id, day)
+);
+
+create table user_schedules (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references profiles(id) on delete cascade unique,
+  wake_alarm_enabled boolean default false, wake_alarm_time time,
+  prayer_toggles jsonb default '{"subuh":true,"dzuhur":true,"ashar":true,"maghrib":true,"isya":true}',
+  hydration_enabled boolean default true, hydration_interval_min int default 60,
+  quiet_start time, quiet_end time
+);
+
+create table push_subscriptions (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  endpoint text unique not null, p256dh text not null, auth text not null,
+  created_at timestamptz default now()
+);
+
+-- RLS: aktifkan di semua tabel + policy "owner only"
+do $$ declare t text; begin
+  foreach t in array array['workouts','workout_sets','run_sessions','nutrition_logs','daily_habits','user_schedules','push_subscriptions']
+  loop
+    execute format('alter table %I enable row level security', t);
+    execute format('create policy "%1$s_owner" on %1$I for all using (auth.uid() = user_id) with check (auth.uid() = user_id)', t);
+  end loop;
+end $$;
+alter table profiles enable row level security;
+create policy "profiles_owner" on profiles for all using (auth.uid() = id) with check (auth.uid() = id);
+
+create index on run_sessions (user_id, started_at desc);
+create index on nutrition_logs (user_id, logged_at desc);
+create index on workouts (user_id, started_at desc);
+```
+
+`.env.example`:
+```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+GEMINI_API_KEY=
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+```
+
+---
+
+## 7. STRUKTUR FOLDER
+
+```
+src/
+  app/(marketing)/page.tsx, login/, onboarding/
+  app/(app)/dashboard/, run/, workout/, plan/, nutrisi/, jadwal/, analitik/, pengaturan/
+  app/api/analyze-food/route.ts, push/subscribe/route.ts, push/send/route.ts
+  components/{ui,layout,dashboard,run,workout3d,plan,nutrition,schedule,landing}
+  data/{exercises.ts, weeklyPlan.ts, exerciseClipMap.ts, demoData.ts}
+  lib/{kalman.ts, haversine.ts, supabase/, gemini.ts, idb.ts, prayer.ts, audio.ts}
+  store/
+public/models/, public/icons/, public/sw.js
+docs/reference/, ASSETS_NEEDED.md, supabase/schema.sql
+```
+
+---
+
+## 8. STANDAR KUALITAS
+
+- Lighthouse mobile: PWA ≥ 90, Performance ≥ 85, Accessibility ≥ 95.
+- TypeScript strict, tanpa `any`; error boundary; state loading/empty/error di setiap halaman.
+- Kontras AA, focus ring jelas, `aria-label` pada kontrol ikon, dukung `prefers-reduced-motion`.
+- Manifest + ikon maskable; shell offline lewat service worker.
+- Tidak ada secret di klien; semua panggilan Gemini lewat route server dengan rate limit sederhana.
+
+---
+
+## 9. DEFINITION OF DONE
+
+Dengan hanya mengisi `.env`: `npm run dev` menjalankan semua halaman dengan data realistis, tampilan cocok dengan 3 referensi (lihat QA visual di bawah), tanpa error TypeScript/console, dan semua fitur di bagian 5 berfungsi atau punya fallback yang terdokumentasi di `ASSETS_NEEDED.md`.
+
+---
+
+## 10. LIBRARY & ASET 3D/ANATOMI (HASIL RISET, NOV 2026)
+
+> Cek ulang lisensi dan harga di halaman sumber sebelum memakai atau membeli. Harga, ketersediaan, dan syarat bisa berubah.
+
+### 10.1 Pilihan yang dipakai (urutan prioritas)
+
+| Kebutuhan | Pilihan utama | Lisensi / biaya | Catatan |
+|---|---|---|---|
+| Peta otot 2D (poster `/plan`, panel Studio 3D) | `react-body-highlighter` (npm v2.0.5) | MIT, gratis | SVG depan/belakang, prop `data: [{name, muscles[]}]`, `bodyColor`, `highlightedColors`, `onClick`. Slug otot antara lain `chest, biceps, triceps, front-deltoids, back-deltoids, abs, obliques, trapezius, upper-back, lower-back, quadriceps, hamstring, calves, gluteal, forearm`. Cek daftar lengkap di README saat instalasi. |
+| Alternatif peta otot 2D | `react-muscle-highlighter` (npm v1.2.0) | Cek LICENSE di repo/npm sebelum dipakai | Mendukung pria/wanita, `intensity`, `side: left/right`. Pakai bila butuh intensitas warna per otot atau model wanita. |
+| Karakter + animasi latihan (3D) | **Mixamo** (karakter stok + animasi) | Gratis dengan akun Adobe pribadi; royalty-free untuk proyek komersial & non-komersial; **file mentah tidak boleh didistribusikan ulang** | Ekspor FBX saja (tidak ada GLB) → konversi sendiri. Akun kampus/sekolah bisa ditolak, pakai akun pribadi. Animasi harus "dibakar" ke dalam GLB aplikasi, jangan disediakan sebagai file terpisah yang bisa diunduh. |
+| Animasi umum tambahan (gerak dasar, transisi) | **Quaternius Universal Animation Library 1 & 2** | CC0 (domain publik); paket Standard gratis ("name your own price"), versi Pro/Source berbayar | 120+ dan 130+ animasi, rig humanoid universal, glTF/FBX tersedia. Isinya dominan lokomosi, kombat, parkour, dll., **bukan** pustaka latihan gym. Cocok untuk idle, jalan, jogging, transisi. |
+| Retarget animasi CC0 ke karakter sendiri di browser | Cinevva "Free Character Animation Library" | Klip CC0; fitur ekspor GLB dengan klip tertanam tersedia di paket Standard/Pro mereka (cek batas gratis) | Alternatif tanpa Blender. |
+| Auto-rig karakter sendiri | Mixamo Auto-Rigger / Cinevva Auto Rigger / AccuRIG 2.0 (Windows) | Gratis (cek syarat masing-masing) | Hanya humanoid pose T/A. |
+| Konversi FBX → GLB | Blender, `FBX2glTF`, atau konverter web | Gratis | Pertahankan track animasi; lalu `gltf-transform optimize in.glb out.glb --compress draco` (atau meshopt). |
+
+### 10.2 Opsi berbayar bila butuh kualitas/variasi lebih (verifikasi lisensi sebelum beli)
+- **Model anatomi rigged** (CGTrader, "Rigged Muscle Anatomy Skeleton Muscles Bodybuilder Anatomy"): berisi kerangka, model otot standar, dan model otot ekstra berotot; format FBX/GLB/BLEND; listing menyebut sekitar $9.99 dengan Royalty Free License. Baca ketentuan lisensinya dulu.
+- **Paket animasi kalistenik** (Fab, "TricksUp" Calisthenics): 134 animasi loop, 40+ variasi push-up termasuk Diamond Push-ups, Pike Push-ups, Plank, tanpa alat; disebut kompatibel retarget ke karakter Mixamo/MetaHuman. Format utama untuk Unreal/Unity (FBX) → perlu retarget ke skeleton Mixamo di Blender sebelum dipakai di Three.js. Ada versi demo gratis.
+- Waspada pada banyak listing anatomi murah di marketplace: sebagian ditandai "AI-generated", poligon sangat berat (hingga ratusan ribu–jutaan), atau berlisensi "Extended Use / IP Restricted". Jangan dipakai tanpa memeriksa lisensi dan beban render.
+
+### 10.3 Z-Anatomy / BodyParts3D (hanya jika sanggup mematuhi lisensinya)
+- Atlas anatomi 3D lengkap dengan otot terpisah (Blender/FBX).
+- Lisensi **CC BY-SA 4.0** (Z-Anatomy) dan CC BY-SA 2.1 Japan (BodyParts3D), bersifat *share-alike* (copyleft): karya turunan harus dibagikan dengan lisensi yang sama dan wajib atribusi. Ini bisa bentrok dengan aplikasi komersial/tertutup.
+- Aturan untuk AI: **jangan memasukkan aset Z-Anatomy ke repo** kecuali pemilik proyek menulis eksplisit bahwa aplikasi ini akan dirilis dengan lisensi kompatibel. Boleh dipakai sebagai referensi visual saja.
+
+### 10.4 Keputusan arsitektur (WAJIB DIIKUTI)
+1. **Studio 3D = karakter Mixamo + klip latihan Mixamo** (digabung dengan klip CC0 Quaternius untuk idle/transisi) dalam satu `trainer.glb`, atau beberapa GLB animasi yang berbagi skeleton yang sama.
+2. **Sorotan otot 3D = mask prosedural dari bobot tulang** (bukan lukisan manual), lihat 10.5. Jika pengguna kelak menyediakan model anatomi dengan mask/mesh otot terpisah, pakai itu dan lewati 10.5.
+3. **Peta otot 2D = `react-body-highlighter`** untuk poster `/plan`, panel samping Studio 3D, dan kartu latihan di Dashboard. Satu pemetaan otot (`muscleMap.ts`) menerjemahkan grup otot internal ke slug library dan ke channel mask 3D.
+4. **Fallback berlapis:** `trainer.glb` ada → pakai. Tidak ada → manekin prosedural. WebGL gagal/perangkat lemah → gambar statis + peta otot 2D saja. Aplikasi tidak boleh crash di kondisi mana pun.
+5. **Atribusi:** buat halaman `/about/credits` yang memuat kredit semua aset/library (Mixamo/Adobe, Quaternius, react-body-highlighter, dll.) walau lisensinya tidak mewajibkan.
+
+### 10.5 Sorotan otot prosedural dari skin weights (instruksi implementasi)
+Tujuan: menyalakan otot target pada karakter Mixamo tanpa mask lukisan.
+- Saat model dimuat (sekali, di `useEffect`), untuk setiap vertex baca `skinIndex`/`skinWeight` dan tentukan tulang dominan. Kelompokkan tulang Mixamo ke wilayah:
+  - `Spine1/Spine2` → badan atas; `Shoulder/Arm` → bahu & lengan atas; `ForeArm/Hand` → lengan bawah; `Hips` → pinggul/glutes; `UpLeg` → paha; `Leg/Foot` → betis.
+- Bedakan depan/belakang (dada vs punggung, abs vs lower back, quads vs hamstring, biceps vs triceps) memakai **arah normal vertex terhadap sumbu depan karakter** pada pose rest (T-pose): normal menghadap depan = anterior, belakang = posterior. Untuk lengan, bandingkan normal terhadap arah tulang lengan.
+- Hasilkan atribut `BufferAttribute` `aMuscle` (float32, 1 channel per grup, atau 2 vec4) yang disimpan di geometri; bila ukuran terlalu besar, kemas ke `vec4 x2`.
+- Shader (via `onBeforeCompile`) membaca `aMuscle` dan uniform `uPrimary[]`/`uSecondary[]` untuk emissive; transisi antar-latihan di-lerp 0.25 dtk. Haluskan tepi region dengan blur bobot antar-vertex tetangga 1–2 iterasi agar tidak bergerigi.
+- Ini perkiraan, bukan anatomi presisi. Beri tahu pengguna di `ASSETS_NEEDED.md` bahwa kualitas sorotan akan naik bila memakai model dengan mask otot sungguhan.
+- Tambahkan toggle debug (dev only) untuk menampilkan wilayah mask dengan warna berbeda agar mudah dikoreksi.
+
+### 10.6 Daftar latihan → klip (kata kunci pencarian di Mixamo; cek ketersediaan langsung)
+| Latihan di app | Klip internal | Kata kunci Mixamo / catatan |
+|---|---|---|
+| Push-ups, Decline Push-ups, Close-Grip, Diamond | `pushup` (+ ubah `timeScale`/offset tangan) | "push up"; varian dipetakan ke klip yang sama |
+| Squat, Bodyweight Squat | `squat` | "squat" |
+| Walking Lunges, Bulgarian Split Squat | `lunge` | "lunge"/"walking" + loop |
+| Plank, Plank Hold | `plank` | "plank" (jika tidak ada, buat pose statis dari klip push-up) |
+| Burpees | `burpee` | "burpee" |
+| Mountain Climbers | `mountain_climber` | cari "mountain climber"/"crawl" |
+| Crunches, Sit-ups | `crunch` | "sit up"/"crunch" |
+| Glute Bridge | `glute_bridge` | cari "bridge"/"hip thrust" |
+| Stretching / Mobility | `stretch_flow` | "stretching" |
+| Idle / Jogging | `idle`, `jog` | Mixamo atau Quaternius (CC0) |
+Latihan yang tidak punya klip yang cocok: pakai klip terdekat + label "Peragaan perkiraan" di UI, dan catat di `ASSETS_NEEDED.md` (jangan mengarang gerakan yang salah bentuk).
+
+### 10.7 `public/models/manifest.json` (dibuat saat aset dimasukkan, dibaca oleh kode)
+```json
+{
+  "model": "/models/trainer.glb",
+  "meshName": "Body",
+  "skeleton": "mixamo",
+  "clips": ["idle","pushup","squat","lunge","plank","burpee","mountain_climber","crunch","glute_bridge","stretch_flow","jog"],
+  "credits": [
+    {"name":"Mixamo (Adobe)","use":"karakter + animasi","license":"royalty-free, no raw redistribution"},
+    {"name":"Quaternius Universal Animation Library","use":"idle/transisi","license":"CC0"}
+  ]
+}
+```
+Tulis skrip dev `npm run inspect:model` yang membaca GLB dan mencetak nama mesh, tulang, dan clip, agar manifest bisa diisi dengan benar.
+
+---
+
+# CARA MENJALANKAN (UNTUK KAMU, BUKAN UNTUK AI)
+
+## A. Persiapan sebelum tahap 1
+1. Buat repo, taruh file ini di root, taruh 3 gambar di `docs/reference/`.
+2. Siapkan akun: Supabase (project + jalankan `schema.sql`), Google AI Studio (API key Gemini).
+3. Siapkan aset 3D (lihat Bagian 5.4 dan **Bagian 10**): login Mixamo dengan akun Adobe pribadi → pilih karakter stok → unduh FBX karakter + klip latihan (push up, squat, lunge, burpee, dll.) → konversi ke GLB → kompres → taruh di `public/models/` lalu isi `manifest.json`. Boleh menyusul, Tahap 5 punya fallback.
+4. Pasang Playwright agar AI bisa mengambil screenshot sendiri: `npm i -D @playwright/test && npx playwright install chromium`.
+
+## B. Perintah per tahap (salin satu per satu, tunggu selesai sebelum lanjut)
+
+**Tahap 1 — Scaffold + token + shell**
+> Baca PROJECT_SPEC.md. Kerjakan HANYA Tahap 1: scaffold Next.js, pasang semua dependensi bagian 2, terapkan design tokens bagian 3, bangun app shell bagian 4 (sidebar, topbar, bottom nav mobile, dark mode, ⌘K palette) dengan halaman kosong ber-layout untuk semua rute. Cocokkan shell dengan docs/reference/ref-1-dashboard.png. Ikuti aturan kerja bagian 0.
+
+**Tahap 2 — Supabase + auth + seed**
+> Kerjakan HANYA Tahap 2: client Supabase (browser + server), middleware auth, halaman login dasar, `supabase/schema.sql` sesuai bagian 6, dan `demoData.ts` yang realistis untuk 4 minggu terakhir (lari, latihan, makanan, habit).
+
+**Tahap 3 — Dashboard**
+> Kerjakan HANYA Tahap 3 (bagian 5.2). Cocokkan PERSIS dengan ref-1-dashboard.png. Setelah selesai, jalankan alur QA Visual (bagian C) minimal 2 putaran.
+
+**Tahap 4 — Poster `/plan`**
+> Kerjakan HANYA Tahap 4 (bagian 5.3) + buat `exercises.ts` & `weeklyPlan.ts` lengkap Mode Gym dan Mode Rumah. Cocokkan dengan ref-3-plan-poster.png. Jalankan QA Visual minimal 2 putaran.
+
+**Tahap 5 — Studio 3D**
+> Kerjakan HANYA Tahap 5 (bagian 5.4). Mulai dengan satu latihan (push-up) sampai animasi + sorotan otot bagus, lalu perluas ke semua latihan lewat data. Tampilkan daftar nama mesh dan clip yang terbaca dari GLB di console (dev only).
+
+**Tahap 6 — GPS Run Tracker**
+> Kerjakan HANYA Tahap 6 (bagian 5.5). Sertakan unit test untuk Kalman, Haversine, dan filter akurasi. Sediakan mode simulasi rute (dev only) agar bisa dites di desktop.
+
+**Tahap 7 — Nutrisi AI**
+> Kerjakan HANYA Tahap 7 (bagian 5.6) termasuk route `/api/analyze-food` dengan validasi zod dan penanganan error.
+
+**Tahap 8 — Jadwal (sholat, alarm, notifikasi)**
+> Kerjakan HANYA Tahap 8 (bagian 5.7) termasuk service worker, VAPID, dan dua mode yang terpisah tegas.
+
+**Tahap 9 — Landing + PWA + finishing**
+> Kerjakan HANYA Tahap 9: landing/login/onboarding (bagian 5.1) cocok dengan ref-2-landing.png, konfigurasi PWA (manifest, ikon, offline shell), README setup, dan audit Lighthouse. Perbaiki semua temuan.
+
+## C. QA Visual — ulangi 2–3 putaran setelah tahap 3, 4, dan 9
+
+Prompt untuk AI:
+> Jalankan `npm run dev`, gunakan Playwright untuk screenshot halaman ini pada viewport 1440×900 dan 390×844 (simpan di `docs/shots/`). Bandingkan berdampingan dengan gambar referensi yang sesuai. Buat tabel perbedaan SPESIFIK (elemen, nilai sekarang vs target: padding, radius, font-size, warna, bayangan, jarak antar-kartu, proporsi kolom, ikon). Urutkan dari dampak terbesar. Perbaiki SEMUA perbedaan, hanya memakai design tokens bagian 3. Ulangi screenshot, lalu laporkan perbedaan yang tersisa (jika ada) dan alasannya.
+
+Jika masih ada selisih yang terlihat, tambahkan ke prompt: *"Fokus khusus pada: <sebutkan, mis. tooltip chart, tinggi kartu KPI, bayangan kartu hero>."*
+
+## D. Uji perangkat nyata (tidak bisa diotomatisasi)
+- **GPS:** lari/jalan 1 km di luar ruangan, bandingkan jarak dengan Strava/Google Maps. Selisih wajar < 3–5%.
+- **Wake Lock:** layar tidak mati selama 10 menit sesi lari.
+- **Push notification:** pasang sebagai PWA. Di iOS, notifikasi web push hanya bekerja jika PWA sudah ditambahkan ke Home Screen (iOS 16.4+).
+- **Alarm bangun:** browser tidak menjamin bunyi saat layar terkunci/aplikasi ditutup. Uji dengan PWA terbuka; bila perlu sediakan saran memakai alarm bawaan HP sebagai cadangan.
+- **3D di HP kelas menengah:** cek FPS dan suhu perangkat.
+
+## E. Jika AI mulai "ngaco"
+- Hasil terpotong → minta: *"Lanjutkan dari file terakhir yang kamu tulis, jangan ulang yang sudah ada."*
+- Gaya melenceng → *"Audit seluruh kode: temukan semua warna/ukuran di luar design tokens dan ganti dengan token."*
+- Fitur dipalsukan → *"Tunjukkan bukti fitur X berfungsi (log/test/screenshot). Jika tidak bisa, jelaskan apa yang belum jalan."*

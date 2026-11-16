@@ -1,0 +1,32 @@
+{
+  "model": "/models/trainer.glb",
+  "glbPlaced": false,
+  "fallback": "procedural-12-part-mannequin",
+  "meshes": [
+    "Mesh_Chest",
+    "Mesh_BackLats",
+    "Mesh_Shoulders",
+    "Mesh_Biceps",
+    "Mesh_Triceps",
+    "Mesh_Abs",
+    "Mesh_Glutes",
+    "Mesh_Quads",
+    "Mesh_Hamstrings",
+    "Mesh_Calves",
+    "Mesh_Forearms"
+  ],
+  "clips": [
+    "idle",
+    "pushup",
+    "diamond_pushup",
+    "squat",
+    "lunge",
+    "plank",
+    "mountain_climber",
+    "crunch",
+    "glute_bridge",
+    "burpee",
+    "jog",
+    "stretch_flow"
+  ]
+}

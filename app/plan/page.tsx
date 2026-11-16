@@ -1,0 +1,302 @@
+'use client';
+
+import React, { useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { toPng } from 'html-to-image';
+import {
+  Download,
+  Dumbbell,
+  Home,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Play,
+  Flame,
+} from 'lucide-react';
+import { AppShell } from '@/components/layout/AppShell';
+import { BodyHighlighter2D } from '@/components/plan/BodyHighlighter2D';
+import { useFitForgeStore } from '@/store/useFitForgeStore';
+import {
+  WEEKLY_PLAN,
+  GOLDEN_RULES,
+  getExercisesForDay,
+  type DayKey,
+} from '@/data/weeklyPlan';
+
+export default function PlanPosterPage() {
+  const router = useRouter();
+  const posterRef = useRef<HTMLDivElement | null>(null);
+  const {
+    planMode,
+    setPlanMode,
+    setSelectedDayKey,
+    setSelectedExerciseId,
+    goldenRules,
+    toggleGoldenRule,
+    streakDays,
+  } = useFitForgeStore();
+
+  const [expandedDay, setExpandedDay] = useState<DayKey | 'all'>('all');
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportPng = async () => {
+    if (!posterRef.current || exporting) return;
+    setExporting(true);
+    try {
+      const dataUrl = await toPng(posterRef.current, {
+        quality: 0.95,
+        pixelRatio: 2,
+        backgroundColor: '#FFFFFF',
+      });
+      const link = document.createElement('a');
+      link.download = `FitForge-Weekly-Workout-Plan-${planMode}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch {
+      // ignore export error
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExerciseClick = (dayKey: DayKey, exerciseId: string) => {
+    setSelectedDayKey(dayKey);
+    setSelectedExerciseId(exerciseId);
+    router.push(`/workout?exercise=${exerciseId}`);
+  };
+
+  return (
+    <AppShell
+      title="Poster Rencana Latihan Mingguan"
+      subtitle="Klik kartu latihan mana saja untuk membuka peragaan biomekanik di Studio 3D"
+      ctaLabel="Buka Studio 3D"
+      ctaHref="/workout"
+    >
+      {/* Top Toolbar: Mode Gym | Mode Rumah + Ekspor Poster PNG */}
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div className="inline-flex items-center gap-1 p-1.5 rounded-2xl bg-white dark:bg-[#161616] border border-[#EFEFEF] dark:border-[#262626] shadow-xs">
+          <button
+            type="button"
+            onClick={() => setPlanMode('gym')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+              planMode === 'gym'
+                ? 'bg-[#161616] text-white dark:bg-[#F97316] dark:text-black'
+                : 'text-[#6B7280] hover:text-[#111111] dark:text-neutral-400 dark:hover:text-white'
+            }`}
+          >
+            <Dumbbell className="w-4 h-4" />
+            <span>Mode Gym (Alat Lengkap)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPlanMode('home')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+              planMode === 'home'
+                ? 'bg-[#161616] text-white dark:bg-[#F97316] dark:text-black'
+                : 'text-[#6B7280] hover:text-[#111111] dark:text-neutral-400 dark:hover:text-white'
+            }`}
+          >
+            <Home className="w-4 h-4" />
+            <span>Mode Rumah (Tanpa Alat)</span>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleExportPng}
+          disabled={exporting}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-[#161616] hover:bg-neutral-50 dark:hover:bg-[#262626] border border-[#EFEFEF] dark:border-[#262626] text-xs sm:text-sm font-semibold text-[#111111] dark:text-white shadow-xs transition cursor-pointer"
+        >
+          <Download className="w-4 h-4 text-[#F97316]" />
+          <span>{exporting ? 'Mengekspor PNG...' : 'Ekspor Poster (PNG)'}</span>
+        </button>
+      </div>
+
+      {/* POSTER CONTAINER (Matches ref-3 "ULTIMATE WEEKLY WORKOUT PLAN") */}
+      <div
+        ref={posterRef}
+        className="rounded-3xl bg-white dark:bg-[#161616] border border-[#EFEFEF] dark:border-[#262626] shadow-card p-5 sm:p-8"
+      >
+        {/* Poster Header */}
+        <div className="text-center border-b-2 border-[#111111] dark:border-[#262626] pb-5 mb-6">
+          <h2
+            className="text-4xl sm:text-6xl font-black italic tracking-wider uppercase leading-none text-[#111111] dark:text-white"
+            style={{ fontFamily: 'var(--font-poster), sans-serif' }}
+          >
+            ULTIMATE{' '}
+            <span className="bg-gradient-to-r from-[#E11D2E] via-[#F97316] to-[#F59E0B] bg-clip-text text-transparent">
+              WEEKLY WORKOUT
+            </span>{' '}
+            PLAN
+          </h2>
+          <p className="text-xs sm:text-sm font-extrabold tracking-[0.22em] text-[#6B7280] dark:text-neutral-300 mt-2">
+            BUILD MUSCLE • BURN FAT • STAY STRONG ({planMode === 'gym' ? 'GYM EDITION' : 'HOME CALISTHENICS'})
+          </p>
+        </div>
+
+        {/* 7 DAY ROWS */}
+        <div className="space-y-4">
+          {WEEKLY_PLAN.map((day) => {
+            const exercises = getExercisesForDay(day.key, planMode);
+            const isExpanded = expandedDay === 'all' || expandedDay === day.key;
+
+            return (
+              <div
+                key={day.key}
+                className="rounded-2xl border border-[#EFEFEF] dark:border-[#262626] bg-[#F8F9FA] dark:bg-[#0E0E0E] overflow-hidden"
+              >
+                <div className="flex flex-col lg:flex-row lg:items-stretch">
+                  {/* Left Colored Day Tab */}
+                  <div
+                    className="lg:w-48 shrink-0 p-4 text-white flex flex-row lg:flex-col justify-between items-center lg:items-start"
+                    style={{ backgroundColor: day.colorHex }}
+                  >
+                    <div>
+                      <span
+                        className="text-2xl sm:text-3xl font-black tracking-wide block leading-none"
+                        style={{ fontFamily: 'var(--font-poster), sans-serif' }}
+                      >
+                        {day.dayNameId}
+                      </span>
+                      <span className="text-xs sm:text-sm font-extrabold uppercase tracking-wider opacity-95 block mt-1">
+                        {day.titleEn}
+                      </span>
+                      <span className="text-[11px] opacity-85 block mt-0.5">
+                        {day.focusId}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedDay((prev) => (prev === day.key ? 'all' : day.key))
+                      }
+                      className="lg:hidden p-1.5 rounded-lg bg-black/20 text-white"
+                      aria-label={`Tampilkan atau sembunyikan latihan hari ${day.dayNameId}`}
+                    >
+                      {isExpanded ? (
+                        <ChevronUp className="w-4 h-4" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4" />
+                      )}
+                    </button>
+
+                    <div className="hidden lg:block mt-4 pt-2 border-t border-white/25 w-full text-[11px] font-semibold">
+                      {exercises.length} Gerakan Terpilih
+                    </div>
+                  </div>
+
+                  {/* Middle: 2D Anatomical Muscle Highlighter (Front & Back SVG tinted in day color) */}
+                  {isExpanded && (
+                    <div className="lg:w-44 shrink-0 px-3 py-3 bg-white dark:bg-[#161616] border-b lg:border-b-0 lg:border-r border-[#EFEFEF] dark:border-[#262626] flex items-center justify-center">
+                      <BodyHighlighter2D
+                        primaryMuscles={day.primaryMuscles}
+                        secondaryMuscles={day.secondaryMuscles}
+                        primaryColor={day.colorHex}
+                        secondaryColor="#F59E0B"
+                        compact
+                      />
+                    </div>
+                  )}
+
+                  {/* Right: Numbered Exercise Cards Grid */}
+                  {isExpanded && (
+                    <div className="flex-1 p-3.5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                      {exercises.map((ex, idx) => (
+                        <button
+                          key={ex.id}
+                          type="button"
+                          onClick={() => handleExerciseClick(day.key, ex.id)}
+                          className="group rounded-xl bg-white dark:bg-[#161616] hover:bg-neutral-50 dark:hover:bg-[#1E1E1E] border border-[#EFEFEF] dark:border-[#262626] p-3 text-left transition flex items-start justify-between gap-2.5 cursor-pointer shadow-2xs"
+                        >
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <span
+                              className="w-6 h-6 rounded-lg text-white text-xs font-extrabold flex items-center justify-center shrink-0 tabular-nums mt-0.5"
+                              style={{ backgroundColor: day.colorHex }}
+                            >
+                              {idx + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-xs sm:text-sm font-bold text-[#111111] dark:text-white group-hover:text-[#F97316] transition truncate">
+                                {ex.name}
+                              </p>
+                              <p className="text-[11px] font-semibold text-[#6B7280] dark:text-neutral-400 mt-1 tabular-nums">
+                                {ex.sets} SETS · {ex.reps} REPS
+                              </p>
+                            </div>
+                          </div>
+
+                          <span className="p-1.5 rounded-lg bg-[#F8F9FA] dark:bg-[#262626] text-neutral-500 group-hover:text-[#F97316] transition shrink-0">
+                            <Play className="w-3.5 h-3.5" />
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* FOOTER: GOLDEN RULES (5 Interactive Columns + Quote) */}
+        <div className="mt-8 pt-6 border-t-2 border-[#111111] dark:border-[#262626]">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+            <h3
+              className="text-2xl sm:text-3xl font-black tracking-wide uppercase text-[#111111] dark:text-white"
+              style={{ fontFamily: 'var(--font-poster), sans-serif' }}
+            >
+              5 GOLDEN RULES FOR MAXIMUM RESULTS
+            </h3>
+            <div className="flex items-center gap-1.5 text-xs font-bold text-[#F97316] tabular-nums">
+              <Flame className="w-4 h-4 fill-[#F97316]" />
+              <span>Streak Disiplin: {streakDays} Hari Beruntun</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {GOLDEN_RULES.map((rule) => {
+              const checked = goldenRules[rule.key];
+              return (
+                <button
+                  key={rule.key}
+                  type="button"
+                  onClick={() => toggleGoldenRule(rule.key)}
+                  className={`p-3.5 rounded-2xl border text-left transition cursor-pointer ${
+                    checked
+                      ? 'bg-[#161616] text-white border-[#161616] dark:bg-[#262626] dark:border-[#F59E0B]'
+                      : 'bg-[#F8F9FA] dark:bg-[#0E0E0E] text-[#111111] dark:text-white border-[#EFEFEF] dark:border-[#262626]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-extrabold text-[#F59E0B] tabular-nums">
+                      {rule.target}
+                    </span>
+                    <CheckCircle2
+                      className={`w-4 h-4 ${
+                        checked ? 'text-emerald-400' : 'text-neutral-400'
+                      }`}
+                    />
+                  </div>
+                  <p className="text-xs font-bold">{rule.title}</p>
+                  <p
+                    className={`text-[11px] mt-1 leading-snug ${
+                      checked ? 'text-neutral-300' : 'text-[#6B7280] dark:text-neutral-400'
+                    }`}
+                  >
+                    {rule.desc}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+
+          <p className="text-center text-xs sm:text-sm font-extrabold tracking-widest uppercase text-[#111111] dark:text-neutral-300 mt-6">
+            &ldquo;Stay Consistent, Stay Disciplined, See The Results.&rdquo;
+          </p>
+        </div>
+      </div>
+    </AppShell>
+  );
+}

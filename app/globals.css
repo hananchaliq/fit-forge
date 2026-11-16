@@ -1,0 +1,80 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* Obsidian (sidebar, topbar, kartu hero, mode gelap) */
+  --obsidian-950: #0A0A0A;
+  --obsidian-900: #0E0E0E;
+  --obsidian-800: #161616;
+  --obsidian-700: #1E1E1E;
+  --obsidian-600: #262626;
+  --obsidian-500: #333333;
+
+  /* Alabaster (kanvas terang) */
+  --canvas: #F8F9FA;
+  --card: #FFFFFF;
+  --border-light: #EFEFEF;
+  --muted: #6B7280;
+  --ink: #111111;
+
+  /* Aksen */
+  --amber-500: #F59E0B;
+  --orange-500: #F97316;
+  --red-500: #EF4444;
+  --red-glow: #FF2D1A;
+  --grad-accent: linear-gradient(135deg, #F97316 0%, #F59E0B 100%);
+
+  /* Semantik (pil status pastel) */
+  --emerald-bg: #D1FAE5;
+  --emerald-fg: #047857;
+  --sky-bg: #E0F2FE;
+  --sky-fg: #0369A1;
+  --amber-bg: #FEF3C7;
+  --amber-fg: #B45309;
+  --rose-bg: #FFE4E6;
+  --rose-fg: #BE123C;
+
+  /* Warna hari (dari poster) */
+  --day-mon: #E11D2E;
+  --day-tue: #16A34A;
+  --day-wed: #F97316;
+  --day-thu: #2563EB;
+  --day-fri: #7C3AED;
+  --day-sat: #EAB308;
+  --day-sun: #0D9488;
+
+  /* Bentuk */
+  --radius-card: 16px;
+  --radius-canvas: 24px;
+  --radius-pill: 9999px;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+  --shadow-tooltip: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.dark {
+  --canvas: #0E0E0E;
+  --card: #161616;
+  --border-light: #262626;
+  --muted: #9CA3AF;
+  --ink: #F8F9FA;
+}
+
+@layer base {
+  body {
+    background-color: var(--obsidian-900);
+    color: var(--ink);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.shadow-card {
+  box-shadow: var(--shadow-card);
+}
+
+.shadow-tooltip {
+  box-shadow: var(--shadow-tooltip);
+}

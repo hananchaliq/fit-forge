@@ -1,0 +1,11 @@
+{
+  "name": "FitForge — AI Fitness, 3D Workout & GPS Run Tracker",
+  "description": "Platform kebugaran terpadu dengan Studio Latihan 3D, Pelacak Lari GPS (Kalman & Haversine), Analisis Nutrisi AI kuliner Indonesia, Poster Rencana Latihan Mingguan, serta Jadwal Sholat & Hidrasi.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
