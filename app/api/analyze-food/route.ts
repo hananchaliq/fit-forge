@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 import { z } from 'zod';
 
 const AnalyzeFoodSchema = z.object({
   imageBase64: z.string().optional(),
   mimeType: z.string().optional(),
   foodHint: z.string().optional(),
+  description: z.string().optional(),
 });
 
 // Simple in-memory rate limiter per IP
@@ -18,81 +19,17 @@ function checkRateLimit(ip: string): boolean {
     rateLimitMap.set(ip, { count: 1, resetAt: now + 60_000 });
     return true;
   }
-  if (entry.count >= 15) return false;
+  if (entry.count >= 20) return false;
   entry.count += 1;
   return true;
 }
-
-const INDONESIAN_CULINARY_PRESETS: Record<
-  string,
-  {
-    food_name: string;
-    portion_estimate: string;
-    calories_kcal: number;
-    protein_g: number;
-    carbs_g: number;
-    fat_g: number;
-    fiber_g: number;
-    health_score: number;
-    local_indonesian_tips: string;
-  }
-> = {
-  nasi_padang_rendang: {
-    food_name: 'Nasi Padang Rendang Sapi + Daun Singkong & Sambal Ijo',
-    portion_estimate: '1 piring standar (420g)',
-    calories_kcal: 740,
-    protein_g: 38,
-    carbs_g: 76,
-    fat_g: 31,
-    fiber_g: 6,
-    health_score: 7,
-    local_indonesian_tips:
-      'Rendang sapi kaya protein & zat besi, namun kuah santan kental tinggi lemak jenuh. Mintalah nasi setengah porsi, kurangi siraman kuah gulai, dan perbanyak sayur daun singkong rebus.',
-  },
-  dada_ayam_tempe: {
-    food_name: 'Nasi Merah, Dada Ayam Bakar & Tempe Mendoan Panggang',
-    portion_estimate: '1 porsi atlet (380g)',
-    calories_kcal: 560,
-    protein_g: 49,
-    carbs_g: 58,
-    fat_g: 13,
-    fiber_g: 8,
-    health_score: 9,
-    local_indonesian_tips:
-      'Kombinasi emas untuk hipertrofi otot! Protein lengkap dari dada ayam ditambah isoflavon & serat prebiotik dari tempe sangat baik untuk pemulihan pasca-latihan.',
-  },
-  sate_ayam_lontong: {
-    food_name: 'Sate Ayam Madura (10 Tusuk) + Lontong & Bumbu Kacang',
-    portion_estimate: '10 tusuk sate + 1 lontong (350g)',
-    calories_kcal: 620,
-    protein_g: 42,
-    carbs_g: 54,
-    fat_g: 24,
-    fiber_g: 4,
-    health_score: 8,
-    local_indonesian_tips:
-      'Sate dada ayam memiliki rasio protein sangat tinggi. Pisahkan bumbu kacang dan gunakan secukupnya (1–2 sdm) serta tambahkan irisan bawang merah dan timun segar.',
-  },
-  gado_gado_telur: {
-    food_name: 'Gado-Gado Betawi Komplit + 2 Telur Rebus & Tahu Tempe',
-    portion_estimate: '1 piring penuh (400g)',
-    calories_kcal: 540,
-    protein_g: 29,
-    carbs_g: 46,
-    fat_g: 26,
-    fiber_g: 11,
-    health_score: 8,
-    local_indonesian_tips:
-      'Kaya serat dan mikronutrien dari sayuran rebus. Tambahkan 1–2 butir telur rebus ekstra dan hindari kerupuk goreng berlebih agar makronutrien makin seimbang.',
-  },
-};
 
 export async function POST(req: NextRequest) {
   try {
     const ip = req.headers.get('x-forwarded-for') || 'local';
     if (!checkRateLimit(ip)) {
       return NextResponse.json(
-        { error: 'Batas permintaan tercapai (maks 15 analisis/menit). Silakan tunggu sebentar.' },
+        { error: 'Batas permintaan tercapai (maks 20 analisis/menit). Silakan tunggu sebentar.' },
         { status: 429 }
       );
     }
@@ -101,135 +38,256 @@ export async function POST(req: NextRequest) {
     const parsed = AnalyzeFoodSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Data input tidak valid. Unggah foto makanan atau pilih menu contoh.' },
+        { error: 'Data input tidak valid. Ketik nama makanan atau unggah foto makanan.' },
         { status: 400 }
       );
     }
 
-    const { imageBase64, mimeType, foodHint } = parsed.data;
+    const { imageBase64, mimeType, foodHint, description } = parsed.data;
+    const trimmedHint = (foodHint || description || '').trim();
 
-    // Check if user selected one of the quick presets and no API key or image is needed
-    const apiKey = process.env.GEMINI_API_KEY;
-    const hasRealApiKey = Boolean(apiKey && apiKey !== 'MY_GEMINI_API_KEY' && apiKey.length > 10);
-
-    if (hasRealApiKey && (imageBase64 || foodHint)) {
-      try {
-        const ai = new GoogleGenAI({
-          apiKey,
-          httpOptions: {
-            headers: {
-              'User-Agent': 'aistudio-build',
-            },
-          },
-        });
-
-        const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
-        if (imageBase64) {
-          const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '');
-          parts.push({
-            inlineData: {
-              mimeType: mimeType || 'image/jpeg',
-              data: cleanBase64,
-            },
-          });
-        }
-
-        parts.push({
-          text: `Analisis hidangan makanan ini secara akurat (konteks kuliner Indonesia seperti nasi goreng, soto, rendang, tempe, tahu, sate, ayam bakar, gado-gado, dll. Petunjuk tambahan pengguna: "${
-            foodHint || 'Foto makanan'
-          }"). Jika gambar bukan makanan, isi food_name dengan "Bukan Makanan" dan health_score 0. Berikan local_indonesian_tips dalam Bahasa Indonesia yang praktis untuk target pembentukan otot & kebugaran.`,
-        });
-
-        const response = await ai.models.generateContent({
-          model: 'gemini-4-hydrogen',
-          contents: { parts },
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                food_name: { type: Type.STRING },
-                portion_estimate: { type: Type.STRING },
-                calories_kcal: { type: Type.NUMBER },
-                protein_g: { type: Type.NUMBER },
-                carbs_g: { type: Type.NUMBER },
-                fat_g: { type: Type.NUMBER },
-                fiber_g: { type: Type.NUMBER },
-                health_score: { type: Type.INTEGER },
-                local_indonesian_tips: { type: Type.STRING },
-              },
-              required: [
-                'food_name',
-                'portion_estimate',
-                'calories_kcal',
-                'protein_g',
-                'carbs_g',
-                'fat_g',
-                'fiber_g',
-                'health_score',
-                'local_indonesian_tips',
-              ],
-            },
-          },
-        });
-
-        const jsonText = (response.text ?? '').trim();
-        if (jsonText) {
-          const data = JSON.parse(jsonText);
-          if (data.food_name === 'Bukan Makanan' || data.health_score === 0) {
-            return NextResponse.json(
-              { error: 'Gambar yang diunggah tidak terdeteksi sebagai makanan. Silakan unggah foto hidangan makanan.' },
-              { status: 422 }
-            );
-          }
-          return NextResponse.json({ result: data, source: 'gemini' });
-        }
-      } catch {
-        // Fall through to intelligent Indonesian culinary estimation so UI remains resilient
-      }
+    if (!imageBase64 && !trimmedHint) {
+      return NextResponse.json(
+        { error: 'Silakan ketik nama makanan/minuman atau unggah foto hidangan terlebih dahulu.' },
+        { status: 400 }
+      );
     }
 
-    // Intelligent fallback based on hint or uploaded image
-    const hintKey = (foodHint || '').toLowerCase();
-    if (hintKey && INDONESIAN_CULINARY_PRESETS[hintKey]) {
-      return NextResponse.json({
-        result: INDONESIAN_CULINARY_PRESETS[hintKey],
-        source: 'preset',
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+      return NextResponse.json(
+        {
+          error:
+            'Kunci API Gemini (GEMINI_API_KEY) belum dikonfigurasi di server. Periksa panel Settings > Secrets.',
+        },
+        { status: 500 }
+      );
+    }
+
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+
+    const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+    if (imageBase64) {
+      const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '');
+      parts.push({
+        inlineData: {
+          mimeType: mimeType || 'image/jpeg',
+          data: cleanBase64,
+        },
       });
     }
 
-    if (hintKey.includes('rendang') || hintKey.includes('padang')) {
-      return NextResponse.json({ result: INDONESIAN_CULINARY_PRESETS.nasi_padang_rendang, source: 'fallback' });
-    }
-    if (hintKey.includes('sate')) {
-      return NextResponse.json({ result: INDONESIAN_CULINARY_PRESETS.sate_ayam_lontong, source: 'fallback' });
-    }
-    if (hintKey.includes('gado')) {
-      return NextResponse.json({ result: INDONESIAN_CULINARY_PRESETS.gado_gado_telur, source: 'fallback' });
+    const promptText = imageBase64
+      ? `Analisis foto makanan/minuman ini secara JUJUR, kritis, dan ilmiah (petunjuk pengguna: "${
+          trimmedHint || 'Tidak ada teks tambahan, analisis langsung dari visual foto'
+        }").`
+      : `Analisis kandungan gizi dari makanan/minuman berikut secara JUJUR, kritis, dan akurat: "${trimmedHint}".`;
+
+    parts.push({
+      text: `${promptText}
+
+INSTRUKSI WAJIB (JANGAN BERIKAN JAWABAN DEFAULT ATAU BASA-BASI):
+1. Jika input teks atau gambar sama sekali BUKAN makanan/minuman manusia (misal: benda mati, elektronik, pemandangan kosong, teks acak), set "is_food" = false dan jelaskan alasannya di "non_food_reason".
+2. Hitung estimasi kalori (kkal), protein (g), karbohidrat (g), lemak (g), serat (g), gula (g), dan natrium (mg) berdasarkan rincian tiap bahan makanan di dalamnya ("ingredients_breakdown"). Pastikan total kalori & makro konsisten secara matematis dengan penjumlahan komponennya.
+3. Berikan penilaian JUJUR tanpa memanis-maniskan ("honest_verdict" dan "health_score" 1-10):
+   - Jika makanan tinggi minyak/gorengan, tinggi tepung/gula (misal: mie instan dobel, martabak manis, seblak kerupuk, es kopi susu manis, gorengan), beri skor rendah (2-5), sebutkan risiko lemak jenuh/natrium/lonjakan gula darah secara blak-blakan.
+   - Jika makanan tinggi protein berkualitas & gizi seimbang (misal: dada ayam bakar, ikan, telur, tempe, sayur), beri skor tinggi (8-10) dan jelaskan manfaatnya bagi sintesis protein otot.
+4. Gunakan Bahasa Indonesia yang jelas, tajam, dan praktis untuk pengguna aplikasi kebugaran.`,
+    });
+
+    const responseSchema = {
+      type: Type.OBJECT,
+      properties: {
+        is_food: {
+          type: Type.BOOLEAN,
+          description: 'True jika gambar atau teks adalah makanan/minuman manusia.',
+        },
+        non_food_reason: {
+          type: Type.STRING,
+          description: 'Alasan jika bukan makanan (kosongkan jika is_food true).',
+        },
+        food_name: {
+          type: Type.STRING,
+          description: 'Nama lengkap hidangan yang teridentifikasi secara spesifik.',
+        },
+        portion_estimate: {
+          type: Type.STRING,
+          description: 'Estimasi berat (gram/ml) dan ukuran porsi realistis.',
+        },
+        calories_kcal: {
+          type: Type.NUMBER,
+          description: 'Total energi dalam kilokalori (kkal).',
+        },
+        protein_g: {
+          type: Type.NUMBER,
+          description: 'Total protein dalam gram.',
+        },
+        carbs_g: {
+          type: Type.NUMBER,
+          description: 'Total karbohidrat dalam gram.',
+        },
+        fat_g: {
+          type: Type.NUMBER,
+          description: 'Total lemak dalam gram.',
+        },
+        fiber_g: {
+          type: Type.NUMBER,
+          description: 'Total serat pangan dalam gram.',
+        },
+        sugar_g: {
+          type: Type.NUMBER,
+          description: 'Estimasi kandungan gula dalam gram.',
+        },
+        sodium_mg: {
+          type: Type.NUMBER,
+          description: 'Estimasi kandungan natrium/garam dalam miligram.',
+        },
+        health_score: {
+          type: Type.INTEGER,
+          description: 'Skor kesehatan jujur dari 1 (sangat buruk/junk food) sampai 10 (sangat sehat/atletis).',
+        },
+        honest_verdict: {
+          type: Type.STRING,
+          description: 'Ringkasan vonis jujur 1-2 kalimat mengenai kualitas gizi makanan ini.',
+        },
+        ingredients_breakdown: {
+          type: Type.ARRAY,
+          description: 'Rincian komponen bahan makanan dalam porsi tersebut.',
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              item: { type: Type.STRING },
+              amount: { type: Type.STRING },
+              calories_kcal: { type: Type.NUMBER },
+              protein_g: { type: Type.NUMBER },
+            },
+            required: ['item', 'amount', 'calories_kcal', 'protein_g'],
+          },
+        },
+        local_indonesian_tips: {
+          type: Type.STRING,
+          description: 'Saran modifikasi praktis untuk mencapai target otot/defisit kalori.',
+        },
+      },
+      required: [
+        'is_food',
+        'food_name',
+        'portion_estimate',
+        'calories_kcal',
+        'protein_g',
+        'carbs_g',
+        'fat_g',
+        'fiber_g',
+        'sugar_g',
+        'sodium_mg',
+        'health_score',
+        'honest_verdict',
+        'ingredients_breakdown',
+        'local_indonesian_tips',
+      ],
+    };
+
+    const candidateModels = ['gemini-4-hydrogen', 'gemini-2.5-flash', 'gemini-3-flash-preview'];
+    let jsonText = '';
+    let usedModel = candidateModels[0];
+    let lastModelError: unknown = null;
+
+    for (const modelName of candidateModels) {
+      try {
+        const isHydrogen = modelName.startsWith('gemini-4');
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: { parts },
+          config: {
+            ...(isHydrogen
+              ? {
+                  thinkingConfig: {
+                    thinkingLevel: ThinkingLevel.LOW,
+                  },
+                }
+              : {}),
+            responseMimeType: 'application/json',
+            responseSchema,
+          },
+        });
+        const candidateText = (response.text ?? '').trim();
+        if (candidateText) {
+          jsonText = candidateText;
+          usedModel = modelName;
+          break;
+        }
+      } catch (err) {
+        lastModelError = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        // If API key is invalid, do not retry other models
+        if (msg.includes('API_KEY_INVALID') || msg.includes('PERMISSION_DENIED') || msg.includes('403')) {
+          throw err;
+        }
+      }
     }
 
-    const customName = foodHint && foodHint.trim().length > 2
-      ? foodHint.trim()
-      : 'Nasi Campur Ayam Bakar, Tempe & Lalapan Segar';
+    if (!jsonText && lastModelError) {
+      throw lastModelError;
+    }
+
+    if (!jsonText) {
+      return NextResponse.json(
+        { error: 'Model Gemini AI tidak mengembalikan respons teks. Silakan coba lagi.' },
+        { status: 502 }
+      );
+    }
+
+    const data = JSON.parse(jsonText);
+    if (!data.is_food || data.health_score === 0) {
+      return NextResponse.json(
+        {
+          error:
+            data.non_food_reason ||
+            'Input atau gambar yang diberikan tidak terdeteksi sebagai makanan/minuman.',
+        },
+        { status: 422 }
+      );
+    }
 
     return NextResponse.json({
-      result: {
-        food_name: customName,
-        portion_estimate: '1 porsi sajian (360g)',
-        calories_kcal: 575,
-        protein_g: 43,
-        carbs_g: 60,
-        fat_g: 16,
-        fiber_g: 7,
-        health_score: 9,
-        local_indonesian_tips:
-          'Porsi protein sudah sangat mendukung pemulihan otot harian (1.6–2.2 g/kg BB). Tambahkan lalapan segar dan batasi sambal goreng berminyak agar kalori tetap terjaga.',
-      },
-      source: 'fallback',
+      result: data,
+      source: usedModel,
+      analyzedAt: new Date().toISOString(),
     });
-  } catch {
+  } catch (err: unknown) {
+    const rawMsg = err instanceof Error ? err.message : String(err);
+    console.error('[analyze-food] Gemini API error:', rawMsg);
+
+    if (rawMsg.includes('API_KEY_INVALID') || rawMsg.includes('PERMISSION_DENIED') || rawMsg.includes('403')) {
+      return NextResponse.json(
+        {
+          error:
+            'Kunci API Gemini tidak valid atau akses ditolak. Silakan periksa GEMINI_API_KEY di panel Settings > Secrets.',
+        },
+        { status: 403 }
+      );
+    }
+    if (rawMsg.includes('RESOURCE_EXHAUSTED') || rawMsg.includes('429')) {
+      return NextResponse.json(
+        {
+          error:
+            'Kuota Gemini API habis (429 Resource Exhausted). Silakan coba beberapa saat lagi atau perbarui kunci API di Settings > Secrets.',
+        },
+        { status: 429 }
+      );
+    }
+
     return NextResponse.json(
-      { error: 'Terjadi kesalahan saat menganalisis nutrisi makanan.' },
+      {
+        error: `Gagal menganalisis makanan dengan Gemini AI: ${rawMsg.slice(0, 180)}`,
+      },
       { status: 500 }
     );
   }

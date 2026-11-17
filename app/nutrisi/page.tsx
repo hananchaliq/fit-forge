@@ -6,10 +6,11 @@ import {
   Sparkles,
   Plus,
   Trash2,
-  Flame,
   CheckCircle2,
   Utensils,
   AlertCircle,
+  ShieldAlert,
+  ListChecks,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
 import { useFitForgeStore } from '@/store/useFitForgeStore';
@@ -17,6 +18,13 @@ import {
   INDONESIAN_HIGH_PROTEIN_SUGGESTIONS,
   type NutritionLogItem,
 } from '@/data/demoData';
+
+interface IngredientBreakdownItem {
+  item: string;
+  amount: string;
+  calories_kcal: number;
+  protein_g: number;
+}
 
 interface AnalyzedFoodResult {
   food_name: string;
@@ -26,7 +34,11 @@ interface AnalyzedFoodResult {
   carbs_g: number;
   fat_g: number;
   fiber_g: number;
+  sugar_g?: number;
+  sodium_mg?: number;
   health_score: number;
+  honest_verdict?: string;
+  ingredients_breakdown?: IngredientBreakdownItem[];
   local_indonesian_tips: string;
 }
 
@@ -46,16 +58,17 @@ export default function NutrisiAiPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [analysisResult, setAnalysisResult] = useState<AnalyzedFoodResult | null>(null);
+  const [analysisSource, setAnalysisSource] = useState<string>('');
   const [addedToast, setAddedToast] = useState(false);
 
-  // Totals & Dynamic Calorie Budget (+ today's running calories)
+  // Totals & Dynamic Calorie Budget (+ today's real logged running calories, 0 if none)
   const totalCaloriesIn = nutritionLogs.reduce((acc, m) => acc + m.caloriesKcal, 0);
   const totalProteinG = nutritionLogs.reduce((acc, m) => acc + m.proteinG, 0);
   const totalCarbsG = nutritionLogs.reduce((acc, m) => acc + m.carbsG, 0);
   const totalFatG = nutritionLogs.reduce((acc, m) => acc + m.fatG, 0);
   const totalFiberG = nutritionLogs.reduce((acc, m) => acc + m.fiberG, 0);
 
-  const todayRunBurnKcal = runSessions[0]?.caloriesKcal || 318;
+  const todayRunBurnKcal = runSessions[0]?.caloriesKcal || 0;
   const adjustedCalorieBudget = profile.dailyCalorieTarget + todayRunBurnKcal;
   const remainingCalories = adjustedCalorieBudget - totalCaloriesIn;
   const remainingProteinG = Math.max(0, profile.dailyProteinTargetG - totalProteinG);
@@ -99,6 +112,12 @@ export default function NutrisiAiPage() {
   };
 
   const runFoodAnalysis = async (imageBase64?: string, customHint?: string) => {
+    const activeHint = (customHint ?? foodHint).trim();
+    if (!imageBase64 && !activeHint) {
+      setErrorMsg('Silakan ketik deskripsi makanan atau unggah foto makanan terlebih dahulu.');
+      return;
+    }
+
     setIsAnalyzing(true);
     setErrorMsg('');
     try {
@@ -108,7 +127,7 @@ export default function NutrisiAiPage() {
         body: JSON.stringify({
           imageBase64: imageBase64 || undefined,
           mimeType: 'image/jpeg',
-          foodHint: customHint ?? foodHint,
+          foodHint: activeHint,
         }),
       });
       const data = await res.json();
@@ -116,9 +135,10 @@ export default function NutrisiAiPage() {
         setErrorMsg(data.error || 'Gagal menganalisis makanan.');
       } else if (data.result) {
         setAnalysisResult(data.result);
+        setAnalysisSource(data.source || 'gemini-4-hydrogen');
       }
     } catch {
-      setErrorMsg('Gagal menghubungi server analisis AI.');
+      setErrorMsg('Gagal menghubungi server analisis Gemini AI.');
     } finally {
       setIsAnalyzing(false);
     }
@@ -155,7 +175,7 @@ export default function NutrisiAiPage() {
   return (
     <AppShell
       title="Nutrisi AI Kuliner Indonesia"
-      subtitle="Analisis kalori, protein, makro & tips hidangan Nusantara berbasis Gemini AI"
+      subtitle="Analisis kalori, makronutrien, rincian bahan & vonis gizi jujur berbasis Live Gemini AI"
       ctaLabel="Foto / Unggah Makanan"
       onCtaClick={() => fileInputRef.current?.click()}
     >
@@ -207,15 +227,15 @@ export default function NutrisiAiPage() {
 
       {/* SCANNER + AI ANALYSIS RESULT */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-6">
-        {/* Left 6 Cols: Camera / Photo Upload + Quick Indonesian Presets */}
+        {/* Left 6 Cols: Camera / Photo Upload + Live Gemini Query Input */}
         <div className="lg:col-span-6 rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold text-[#111111] dark:text-white">
-                Pemindai Makanan AI (Gemini Vision)
+                Pemindai & Kalkulator Gizi Jujur (Live Gemini AI)
               </h2>
               <p className="text-xs text-[#6B7280] dark:text-neutral-400">
-                Kompresi otomatis ≤ 1024px JPEG · Mengenali masakan Nusantara
+                Terkoneksi langsung ke Gemini 4 Hydrogen API · Tanpa jawaban default
               </p>
             </div>
             <Sparkles className="w-5 h-5 text-[#F97316]" />
@@ -247,10 +267,33 @@ export default function NutrisiAiPage() {
               type="text"
               value={foodHint}
               onChange={(e) => setFoodHint(e.target.value)}
-              placeholder="Ketik nama makanan (mis: Nasi Padang Rendang, Soto Ayam)..."
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !isAnalyzing) {
+                  runFoodAnalysis(previewDataUrl || undefined, foodHint);
+                }
+              }}
+              placeholder="Ketik makanan apa saja (mis: Indomie Goreng 2 bungkus + telur, Nasi Padang)..."
               className="sm:col-span-2 px-3.5 py-2.5 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] border border-[#EFEFEF] dark:border-[#262626] text-xs"
             />
           </div>
+
+          {previewDataUrl && (
+            <div className="relative rounded-xl overflow-hidden border border-[#EFEFEF] dark:border-[#262626] bg-black/5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewDataUrl}
+                alt="Pratinjau foto makanan"
+                className="w-full h-40 object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => setPreviewDataUrl(null)}
+                className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-black/75 text-white text-[11px] font-semibold hover:bg-black cursor-pointer"
+              >
+                Hapus Foto
+              </button>
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-2.5">
             <button
@@ -266,35 +309,36 @@ export default function NutrisiAiPage() {
               type="button"
               onClick={() => runFoodAnalysis(previewDataUrl || undefined, foodHint)}
               disabled={isAnalyzing}
-              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold flex items-center gap-2 hover:opacity-95 cursor-pointer"
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold flex items-center gap-2 hover:opacity-95 disabled:opacity-60 cursor-pointer"
             >
               <Sparkles className="w-4 h-4" />
-              <span>{isAnalyzing ? 'Menganalisis dengan AI...' : 'Analisis Sekarang'}</span>
+              <span>{isAnalyzing ? 'Menganalisis via Gemini AI...' : 'Analisis Sekarang'}</span>
             </button>
           </div>
 
-          {/* One-Click Indonesian Dish Presets for Instant Testing */}
+          {/* One-Click Real Live Gemini Prompts (Both Healthy & Unhealthy Dishes to Prove Honest Evaluation) */}
           <div className="pt-2 border-t border-[#EFEFEF] dark:border-[#262626]">
             <p className="text-[11px] font-semibold text-[#6B7280] dark:text-neutral-400 mb-2">
-              Uji Cepat Hidangan Populer Indonesia:
+              Uji Analisis Jujur Live Gemini AI (Sehat vs Tinggi Kalori/Lemak):
             </p>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { key: 'nasi_padang_rendang', label: 'Nasi Padang Rendang Sapi' },
-                { key: 'dada_ayam_tempe', label: 'Nasi Merah Ayam Bakar & Tempe' },
-                { key: 'sate_ayam_lontong', label: 'Sate Ayam Madura (10 Tusuk)' },
-                { key: 'gado_gado_telur', label: 'Gado-Gado Komplit + 2 Telur' },
-              ].map((preset) => (
+                'Nasi Padang Rendang Sapi + Kuah Gulai & Perkedel',
+                'Dada Ayam Bakar 200g + Nasi Merah 150g + Tempe Rebus',
+                'Indomie Goreng 2 Bungkus + Telur Ceplok + Kerupuk',
+                'Seblak Kerupuk Ceker Pedas + Bakso Sosis Semangkuk',
+              ].map((sampleQuery) => (
                 <button
-                  key={preset.key}
+                  key={sampleQuery}
                   type="button"
+                  disabled={isAnalyzing}
                   onClick={() => {
-                    setFoodHint(preset.label);
-                    runFoodAnalysis(undefined, preset.key);
+                    setFoodHint(sampleQuery);
+                    runFoodAnalysis(previewDataUrl || undefined, sampleQuery);
                   }}
-                  className="p-2.5 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] hover:bg-neutral-100 dark:hover:bg-[#1E1E1E] border border-[#EFEFEF] dark:border-[#262626] text-left text-xs font-semibold transition cursor-pointer"
+                  className="p-2.5 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] hover:bg-neutral-100 dark:hover:bg-[#1E1E1E] border border-[#EFEFEF] dark:border-[#262626] text-left text-xs font-semibold transition cursor-pointer disabled:opacity-50"
                 >
-                  {preset.label}
+                  {sampleQuery}
                 </button>
               ))}
             </div>
@@ -308,15 +352,22 @@ export default function NutrisiAiPage() {
           )}
         </div>
 
-        {/* Right 6 Cols: Analysis Result Card + Remaining Protein Food Suggestions */}
+        {/* Right 6 Cols: Live Gemini Analysis Result Card */}
         <div className="lg:col-span-6 rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card flex flex-col justify-between">
           {analysisResult ? (
             <div>
-              <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="flex items-start justify-between gap-3 mb-3">
                 <div>
-                  <span className="text-[11px] font-bold uppercase text-[#F97316]">
-                    HASIL ANALISIS GEMINI AI
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold uppercase text-[#F97316]">
+                      HASIL LIVE GEMINI AI
+                    </span>
+                    {analysisSource && (
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-mono font-bold">
+                        {analysisSource}
+                      </span>
+                    )}
+                  </div>
                   <h3 className="text-base font-bold text-[#111111] dark:text-white mt-0.5">
                     {analysisResult.food_name}
                   </h3>
@@ -324,43 +375,118 @@ export default function NutrisiAiPage() {
                     Estimasi porsi: {analysisResult.portion_estimate}
                   </p>
                 </div>
-                <div className="px-3 py-1.5 rounded-xl bg-[#D1FAE5] text-[#047857] text-xs font-extrabold tabular-nums shrink-0">
-                  Skor Sehat: {analysisResult.health_score}/10
+                <div
+                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold tabular-nums shrink-0 ${
+                    analysisResult.health_score >= 7
+                      ? 'bg-[#D1FAE5] text-[#047857]'
+                      : analysisResult.health_score >= 5
+                      ? 'bg-[#FEF3C7] text-[#B45309]'
+                      : 'bg-[#FFE4E6] text-[#BE123C]'
+                  }`}
+                >
+                  Skor Jujur: {analysisResult.health_score}/10
                 </div>
               </div>
 
+              {/* Honest Verdict Banner */}
+              {analysisResult.honest_verdict && (
+                <div
+                  className={`p-3 rounded-xl mb-3 text-xs font-medium flex items-start gap-2.5 border ${
+                    analysisResult.health_score >= 7
+                      ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-900 dark:text-emerald-200'
+                      : analysisResult.health_score >= 5
+                      ? 'bg-amber-500/10 border-amber-500/25 text-amber-900 dark:text-amber-200'
+                      : 'bg-rose-500/10 border-rose-500/25 text-rose-900 dark:text-rose-200'
+                  }`}
+                >
+                  <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="font-bold">Vonis Gizi Jujur: </strong>
+                    <span>{analysisResult.honest_verdict}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Macro Breakdown Boxes */}
-              <div className="grid grid-cols-5 gap-2 mb-4 text-center tabular-nums">
+              <div className="grid grid-cols-5 gap-2 mb-3 text-center tabular-nums">
                 <div className="p-2.5 rounded-xl bg-[#161616] text-white">
                   <span className="text-[10px] text-neutral-400 block">Kalori</span>
                   <span className="text-sm font-extrabold text-[#F59E0B]">
-                    {analysisResult.calories_kcal}
+                    {Math.round(analysisResult.calories_kcal)}
                   </span>
                 </div>
                 <div className="p-2.5 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] border border-[#EFEFEF] dark:border-[#262626]">
                   <span className="text-[10px] text-[#6B7280] block">Protein</span>
                   <span className="text-sm font-extrabold text-[#F97316]">
-                    {analysisResult.protein_g}g
+                    {Math.round(analysisResult.protein_g)}g
                   </span>
                 </div>
                 <div className="p-2.5 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] border border-[#EFEFEF] dark:border-[#262626]">
                   <span className="text-[10px] text-[#6B7280] block">Karbo</span>
-                  <span className="text-sm font-bold">{analysisResult.carbs_g}g</span>
+                  <span className="text-sm font-bold">{Math.round(analysisResult.carbs_g)}g</span>
                 </div>
                 <div className="p-2.5 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] border border-[#EFEFEF] dark:border-[#262626]">
                   <span className="text-[10px] text-[#6B7280] block">Lemak</span>
-                  <span className="text-sm font-bold">{analysisResult.fat_g}g</span>
+                  <span className="text-sm font-bold">{Math.round(analysisResult.fat_g)}g</span>
                 </div>
                 <div className="p-2.5 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] border border-[#EFEFEF] dark:border-[#262626]">
                   <span className="text-[10px] text-[#6B7280] block">Serat</span>
                   <span className="text-sm font-bold text-emerald-500">
-                    {analysisResult.fiber_g}g
+                    {Math.round(analysisResult.fiber_g)}g
                   </span>
                 </div>
               </div>
 
+              {/* Sugar & Sodium Strip */}
+              {(analysisResult.sugar_g !== undefined || analysisResult.sodium_mg !== undefined) && (
+                <div className="flex items-center gap-4 text-[11px] text-[#6B7280] dark:text-neutral-400 mb-3 px-1 tabular-nums">
+                  {analysisResult.sugar_g !== undefined && (
+                    <span>
+                      Gula: <strong className="text-[#111111] dark:text-white">{Math.round(analysisResult.sugar_g)}g</strong>
+                    </span>
+                  )}
+                  {analysisResult.sodium_mg !== undefined && (
+                    <span>
+                      Natrium (Garam):{' '}
+                      <strong className="text-[#111111] dark:text-white">
+                        {Math.round(analysisResult.sodium_mg)} mg
+                      </strong>
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Itemized Ingredients Breakdown */}
+              {analysisResult.ingredients_breakdown &&
+                analysisResult.ingredients_breakdown.length > 0 && (
+                  <div className="mb-3 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] border border-[#EFEFEF] dark:border-[#262626] p-3">
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#111111] dark:text-white mb-2">
+                      <ListChecks className="w-3.5 h-3.5 text-[#F97316]" />
+                      <span>Rincian Komponen Bahan Makanan:</span>
+                    </div>
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                      {analysisResult.ingredients_breakdown.map((ing, i) => (
+                        <div
+                          key={`${ing.item}-${i}`}
+                          className="flex items-center justify-between text-xs border-b border-[#EFEFEF]/60 dark:border-[#262626]/60 last:border-none pb-1 last:pb-0"
+                        >
+                          <span className="text-[#111111] dark:text-neutral-200 font-medium">
+                            {ing.item}{' '}
+                            <span className="text-[#6B7280] dark:text-neutral-400">
+                              ({ing.amount})
+                            </span>
+                          </span>
+                          <span className="tabular-nums font-semibold text-[#6B7280] dark:text-neutral-300 shrink-0 ml-2">
+                            {Math.round(ing.calories_kcal)} kkal · {Math.round(ing.protein_g)}g P
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
               <div className="p-3.5 rounded-xl bg-[#FEF3C7]/60 dark:bg-[#0E0E0E] border border-[#F59E0B]/30 text-xs text-[#111111] dark:text-neutral-200 leading-relaxed mb-4">
-                <strong className="text-[#B45309] dark:text-[#F59E0B]">Tips Nutrisi Lokal: </strong>
+                <strong className="text-[#B45309] dark:text-[#F59E0B]">Saran Praktis Atletis: </strong>
                 {analysisResult.local_indonesian_tips}
               </div>
 
