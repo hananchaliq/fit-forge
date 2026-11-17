@@ -1,0 +1,130 @@
+{
+  "schema_version": "1.0",
+  "units": "meters",
+  "coordinate_system": "Y-up, character forward is +Z, character right is +X",
+  "character": {
+    "type": "realistic_human_anatomy",
+    "proportions": "neutral adult-proportioned anatomical reference; do not infer exact body measurements from poster",
+    "mesh": "single watertight skinned character mesh where practical",
+    "materials": {
+      "skin": "neutral light gray",
+      "clothing": "matte charcoal athletic shorts",
+      "muscle_highlights": "red translucent overlay, separate mesh/material layer"
+    },
+    "rig": {
+      "type": "humanoid_fk_ik",
+      "required_bones": [
+        "root",
+        "pelvis",
+        "spine",
+        "chest",
+        "neck",
+        "head",
+        "clavicle.L",
+        "upper_arm.L",
+        "forearm.L",
+        "hand.L",
+        "clavicle.R",
+        "upper_arm.R",
+        "forearm.R",
+        "hand.R",
+        "thigh.L",
+        "shin.L",
+        "foot.L",
+        "toe.L",
+        "thigh.R",
+        "shin.R",
+        "foot.R",
+        "toe.R"
+      ],
+      "controls": [
+        "root",
+        "pelvis",
+        "chest",
+        "head",
+        "hand_ik.L",
+        "hand_ik.R",
+        "foot_ik.L",
+        "foot_ik.R"
+      ],
+      "deform_quality": "clean joint deformation at shoulders, elbows, hips, and knees"
+    }
+  },
+  "deliverables": {
+    "preferred": [
+      ".glb",
+      ".fbx"
+    ],
+    "optional": [
+      ".blend",
+      ".obj"
+    ],
+    "include": [
+      "skinned_mesh",
+      "armature",
+      "named_animation_clips",
+      "muscle_highlight_overlay",
+      "front_side_back_camera_views"
+    ],
+    "frame_rate": 30
+  },
+  "exercise": {
+    "id": "02_squat",
+    "name": "Bodyweight Squat",
+    "category": "lower_body",
+    "equipment": "clear, level floor",
+    "muscle_highlights": [
+      "quadriceps",
+      "gluteals",
+      "hamstrings"
+    ],
+    "setup": "Stand with feet around shoulder width, toes turned out slightly if comfortable, arms forward for balance.",
+    "keyframes": [
+      {
+        "frame": 0,
+        "label": "standing_start",
+        "pose": "stand tall with feet grounded; ribs stacked over pelvis; gaze forward."
+      },
+      {
+        "frame": 15,
+        "label": "descent",
+        "pose": "send hips down and slightly back; bend knees in line with toes; keep heels grounded and torso controlled."
+      },
+      {
+        "frame": 30,
+        "label": "bottom_controlled",
+        "pose": "reach a comfortable depth without heels lifting or lower back rounding; knees track with toes."
+      },
+      {
+        "frame": 45,
+        "label": "rise",
+        "pose": "push through the whole foot; extend hips and knees together; keep knees tracking with toes."
+      },
+      {
+        "frame": 60,
+        "label": "standing_return",
+        "pose": "stand tall without leaning backward; pause."
+      }
+    ],
+    "animation_clip": {
+      "name": "bodyweight_squat_cycle",
+      "duration_seconds": 2.0,
+      "loop": true,
+      "interpolation": "smooth_bezier",
+      "root_motion": false
+    },
+    "camera_views": [
+      "front",
+      "side",
+      "back",
+      "top"
+    ],
+    "form_checks": [
+      "heels stay grounded",
+      "knees track in the same direction as toes",
+      "movement stays balanced",
+      "spine remains controlled"
+    ],
+    "safety_note": "Use a comfortable depth and clear the surrounding area. Do not force extra depth or add load to match a reference image."
+  }
+}

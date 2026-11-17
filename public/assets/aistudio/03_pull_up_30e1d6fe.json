@@ -1,0 +1,130 @@
+{
+  "schema_version": "1.0",
+  "units": "meters",
+  "coordinate_system": "Y-up, character forward is +Z, character right is +X",
+  "character": {
+    "type": "realistic_human_anatomy",
+    "proportions": "neutral adult-proportioned anatomical reference; do not infer exact body measurements from poster",
+    "mesh": "single watertight skinned character mesh where practical",
+    "materials": {
+      "skin": "neutral light gray",
+      "clothing": "matte charcoal athletic shorts",
+      "muscle_highlights": "red translucent overlay, separate mesh/material layer"
+    },
+    "rig": {
+      "type": "humanoid_fk_ik",
+      "required_bones": [
+        "root",
+        "pelvis",
+        "spine",
+        "chest",
+        "neck",
+        "head",
+        "clavicle.L",
+        "upper_arm.L",
+        "forearm.L",
+        "hand.L",
+        "clavicle.R",
+        "upper_arm.R",
+        "forearm.R",
+        "hand.R",
+        "thigh.L",
+        "shin.L",
+        "foot.L",
+        "toe.L",
+        "thigh.R",
+        "shin.R",
+        "foot.R",
+        "toe.R"
+      ],
+      "controls": [
+        "root",
+        "pelvis",
+        "chest",
+        "head",
+        "hand_ik.L",
+        "hand_ik.R",
+        "foot_ik.L",
+        "foot_ik.R"
+      ],
+      "deform_quality": "clean joint deformation at shoulders, elbows, hips, and knees"
+    }
+  },
+  "deliverables": {
+    "preferred": [
+      ".glb",
+      ".fbx"
+    ],
+    "optional": [
+      ".blend",
+      ".obj"
+    ],
+    "include": [
+      "skinned_mesh",
+      "armature",
+      "named_animation_clips",
+      "muscle_highlight_overlay",
+      "front_side_back_camera_views"
+    ],
+    "frame_rate": 30
+  },
+  "exercise": {
+    "id": "03_pull_up",
+    "name": "Pull-Up",
+    "category": "back",
+    "equipment": "properly installed, load-rated pull-up bar; supervised setup where appropriate",
+    "muscle_highlights": [
+      "latissimus_dorsi",
+      "biceps",
+      "upper_back"
+    ],
+    "setup": "Hang from a secure pull-up bar with an overhand grip around shoulder width; feet clear of the floor; begin from a controlled active hang.",
+    "keyframes": [
+      {
+        "frame": 0,
+        "label": "active_hang",
+        "pose": "arms extended comfortably; shoulders controlled rather than shrugged; legs quiet; no swinging."
+      },
+      {
+        "frame": 15,
+        "label": "pulling",
+        "pose": "draw shoulder blades down and back; bend elbows and bring torso upward smoothly; avoid kicking."
+      },
+      {
+        "frame": 30,
+        "label": "top_controlled",
+        "pose": "reach the highest controlled position available without craning the neck; chin may approach bar level."
+      },
+      {
+        "frame": 45,
+        "label": "lowering",
+        "pose": "lower smoothly under control; avoid dropping suddenly; keep legs quiet."
+      },
+      {
+        "frame": 60,
+        "label": "return_hang",
+        "pose": "return to controlled hang; pause before next repetition."
+      }
+    ],
+    "animation_clip": {
+      "name": "pull_up_cycle",
+      "duration_seconds": 2.5,
+      "loop": true,
+      "interpolation": "smooth_bezier",
+      "root_motion": false
+    },
+    "camera_views": [
+      "front",
+      "side",
+      "back",
+      "top"
+    ],
+    "form_checks": [
+      "bar remains fixed",
+      "no kipping or swinging",
+      "shoulders remain controlled",
+      "lowering phase is controlled"
+    ],
+    "safety_note": "Only animate or perform this with a professionally installed, load-rated bar. Do not use doorframes, loose furniture, or improvised supports. A supported row or band-assisted version is a safer alternative when equipment or strength is uncertain."
+  }
+}

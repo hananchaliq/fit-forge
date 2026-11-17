@@ -7,7 +7,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { AnimationClipName, MuscleGroup } from '@/data/exerciseClipMap';
 
-export type CameraPreset = 'front' | 'side' | 'back';
+export type CameraPreset = 'front' | 'side' | 'back' | 'top';
 
 interface TrainerStudio3DProps {
   clip: AnimationClipName;
@@ -549,6 +549,44 @@ export function TrainerStudio3D({
       metalness: 0.55,
     });
 
+    const shortsMat = new THREE.MeshStandardMaterial({
+      color: 0x16181d,
+      roughness: 0.78,
+      metalness: 0.12,
+    });
+
+    // === OVERHEAD PULL-UP BAR RIG (bar_ref for 03. PULL-UP Blueprint) ===
+    const pullupBarGroup = new THREE.Group();
+    pullupBarGroup.visible = false;
+    scene.add(pullupBarGroup);
+
+    const overheadBarMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.018, 0.018, 1.38, 24),
+      chromePropMat
+    );
+    overheadBarMesh.rotation.z = Math.PI / 2;
+    overheadBarMesh.position.set(0, 2.04, 0.02);
+    pullupBarGroup.add(overheadBarMesh);
+
+    [-0.26, 0.26].forEach((gripX) => {
+      const gripSleeve = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.022, 0.022, 0.16, 20),
+        platePropMat
+      );
+      gripSleeve.rotation.z = Math.PI / 2;
+      gripSleeve.position.set(gripX, 2.04, 0.02);
+      pullupBarGroup.add(gripSleeve);
+    });
+
+    [-0.66, 0.66].forEach((postX) => {
+      const uprightPost = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.026, 0.03, 2.12, 20),
+        platePropMat
+      );
+      uprightPost.position.set(postX, 1.06, 0.02);
+      pullupBarGroup.add(uprightPost);
+    });
+
     // === 1024-BIT HIGH-DEFINITION SCULPTED ANATOMICAL MANNEQUIN (28 SUBMESHES) ===
     const rootPivot = new THREE.Group();
     scene.add(rootPivot);
@@ -557,10 +595,10 @@ export function TrainerStudio3D({
     hipsPivot.position.set(0, 0.96, 0);
     rootPivot.add(hipsPivot);
 
-    // Pelvis Core & Left/Right Sculpted Gluteus Maximus
+    // Pelvis Core & Matte Charcoal Athletic Shorts Waistband (Clothes: Black #16181D)
     const pelvisCore = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.145, 0.125, 0.14, 28),
-      boneTendonMat
+      new THREE.CylinderGeometry(0.152, 0.142, 0.16, 28),
+      shortsMat
     );
     hipsPivot.add(pelvisCore);
 
@@ -805,13 +843,20 @@ export function TrainerStudio3D({
       hipLegPivot.position.set(side * 0.115, -0.04, 0);
       hipsPivot.add(hipLegPivot);
 
-      // Femur Core
+      // Femur Core & Matte Charcoal Athletic Shorts Leg Sleeve
       const femurCore = new THREE.Mesh(
         new THREE.CylinderGeometry(0.042, 0.036, 0.38, 16),
         boneTendonMat
       );
       femurCore.position.set(0, -0.21, 0);
       hipLegPivot.add(femurCore);
+
+      const shortsLegSleeve = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.082, 0.076, 0.17, 24),
+        shortsMat
+      );
+      shortsLegSleeve.position.set(0, -0.095, 0.004);
+      hipLegPivot.add(shortsLegSleeve);
 
       // Anterior Thigh = Rectus Femoris + Vastus Lateralis + Vastus Medialis (Teardrop)
       const quadMainGeo = new THREE.CapsuleGeometry(0.068, 0.24, 16, 32);
@@ -946,6 +991,7 @@ export function TrainerStudio3D({
       front: new THREE.Vector3(1.52, 1.42, 2.68),
       side: new THREE.Vector3(3.05, 1.16, 0.35),
       back: new THREE.Vector3(-1.32, 1.42, -2.75),
+      top: new THREE.Vector3(0.01, 3.65, 0.38),
     };
 
     let lastFrameTime = performance.now();
@@ -991,21 +1037,38 @@ export function TrainerStudio3D({
       leftLeg.kneePivot.rotation.set(0, 0, 0);
       rightLeg.kneePivot.rotation.set(0, 0, 0);
 
+      // Show overhead pull-up bar only for 'pullup' clip
+      pullupBarGroup.visible = activeClip === 'pullup';
+
       // Show dumbbells only for weighted upper/lower variants
       const showDumbbells =
-        variant === 'curl' ||
-        variant === 'tricep_ext' ||
-        variant === 'overhead_push' ||
-        variant === 'row_pull' ||
-        variant === 'hinge' ||
-        activeClip === 'lunge';
+        activeClip !== 'pullup' &&
+        (variant === 'curl' ||
+          variant === 'tricep_ext' ||
+          variant === 'overhead_push' ||
+          variant === 'row_pull' ||
+          variant === 'hinge' ||
+          activeClip === 'lunge');
       leftArm.dumbbellGroup.visible = showDumbbells;
       rightArm.dumbbellGroup.visible = showDumbbells;
 
       const phase = Math.sin(t * 3.2);
       const halfPhase = 0.5 + 0.5 * Math.sin(t * 3.2); // 0..1
 
-      if (activeClip === 'pushup' || activeClip === 'diamond_pushup') {
+      if (activeClip === 'pullup') {
+        // 03. PULL-UP Blueprint Cycle: Frame 0 (active_hang) -> Frame 15 (scapular_pull) -> Frame 30 (top_chin_over_bar) -> Frame 45 (lowering) -> Frame 60 (hang_return)
+        const pullHeight = halfPhase;
+        hipsPivot.position.set(0, 0.94 + pullHeight * 0.42, 0);
+        spinePivot.rotation.x = -pullHeight * 0.14;
+        leftArm.shoulderPivot.rotation.set(-2.95 + pullHeight * 1.28, 0, 0.28 + pullHeight * 0.22);
+        rightArm.shoulderPivot.rotation.set(-2.95 + pullHeight * 1.28, 0, -0.28 - pullHeight * 0.22);
+        leftArm.elbowPivot.rotation.x = -0.12 - pullHeight * 1.72;
+        rightArm.elbowPivot.rotation.x = -0.12 - pullHeight * 1.72;
+        leftLeg.hipLegPivot.rotation.x = 0.06;
+        rightLeg.hipLegPivot.rotation.x = 0.06;
+        leftLeg.kneePivot.rotation.x = 0.18 + pullHeight * 0.12;
+        rightLeg.kneePivot.rotation.x = 0.18 + pullHeight * 0.12;
+      } else if (activeClip === 'pushup' || activeClip === 'diamond_pushup') {
         const isNarrow = activeClip === 'diamond_pushup' || variant === 'narrow_press';
         const depth = halfPhase;
         hipsPivot.position.set(0, 0.32 + depth * 0.22, -0.15);

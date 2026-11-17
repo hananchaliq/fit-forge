@@ -3,6 +3,7 @@ export type AnimationClipName =
   | 'pushup'
   | 'diamond_pushup'
   | 'squat'
+  | 'pullup'
   | 'lunge'
   | 'plank'
   | 'burpee'
@@ -71,8 +72,8 @@ export const EXERCISE_CLIP_MAP: Record<string, ClipMapping> = {
   overhead_tricep_ext: { clip: 'stretch_flow', timeScaleDefault: 0.95, isApproximate: true, biomechanicalVariant: 'tricep_ext' },
 
   // Tuesday Back & Biceps
-  pull_ups: { clip: 'stretch_flow', timeScaleDefault: 0.85, isApproximate: true, biomechanicalVariant: 'row_pull' },
-  lat_pulldown: { clip: 'stretch_flow', timeScaleDefault: 0.9, isApproximate: true, biomechanicalVariant: 'row_pull' },
+  pull_ups: { clip: 'pullup', timeScaleDefault: 1.0, isApproximate: false, biomechanicalVariant: 'standard' },
+  lat_pulldown: { clip: 'pullup', timeScaleDefault: 0.95, isApproximate: true, biomechanicalVariant: 'row_pull' },
   barbell_row: { clip: 'stretch_flow', timeScaleDefault: 0.9, isApproximate: true, biomechanicalVariant: 'row_pull' },
   seated_cable_row: { clip: 'stretch_flow', timeScaleDefault: 0.95, isApproximate: true, biomechanicalVariant: 'row_pull' },
   barbell_curl: { clip: 'stretch_flow', timeScaleDefault: 1.0, isApproximate: true, biomechanicalVariant: 'curl' },

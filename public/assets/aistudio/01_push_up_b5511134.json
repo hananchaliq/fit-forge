@@ -1,0 +1,130 @@
+{
+  "schema_version": "1.0",
+  "units": "meters",
+  "coordinate_system": "Y-up, character forward is +Z, character right is +X",
+  "character": {
+    "type": "realistic_human_anatomy",
+    "proportions": "neutral adult-proportioned anatomical reference; do not infer exact body measurements from poster",
+    "mesh": "single watertight skinned character mesh where practical",
+    "materials": {
+      "skin": "neutral light gray",
+      "clothing": "matte charcoal athletic shorts",
+      "muscle_highlights": "red translucent overlay, separate mesh/material layer"
+    },
+    "rig": {
+      "type": "humanoid_fk_ik",
+      "required_bones": [
+        "root",
+        "pelvis",
+        "spine",
+        "chest",
+        "neck",
+        "head",
+        "clavicle.L",
+        "upper_arm.L",
+        "forearm.L",
+        "hand.L",
+        "clavicle.R",
+        "upper_arm.R",
+        "forearm.R",
+        "hand.R",
+        "thigh.L",
+        "shin.L",
+        "foot.L",
+        "toe.L",
+        "thigh.R",
+        "shin.R",
+        "foot.R",
+        "toe.R"
+      ],
+      "controls": [
+        "root",
+        "pelvis",
+        "chest",
+        "head",
+        "hand_ik.L",
+        "hand_ik.R",
+        "foot_ik.L",
+        "foot_ik.R"
+      ],
+      "deform_quality": "clean joint deformation at shoulders, elbows, hips, and knees"
+    }
+  },
+  "deliverables": {
+    "preferred": [
+      ".glb",
+      ".fbx"
+    ],
+    "optional": [
+      ".blend",
+      ".obj"
+    ],
+    "include": [
+      "skinned_mesh",
+      "armature",
+      "named_animation_clips",
+      "muscle_highlight_overlay",
+      "front_side_back_camera_views"
+    ],
+    "frame_rate": 30
+  },
+  "exercise": {
+    "id": "01_push_up",
+    "name": "Push-Up",
+    "category": "upper_body",
+    "equipment": "floor mat or stable non-slip floor",
+    "muscle_highlights": [
+      "pectorals",
+      "anterior_deltoids",
+      "triceps"
+    ],
+    "setup": "Hands on floor slightly wider than shoulder width; body in a straight plank line; feet supported on floor.",
+    "keyframes": [
+      {
+        "frame": 0,
+        "label": "start_high_plank",
+        "pose": "elbows extended but not forcefully locked; shoulders over or slightly ahead of wrists; head aligned with spine; pelvis neutral; legs straight."
+      },
+      {
+        "frame": 15,
+        "label": "lowering",
+        "pose": "bend elbows under control; lower chest and hips together; maintain a stable trunk; elbows angled naturally rather than flared straight sideways."
+      },
+      {
+        "frame": 30,
+        "label": "bottom_controlled",
+        "pose": "reach a comfortable depth while keeping trunk aligned; do not force the shoulder range."
+      },
+      {
+        "frame": 45,
+        "label": "press_up",
+        "pose": "press the floor away; extend elbows smoothly; keep hips from sagging or rising ahead of the chest."
+      },
+      {
+        "frame": 60,
+        "label": "return_start",
+        "pose": "return to stable high plank; brief pause."
+      }
+    ],
+    "animation_clip": {
+      "name": "push_up_cycle",
+      "duration_seconds": 2.0,
+      "loop": true,
+      "interpolation": "smooth_bezier",
+      "root_motion": false
+    },
+    "camera_views": [
+      "front",
+      "side",
+      "back",
+      "top"
+    ],
+    "form_checks": [
+      "head, torso, pelvis and legs remain aligned",
+      "hands remain planted",
+      "left and right sides move symmetrically",
+      "use a comfortable range of motion"
+    ],
+    "safety_note": "Use a stable, non-slip surface. Stop if movement causes pain; use an easier incline variation if a floor push-up is not controlled."
+  }
+}
