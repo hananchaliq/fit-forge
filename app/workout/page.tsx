@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import Image from 'next/image';
 import {
   Play,
@@ -12,8 +12,6 @@ import {
   CheckCircle2,
   Volume2,
   Eye,
-  ChevronDown,
-  ChevronUp,
   Sparkles,
   AlertTriangle,
   Dumbbell,
@@ -25,6 +23,8 @@ import {
   Download,
   Layers,
   Sliders,
+  Grid2X2,
+  Box,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
 import { BodyHighlighter2D } from '@/components/plan/BodyHighlighter2D';
@@ -49,8 +49,8 @@ const TrainerStudio3D = dynamic(
     loading: () => (
       <BiomechanicalLoader
         compact
-        label="MEMUAT ENGINE BIOMEKANIK 1024-BIT HD"
-        sublabel="Menyiapkan 28-Submesh Anatomical Striated Rig & PBR Shaders..."
+        label="MEMUAT ENGINE MANUSIA 3D & IK RIG"
+        sublabel="Menyiapkan 22-Bone Analytical IK & Highlight Otot Blueprint..."
       />
     ),
   }
@@ -74,6 +74,10 @@ function WorkoutStudioContent() {
     const queryEx = searchParams.get('exercise');
     if (queryEx && EXERCISES[queryEx]) {
       setSelectedExerciseId(queryEx);
+      const matchingBp = BLUEPRINT_EXERCISES.find((b) => b.fitforgeExerciseId === queryEx);
+      if (matchingBp) {
+        setActiveBlueprintId(matchingBp.id);
+      }
     }
   }, [searchParams, setSelectedExerciseId]);
 
@@ -83,8 +87,9 @@ function WorkoutStudioContent() {
   // 3D Viewport controls
   const [isPaused, setIsPaused] = useState(false);
   const [timeScale, setTimeScale] = useState(1.0);
-  const [cameraPreset, setCameraPreset] = useState<CameraPreset>('front');
-  const [dockCollapsed, setDockCollapsed] = useState(false);
+  const [cameraPreset, setCameraPreset] = useState<CameraPreset>('side');
+  const [quadView, setQuadView] = useState(false);
+  const [lockedFrame, setLockedFrame] = useState<number | null>(null);
   const [debugMuscleMask, setDebugMuscleMask] = useState(false);
 
   // Active Workout Session state
@@ -96,12 +101,17 @@ function WorkoutStudioContent() {
   const [sessionSavedBanner, setSessionSavedBanner] = useState(false);
 
   // 3D Blueprint Pack & AI_BUILD_PROMPT.md Inspector state
-  const [activeBlueprintId, setActiveBlueprintId] = useState<BlueprintExerciseSpec['id']>('01_push_up');
-  const [blueprintViewTab, setBlueprintViewTab] = useState<'prompt' | 'specs' | 'diagram'>('prompt');
+  const [activeBlueprintId, setActiveBlueprintId] =
+    useState<BlueprintExerciseSpec['id']>('01_push_up');
+  const [blueprintViewTab, setBlueprintViewTab] = useState<'prompt' | 'specs' | 'diagram'>(
+    'specs'
+  );
   const [copiedPrompt, setCopiedPrompt] = useState(false);
 
   const activeBlueprint =
-    BLUEPRINT_EXERCISES.find((b) => b.id === activeBlueprintId) || BLUEPRINT_EXERCISES[0];
+    BLUEPRINT_EXERCISES.find((b) => b.fitforgeExerciseId === currentExercise.id) ||
+    BLUEPRINT_EXERCISES.find((b) => b.id === activeBlueprintId) ||
+    BLUEPRINT_EXERCISES[0];
 
   const handleCopyPrompt = async (textToCopy: string) => {
     try {
@@ -155,7 +165,6 @@ function WorkoutStudioContent() {
       setCurrentSet((s) => s + 1);
       setRestSecondsLeft(currentExercise.restSec);
     } else {
-      // Advance to next exercise in day plan
       const idx = dayExercises.findIndex((e) => e.id === currentExercise.id);
       const nextEx = dayExercises[(idx + 1) % dayExercises.length];
       if (nextEx) {
@@ -201,10 +210,19 @@ function WorkoutStudioContent() {
     setTimeout(() => setSessionSavedBanner(false), 3500);
   };
 
+  const keyframeButtons = [
+    { frame: null, shortLabel: 'Loop 30 FPS', sub: 'Animasi Mulus' },
+    { frame: 0, shortLabel: '1. Start (F0)', sub: activeBlueprint.animation.keyframes[0]?.pose || 'start' },
+    { frame: 15, shortLabel: 'Turun (F15)', sub: activeBlueprint.animation.keyframes[1]?.pose || 'descent' },
+    { frame: 30, shortLabel: '2. Puncak (F30)', sub: activeBlueprint.animation.keyframes[2]?.pose || 'bottom' },
+    { frame: 45, shortLabel: 'Dorong (F45)', sub: activeBlueprint.animation.keyframes[3]?.pose || 'ascent' },
+    { frame: 60, shortLabel: '3. Kembali (F60)', sub: activeBlueprint.animation.keyframes[4]?.pose || 'return' },
+  ];
+
   return (
     <AppShell
       title={`Studio 3D: ${currentExercise.name}`}
-      subtitle={`Sorotan Otot Real-Time · ${currentExercise.sets} Set × ${currentExercise.reps} Repetisi · Istirahat ${currentExercise.restSec} dtk`}
+      subtitle={`Anatomical Human IK · ${currentExercise.sets} Set × ${currentExercise.reps} Repetisi · Istirahat ${currentExercise.restSec} dtk`}
       ctaLabel="Simpan Sesi Latihan"
       onCtaClick={handleFinishSession}
     >
@@ -217,8 +235,8 @@ function WorkoutStudioContent() {
         </div>
       )}
 
-      {/* Top Exercise Selector Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+      {/* Top Exercise & Blueprint Selector Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
         <div className="flex flex-wrap items-center gap-2">
           <select
             aria-label="Pilih hari program latihan"
@@ -229,7 +247,7 @@ function WorkoutStudioContent() {
               const list = getExercisesForDay(nextDay, planMode);
               if (list[0]) setSelectedExerciseId(list[0].id);
             }}
-            className="px-3 py-2 rounded-xl bg-white dark:bg-[#161616] border border-[#EFEFEF] dark:border-[#262626] text-xs font-bold"
+            className="px-3.5 py-2 rounded-xl bg-white dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#262626] text-xs font-bold text-[#111111] dark:text-white shadow-xs"
           >
             {WEEKLY_PLAN.map((d) => (
               <option key={d.key} value={d.key}>
@@ -242,10 +260,13 @@ function WorkoutStudioContent() {
             aria-label="Pilih gerakan latihan 3D"
             value={currentExercise.id}
             onChange={(e) => {
-              setSelectedExerciseId(e.target.value);
+              const exId = e.target.value;
+              setSelectedExerciseId(exId);
               setCurrentSet(1);
+              const bp = BLUEPRINT_EXERCISES.find((b) => b.fitforgeExerciseId === exId);
+              if (bp) setActiveBlueprintId(bp.id);
             }}
-            className="px-3 py-2 rounded-xl bg-white dark:bg-[#161616] border border-[#EFEFEF] dark:border-[#262626] text-xs font-bold"
+            className="px-3.5 py-2 rounded-xl bg-white dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#262626] text-xs font-bold text-[#111111] dark:text-white shadow-xs"
           >
             {Object.values(EXERCISES).map((ex) => (
               <option key={ex.id} value={ex.id}>
@@ -254,12 +275,14 @@ function WorkoutStudioContent() {
             ))}
           </select>
 
-          <div className="inline-flex rounded-xl bg-white dark:bg-[#161616] border border-[#EFEFEF] dark:border-[#262626] p-0.5">
+          <div className="inline-flex rounded-xl bg-white dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#262626] p-0.5 shadow-xs">
             <button
               type="button"
               onClick={() => setPlanMode('gym')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
-                planMode === 'gym' ? 'bg-[#161616] text-white dark:bg-[#F97316] dark:text-black' : 'text-neutral-500'
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition ${
+                planMode === 'gym'
+                  ? 'bg-[#161616] text-white dark:bg-[#F97316] dark:text-black'
+                  : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-white'
               }`}
             >
               Gym
@@ -267,8 +290,10 @@ function WorkoutStudioContent() {
             <button
               type="button"
               onClick={() => setPlanMode('home')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
-                planMode === 'home' ? 'bg-[#161616] text-white dark:bg-[#F97316] dark:text-black' : 'text-neutral-500'
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition ${
+                planMode === 'home'
+                  ? 'bg-[#161616] text-white dark:bg-[#F97316] dark:text-black'
+                  : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-white'
               }`}
             >
               Rumah
@@ -276,10 +301,10 @@ function WorkoutStudioContent() {
           </div>
         </div>
 
-        {/* Quick Blueprint Pack 01 / 02 / 03 Switcher */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-neutral-400 mr-1">
-            Blueprint 3D:
+        {/* Blueprint 3D Core Trio Quick-Switch (01. PUSH-UP · 02. SQUAT · 03. PULL-UP) */}
+        <div className="flex flex-wrap items-center gap-1.5 bg-white dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#262626] p-1 rounded-2xl shadow-xs">
+          <span className="px-2.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Blueprint:
           </span>
           {BLUEPRINT_EXERCISES.map((bp) => {
             const isSelected = currentExercise.id === bp.fitforgeExerciseId;
@@ -291,11 +316,12 @@ function WorkoutStudioContent() {
                   setSelectedExerciseId(bp.fitforgeExerciseId);
                   setActiveBlueprintId(bp.id);
                   setCurrentSet(1);
+                  setCameraPreset(bp.id === '03_pull_up' ? 'front' : 'side');
                 }}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
                   isSelected
-                    ? 'bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black border-[#F97316] shadow-sm'
-                    : 'bg-white dark:bg-[#161616] text-[#111111] dark:text-neutral-200 border-[#EFEFEF] dark:border-[#262626] hover:border-[#F59E0B]/60'
+                    ? 'bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black shadow-xs'
+                    : 'text-[#111111] dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-[#222226]'
                 }`}
               >
                 {bp.code}. {bp.exercise.replace('_', '-').toUpperCase()}
@@ -305,191 +331,249 @@ function WorkoutStudioContent() {
         </div>
       </div>
 
-      {/* MAIN 3D VIEWPORT CONTAINER WITH UNOBSTRUCTED CENTER + COLLAPSIBLE BOTTOM DOCK */}
-      <div className="relative w-full h-[540px] sm:h-[600px] rounded-3xl overflow-hidden shadow-card mb-6">
-        <TrainerStudio3D
-          clip={currentExercise.clip}
-          biomechanicalVariant={currentExercise.biomechanicalVariant}
-          primaryMuscles={currentExercise.primaryMuscles}
-          secondaryMuscles={currentExercise.secondaryMuscles}
-          timeScale={timeScale}
-          isPaused={isPaused}
-          cameraPreset={cameraPreset}
-          debugMuscleMask={debugMuscleMask}
-        />
-
-        {/* Top-Left Minimal Spec Header (Collision-Free on Mobile) */}
-        <div className="absolute top-3 left-3 max-w-[48%] sm:max-w-none bg-[#161616]/90 backdrop-blur-md border border-[#262626] rounded-xl px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-white pointer-events-none">
-          <p className="text-[11px] sm:text-xs font-bold text-white truncate">
-            {currentExercise.name}
-          </p>
-          <p className="text-[10px] sm:text-[11px] text-[#F59E0B] tabular-nums truncate">
-            Set {currentSet}/{currentExercise.sets} · Target {currentExercise.reps} rep
-          </p>
-        </div>
-
-        {/* Unified Collapsible Bottom Control Dock (Zero Side-Panel Clutter over 3D Canvas) */}
-        <div className="absolute bottom-2.5 sm:bottom-3 left-1/2 -translate-x-1/2 w-[95%] max-w-[900px] z-20">
-          <div className="flex justify-center mb-1.5">
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setDockCollapsed((prev) => !prev)}
-              className="px-3 py-1 rounded-full bg-[#161616]/95 backdrop-blur-md border border-[#333333] text-[11px] font-semibold text-neutral-200 hover:text-white flex items-center gap-1 cursor-pointer shadow-md"
-            >
-              {dockCollapsed ? (
-                <>
-                  <ChevronUp className="w-3.5 h-3.5 text-[#F59E0B]" />
-                  <span>Tampilkan Kontrol 3D</span>
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="w-3.5 h-3.5 text-[#F59E0B]" />
-                  <span>Sembunyikan Kontrol (Mode Zen)</span>
-                </>
-              )}
-            </motion.button>
+      {/* =====================================================================
+          UNIFIED APPLE-GRADE 3D BLUEPRINT STUDIO CARD (ZERO COLLISION / OVERLAP)
+         ===================================================================== */}
+      <div className="w-full rounded-[28px] bg-[#070D19] border border-[#1E293B] overflow-hidden shadow-2xl mb-6">
+        {/* 1. Studio Top Bar (Docked cleanly above canvas) */}
+        <div className="px-4 sm:px-5 py-3 bg-[#0B1324] border-b border-[#1E293B] flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#EF4444] shrink-0 shadow-[0_0_10px_#EF4444]" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-xs sm:text-sm font-extrabold text-white truncate">
+                  {currentExercise.name}
+                </h2>
+                <span className="px-2 py-0.5 rounded-md bg-sky-500/15 border border-sky-500/30 text-[10px] font-bold text-sky-300 tabular-nums">
+                  Set {currentSet}/{currentExercise.sets} · {currentExercise.reps} rep
+                </span>
+              </div>
+              <div className="hidden sm:flex items-center gap-3 mt-0.5 text-[11px] text-slate-400">
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-[#DC2626]" />
+                  Muscle (Red)
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-[#B8C1CC]" />
+                  Body (Gray)
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-[#161920] border border-slate-600" />
+                  Clothes (Black)
+                </span>
+              </div>
+            </div>
           </div>
 
-          <AnimatePresence initial={false}>
-            {!dockCollapsed && (
-              <motion.div
-                initial={{ opacity: 0, y: 16, scale: 0.97 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 16, scale: 0.97 }}
-                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                className="rounded-2xl bg-[#141416]/95 backdrop-blur-xl border border-[#2A2A2E] p-2.5 sm:p-3.5 text-white shadow-2xl flex flex-wrap items-center justify-between gap-2.5 sm:gap-3"
+          {/* Right: Single Studio vs 4-Angle Quad View + Camera Angle Pills */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* View Mode Toggle: Single 3D vs 4-Angle Blueprint Split */}
+            <div className="inline-flex rounded-xl bg-[#070D19] p-1 border border-[#1E293B]">
+              <button
+                type="button"
+                onClick={() => setQuadView(false)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                  !quadView
+                    ? 'bg-sky-500 text-slate-950'
+                    : 'text-slate-400 hover:text-white'
+                }`}
               >
-                {/* Playback & Set Actions */}
-                <div className="flex items-center gap-1.5 sm:gap-2">
-                  <motion.button
+                <Box className="w-3.5 h-3.5" />
+                <span>Studio 3D</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuadView(true)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                  quadView
+                    ? 'bg-sky-500 text-slate-950'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Grid2X2 className="w-3.5 h-3.5" />
+                <span>4-Angle Blueprint</span>
+              </button>
+            </div>
+
+            {/* Camera Angle Presets (Depan / Samping / Belakang / Atas) */}
+            {!quadView && (
+              <div className="flex items-center gap-0.5 bg-[#070D19] p-1 rounded-xl border border-[#1E293B]">
+                {(
+                  [
+                    { key: 'front', label: 'Depan' },
+                    { key: 'side', label: 'Samping' },
+                    { key: 'back', label: 'Belakang' },
+                    { key: 'top', label: 'Atas' },
+                  ] as const
+                ).map((cam) => (
+                  <button
+                    key={cam.key}
                     type="button"
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => setIsPaused((p) => !p)}
-                    className="p-2 sm:p-2.5 rounded-xl bg-[#262626] hover:bg-[#333333] text-white transition cursor-pointer"
-                    aria-label={isPaused ? 'Putar animasi 3D' : 'Jeda animasi 3D'}
+                    onClick={() => setCameraPreset(cam.key)}
+                    className={`relative px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      cameraPreset === cam.key
+                        ? 'text-[#F59E0B]'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
                   >
-                    {isPaused ? (
-                      <Play className="w-4 h-4 text-[#F59E0B] fill-[#F59E0B]" />
-                    ) : (
-                      <Pause className="w-4 h-4 text-white" />
+                    {cameraPreset === cam.key && (
+                      <motion.span
+                        layoutId="workout-cam-preset-pill"
+                        className="absolute inset-0 rounded-lg bg-[#162033] border border-sky-500/30"
+                        transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                      />
                     )}
-                  </motion.button>
-
-                  <motion.button
-                    type="button"
-                    whileTap={{ scale: 0.95 }}
-                    onClick={handleCompleteSet}
-                    className="px-3 sm:px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold hover:opacity-95 transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Selesai Set {currentSet}</span>
-                  </motion.button>
-
-                  <motion.button
-                    type="button"
-                    whileTap={{ scale: 0.9 }}
-                    onClick={handleSkipNextExercise}
-                    className="p-2 sm:p-2.5 rounded-xl bg-[#262626] hover:bg-[#333333] text-neutral-200 transition cursor-pointer"
-                    aria-label="Lanjut ke gerakan berikutnya"
-                    title="Gerakan Berikutnya"
-                  >
-                    <SkipForward className="w-4 h-4" />
-                  </motion.button>
-
-                  {restSecondsLeft > 0 && (
-                    <div className="px-2.5 py-1.5 rounded-xl bg-[#EF4444]/20 border border-[#EF4444] text-xs font-bold text-[#EF4444] tabular-nums flex items-center gap-1">
-                      <Timer className="w-3.5 h-3.5" />
-                      <span>{restSecondsLeft}s</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Camera Angle Presets (Depan / Samping / Belakang / Atas) with Sliding Pill */}
-                <div className="flex items-center gap-0.5 bg-[#0A0A0C] p-1 rounded-xl border border-[#262626]">
-                  {(
-                    [
-                      { key: 'front', label: 'Depan' },
-                      { key: 'side', label: 'Samping' },
-                      { key: 'back', label: 'Belakang' },
-                      { key: 'top', label: 'Atas' },
-                    ] as const
-                  ).map((cam) => (
-                    <button
-                      key={cam.key}
-                      type="button"
-                      onClick={() => setCameraPreset(cam.key)}
-                      className={`relative px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                        cameraPreset === cam.key
-                          ? 'text-[#F59E0B]'
-                          : 'text-neutral-400 hover:text-white'
-                      }`}
-                    >
-                      {cameraPreset === cam.key && (
-                        <motion.span
-                          layoutId="workout-cam-preset-pill"
-                          className="absolute inset-0 rounded-lg bg-[#222226] border border-[#38383E]"
-                          transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                        />
-                      )}
-                      <span className="relative z-10">{cam.label}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Speed Slider (0.5x – 1.5x) & Voice Coach + Debug Mask */}
-                <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-between sm:justify-end">
-                  <div className="flex items-center gap-2">
-                    <label htmlFor="speed-slider" className="text-[11px] text-neutral-400 tabular-nums">
-                      Tempo: {timeScale.toFixed(1)}×
-                    </label>
-                    <input
-                      id="speed-slider"
-                      type="range"
-                      min="0.5"
-                      max="1.5"
-                      step="0.1"
-                      value={timeScale}
-                      onChange={(e) => setTimeScale(parseFloat(e.target.value))}
-                      className="w-20 accent-[#F97316]"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <motion.button
-                      type="button"
-                      whileTap={{ scale: 0.9 }}
-                      onClick={() =>
-                        soundEngine.speakIndonesian(
-                          `${currentExercise.name}. ${currentExercise.formTips[0]}`
-                        )
-                      }
-                      className="p-2 rounded-xl bg-[#262626] hover:bg-[#333333] text-neutral-200 cursor-pointer"
-                      aria-label="Dengarkan panduan suara Bahasa Indonesia"
-                      title="Panduan Suara (ID)"
-                    >
-                      <Volume2 className="w-4 h-4 text-[#F59E0B]" />
-                    </motion.button>
-
-                    <motion.button
-                      type="button"
-                      whileTap={{ scale: 0.9 }}
-                      onClick={() => setDebugMuscleMask((d) => !d)}
-                      className={`p-2 rounded-xl border text-xs font-semibold cursor-pointer ${
-                        debugMuscleMask
-                          ? 'bg-[#F97316] text-black border-[#F97316]'
-                          : 'bg-[#0E0E0E] text-neutral-400 border-[#262626]'
-                      }`}
-                      aria-label="Tampilkan warna wilayah mask otot"
-                      title="Toggle Mask Region Otot"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </motion.button>
-                  </div>
-                </div>
-              </motion.div>
+                    <span className="relative z-10">{cam.label}</span>
+                  </button>
+                ))}
+              </div>
             )}
-          </AnimatePresence>
+          </div>
+        </div>
+
+        {/* 2. Center 3D Viewport (100% Unobstructed — Zero Floating Dock Covering Athlete) */}
+        <div className="relative w-full h-[440px] sm:h-[520px]">
+          <TrainerStudio3D
+            clip={currentExercise.clip}
+            biomechanicalVariant={currentExercise.biomechanicalVariant}
+            exerciseName={currentExercise.name}
+            primaryMuscles={currentExercise.primaryMuscles}
+            secondaryMuscles={currentExercise.secondaryMuscles}
+            timeScale={timeScale}
+            isPaused={isPaused}
+            cameraPreset={cameraPreset}
+            debugMuscleMask={debugMuscleMask}
+            quadView={quadView}
+            lockedFrame={lockedFrame}
+          />
+        </div>
+
+        {/* 3. Studio Bottom Control Dock (Cleanly below canvas, never colliding with 3D model) */}
+        <div className="bg-[#0B1324] border-t border-[#1E293B] p-3 sm:p-4 space-y-3">
+          {/* Row A: 3D Pose Sequence Scrubber (Matching Blueprint 1. Start -> 2. Lower/Squat/Pull -> 3. Return) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#1E293B]/80">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-sky-400 shrink-0">
+              3D Pose Sequence:
+            </span>
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 w-full sm:w-auto flex-1 max-w-[780px]">
+              {keyframeButtons.map((btn) => {
+                const isSelected = lockedFrame === btn.frame;
+                return (
+                  <button
+                    key={String(btn.frame)}
+                    type="button"
+                    onClick={() => {
+                      setLockedFrame(btn.frame);
+                      if (btn.frame === null) setIsPaused(false);
+                    }}
+                    className={`px-2.5 py-1.5 rounded-xl border text-left transition cursor-pointer ${
+                      isSelected
+                        ? 'bg-sky-500/20 border-sky-400 text-white'
+                        : 'bg-[#070D19] border-[#1E293B] text-slate-400 hover:text-white hover:border-slate-700'
+                    }`}
+                  >
+                    <p className="text-[11px] font-bold truncate">{btn.shortLabel}</p>
+                    <p className="text-[9px] text-slate-400 font-mono truncate">{btn.sub}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Row B: Playback, Set Completion, Tempo Slider & Voice Coach */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setLockedFrame(null);
+                  setIsPaused((p) => !p);
+                }}
+                className="p-2.5 rounded-xl bg-[#162033] hover:bg-[#1E293B] border border-slate-700/60 text-white transition cursor-pointer"
+                aria-label={isPaused ? 'Putar animasi 3D' : 'Jeda animasi 3D'}
+              >
+                {isPaused || lockedFrame !== null ? (
+                  <Play className="w-4 h-4 text-[#F59E0B] fill-[#F59E0B]" />
+                ) : (
+                  <Pause className="w-4 h-4 text-white" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCompleteSet}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold hover:opacity-95 transition flex items-center gap-1.5 cursor-pointer shadow-md"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Selesai Set {currentSet}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSkipNextExercise}
+                className="px-3 py-2.5 rounded-xl bg-[#162033] hover:bg-[#1E293B] border border-slate-700/60 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                title="Gerakan Berikutnya"
+              >
+                <SkipForward className="w-4 h-4" />
+                <span className="hidden sm:inline">Gerakan Berikutnya</span>
+              </button>
+
+              {restSecondsLeft > 0 && (
+                <div className="px-3 py-2 rounded-xl bg-[#EF4444]/20 border border-[#EF4444] text-xs font-bold text-[#EF4444] tabular-nums flex items-center gap-1.5">
+                  <Timer className="w-3.5 h-3.5" />
+                  <span>Istirahat: {restSecondsLeft}s</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+              <div className="flex items-center gap-2 bg-[#070D19] px-3 py-1.5 rounded-xl border border-[#1E293B]">
+                <label htmlFor="speed-slider" className="text-[11px] font-semibold text-slate-300 tabular-nums">
+                  Tempo: {timeScale.toFixed(1)}×
+                </label>
+                <input
+                  id="speed-slider"
+                  type="range"
+                  min="0.5"
+                  max="1.5"
+                  step="0.1"
+                  value={timeScale}
+                  onChange={(e) => setTimeScale(parseFloat(e.target.value))}
+                  className="w-20 accent-[#F97316]"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    soundEngine.speakIndonesian(
+                      `${currentExercise.name}. ${currentExercise.formTips[0]}`
+                    )
+                  }
+                  className="p-2.5 rounded-xl bg-[#162033] hover:bg-[#1E293B] border border-slate-700/60 text-slate-200 cursor-pointer"
+                  aria-label="Dengarkan panduan suara Bahasa Indonesia"
+                  title="Panduan Suara (ID)"
+                >
+                  <Volume2 className="w-4 h-4 text-[#F59E0B]" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDebugMuscleMask((d) => !d)}
+                  className={`p-2.5 rounded-xl border text-xs font-semibold cursor-pointer ${
+                    debugMuscleMask
+                      ? 'bg-[#F97316] text-black border-[#F97316]'
+                      : 'bg-[#070D19] text-slate-400 border-[#1E293B] hover:text-white'
+                  }`}
+                  aria-label="Tampilkan warna wilayah mask otot"
+                  title="Toggle Mask Region Otot"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -501,26 +585,26 @@ function WorkoutStudioContent() {
             Peta Aktivasi Otot (2D & 3D Sinkron)
           </h2>
           <p className="text-xs text-[#6B7280] dark:text-neutral-400 mb-4">
-            Merah menyala = Otot Primer · Amber = Otot Sekunder
+            Merah menyala = Otot Primer · Coral = Otot Sekunder
           </p>
 
           <BodyHighlighter2D
             primaryMuscles={currentExercise.primaryMuscles}
             secondaryMuscles={currentExercise.secondaryMuscles}
-            primaryColor="#EF4444"
-            secondaryColor="#F59E0B"
+            primaryColor="#DC2626"
+            secondaryColor="#EA580C"
           />
 
           <div className="mt-4 pt-3 border-t border-[#EFEFEF] dark:border-[#262626] space-y-2 text-xs">
             <div>
-              <span className="font-bold text-[#EF4444]">Otot Primer: </span>
+              <span className="font-bold text-[#DC2626]">Otot Primer: </span>
               <span className="text-[#111111] dark:text-neutral-200">
                 {currentExercise.primaryMuscles.map((m) => MUSCLE_LABELS_ID[m]).join(', ')}
               </span>
             </div>
             {currentExercise.secondaryMuscles.length > 0 && (
               <div>
-                <span className="font-bold text-[#F59E0B]">Otot Sekunder: </span>
+                <span className="font-bold text-[#EA580C]">Otot Sekunder: </span>
                 <span className="text-[#6B7280] dark:text-neutral-400">
                   {currentExercise.secondaryMuscles.map((m) => MUSCLE_LABELS_ID[m]).join(', ')}
                 </span>
@@ -532,7 +616,6 @@ function WorkoutStudioContent() {
         {/* Right 8 cols: Form Tips (3) + Common Mistakes (2) + Day Exercise Queue */}
         <div className="lg:col-span-8 space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* 3 Form Tips */}
             <div className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card">
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles className="w-4 h-4 text-emerald-500" />
@@ -547,7 +630,6 @@ function WorkoutStudioContent() {
               </ol>
             </div>
 
-            {/* 2 Common Mistakes */}
             <div className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card">
               <div className="flex items-center gap-2 mb-3">
                 <AlertTriangle className="w-4 h-4 text-[#EF4444]" />
@@ -653,8 +735,8 @@ function WorkoutStudioContent() {
       </div>
 
       {/* 3D MODEL BLUEPRINT PACK & MASTER AI_BUILD_PROMPT.MD STUDIO */}
-      <div className="mt-6 rounded-3xl bg-[#0D1017] text-white border border-[#1E2638] p-5 sm:p-6 shadow-card">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-[#1E2638]">
+      <div className="mt-6 rounded-3xl bg-[#070D19] text-white border border-[#1E293B] p-5 sm:p-6 shadow-card">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-[#1E293B]">
           <div>
             <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-[#F97316]/15 border border-[#F97316]/40 text-[#F59E0B] text-[11px] font-extrabold uppercase tracking-wider mb-2">
               <FileCode2 className="w-3.5 h-3.5" />
@@ -664,7 +746,7 @@ function WorkoutStudioContent() {
               AI_BUILD_PROMPT.md & Spesifikasi Rigging 3D (Push-Up · Squat · Pull-Up)
             </h2>
             <p className="text-xs text-slate-400 mt-1">
-              Spesifikasi lengkap karakter atletis 180 cm / 70 kg, 22 tulang wajib, 5 keyframe @ 30 FPS, dan highlight otot merah untuk pipeline Blender / Mixamo / Three.js (.glb / .fbx / .obj).
+              Spesifikasi lengkap karakter manusia atletis 180 cm / 70 kg, 22 tulang wajib, 5 keyframe @ 30 FPS, dan highlight otot merah sesuai blueprint.
             </p>
           </div>
 
@@ -690,7 +772,7 @@ function WorkoutStudioContent() {
             <button
               type="button"
               onClick={handleDownloadPrompt}
-              className="px-3.5 py-2 rounded-xl bg-[#161B26] hover:bg-[#1E2638] border border-[#2A344B] text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+              className="px-3.5 py-2 rounded-xl bg-[#111A2E] hover:bg-[#1E293B] border border-[#2A3B5C] text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
             >
               <Download className="w-4 h-4 text-[#F59E0B]" />
               <span>Unduh AI_BUILD_PROMPT.md</span>
@@ -700,12 +782,12 @@ function WorkoutStudioContent() {
 
         {/* Navigation Tabs: Prompt vs JSON Keyframe Specs vs Reference Blueprint Image */}
         <div className="flex flex-wrap items-center justify-between gap-3 my-4">
-          <div className="inline-flex rounded-xl bg-[#141923] border border-[#232C3F] p-1">
+          <div className="inline-flex rounded-xl bg-[#0B1324] border border-[#1E293B] p-1">
             {(
               [
-                { id: 'prompt', label: 'Master AI_BUILD_PROMPT.md', icon: FileCode2 },
                 { id: 'specs', label: '5-Keyframe & Rigging JSON', icon: Sliders },
                 { id: 'diagram', label: 'Blueprint Reference Sheet', icon: Layers },
+                { id: 'prompt', label: 'Master AI_BUILD_PROMPT.md', icon: FileCode2 },
               ] as const
             ).map((tab) => {
               const Icon = tab.icon;
@@ -716,9 +798,7 @@ function WorkoutStudioContent() {
                   type="button"
                   onClick={() => setBlueprintViewTab(tab.id)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                    active
-                      ? 'bg-[#F97316] text-black'
-                      : 'text-slate-300 hover:text-white'
+                    active ? 'bg-[#F97316] text-black' : 'text-slate-300 hover:text-white'
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
@@ -728,9 +808,9 @@ function WorkoutStudioContent() {
             })}
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             {BLUEPRINT_EXERCISES.map((bp) => {
-              const active = activeBlueprintId === bp.id;
+              const active = activeBlueprint.id === bp.id;
               return (
                 <button
                   key={bp.id}
@@ -738,11 +818,12 @@ function WorkoutStudioContent() {
                   onClick={() => {
                     setActiveBlueprintId(bp.id);
                     setSelectedExerciseId(bp.fitforgeExerciseId);
+                    setCameraPreset(bp.id === '03_pull_up' ? 'front' : 'side');
                   }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
                     active
-                      ? 'bg-[#1E293B] text-[#F59E0B] border-[#F59E0B]'
-                      : 'bg-[#141923] text-slate-400 border-[#232C3F] hover:text-white'
+                      ? 'bg-[#162033] text-[#F59E0B] border-[#F59E0B]'
+                      : 'bg-[#0B1324] text-slate-400 border-[#1E293B] hover:text-white'
                   }`}
                 >
                   {bp.titleLabel}
@@ -752,61 +833,87 @@ function WorkoutStudioContent() {
           </div>
         </div>
 
-        {/* Tab 1: Master AI_BUILD_PROMPT.md Content */}
-        {blueprintViewTab === 'prompt' && (
+        {/* Tab 1: 5-Keyframe Sequence & 22-Bone Rigging JSON Inspector */}
+        {blueprintViewTab === 'specs' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-            <div className="lg:col-span-8 rounded-2xl bg-[#080A0F] border border-[#1E2638] p-4 overflow-x-auto max-h-[420px] overflow-y-auto">
-              <pre className="text-[11px] sm:text-xs font-mono text-slate-200 whitespace-pre-wrap leading-relaxed">
-                {AI_BUILD_PROMPT_MD}
-              </pre>
+            <div className="lg:col-span-7 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#F59E0B]">
+                  Urutan Pose 3D ({activeBlueprint.animation.fps} FPS ·{' '}
+                  {activeBlueprint.animation.duration_seconds}s Loop) — Klik untuk Pratinjau di 3D
+                </h3>
+                <a
+                  href={activeBlueprint.jsonFileUrl}
+                  download={`${activeBlueprint.id}.json`}
+                  className="text-xs font-bold text-[#F97316] hover:underline"
+                >
+                  Unduh {activeBlueprint.id}.json
+                </a>
+              </div>
+
+              <div className="space-y-2">
+                {activeBlueprint.animation.keyframes.map((kf) => {
+                  const isLocked = lockedFrame === kf.frame;
+                  return (
+                    <button
+                      key={kf.frame}
+                      type="button"
+                      onClick={() => setLockedFrame(isLocked ? null : kf.frame)}
+                      className={`w-full text-left p-3 rounded-xl border flex items-start gap-3 transition cursor-pointer ${
+                        isLocked
+                          ? 'bg-sky-500/15 border-sky-400'
+                          : 'bg-[#0B1324] border-[#1E293B] hover:border-slate-600'
+                      }`}
+                    >
+                      <span className="px-2.5 py-1 rounded-lg bg-[#F97316]/20 border border-[#F97316]/40 text-[#F59E0B] text-xs font-extrabold tabular-nums shrink-0">
+                        Frame {kf.frame}
+                      </span>
+                      <div>
+                        <p className="text-xs font-bold text-white font-mono">{kf.pose}</p>
+                        <p className="text-xs text-slate-300 mt-0.5">{kf.description}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="lg:col-span-4 space-y-4">
-              <div className="rounded-2xl bg-[#141923] border border-[#232C3F] p-4">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#F59E0B] mb-2.5">
-                  Spesifikasi Karakter Global
+            <div className="lg:col-span-5 space-y-4">
+              <div className="rounded-2xl bg-[#0B1324] border border-[#1E293B] p-4">
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#F59E0B] mb-2">
+                  Kontrol IK / FK ({activeBlueprint.rigging.controls.length} Kontrol)
                 </h3>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="p-2.5 rounded-xl bg-[#0D1017] border border-[#1E2638]">
-                    <span className="text-slate-400 block text-[10px]">Tinggi & Berat</span>
-                    <span className="font-bold text-white">180 cm · 70 kg</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-[#0D1017] border border-[#1E2638]">
-                    <span className="text-slate-400 block text-[10px]">Format 3D</span>
-                    <span className="font-bold text-white">.glb / .fbx / .obj</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-[#0D1017] border border-[#1E2638]">
-                    <span className="text-slate-400 block text-[10px]">Skala Unit</span>
-                    <span className="font-bold text-white">1 unit = 1 meter</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-[#0D1017] border border-[#1E2638]">
-                    <span className="text-slate-400 block text-[10px]">Sudut Kamera</span>
-                    <span className="font-bold text-white">Front/Side/Back/Top</span>
-                  </div>
-                </div>
-
-                <div className="mt-3 pt-3 border-t border-[#232C3F] space-y-1.5 text-xs">
-                  <p className="text-[11px] font-bold text-slate-300">Panduan Warna (Color Guide):</p>
-                  <div className="flex items-center gap-3">
-                    <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-200">
-                      <span className="w-3 h-3 rounded-full bg-[#EF4444] inline-block" />
-                      Muscle (Red)
+                <div className="flex flex-wrap gap-1.5">
+                  {activeBlueprint.rigging.controls.map((ctrl) => (
+                    <span
+                      key={ctrl}
+                      className="px-2.5 py-1 rounded-lg bg-[#070D19] border border-[#2A3B5C] text-[11px] font-mono text-amber-300"
+                    >
+                      {ctrl}
                     </span>
-                    <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-200">
-                      <span className="w-3 h-3 rounded-full bg-[#9CA3AF] inline-block" />
-                      Body (Gray)
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-200">
-                      <span className="w-3 h-3 rounded-full bg-[#16181D] border border-slate-500 inline-block" />
-                      Clothes (Black)
-                    </span>
-                  </div>
+                  ))}
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-[#141923] border border-[#232C3F] p-4">
+              <div className="rounded-2xl bg-[#0B1324] border border-[#1E293B] p-4">
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-300 mb-2">
+                  Hierarki Tulang Wajib ({activeBlueprint.rigging.required_bones.length} Bones)
+                </h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {activeBlueprint.rigging.required_bones.map((bone) => (
+                    <span
+                      key={bone}
+                      className="px-2 py-0.5 rounded-md bg-[#070D19] border border-[#1E293B] text-[10px] font-mono text-slate-300"
+                    >
+                      {bone}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-[#0B1324] border border-[#1E293B] p-4">
                 <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-400 mb-2">
-                  Tips Form ({activeBlueprint.titleLabel})
+                  Form Checks ({activeBlueprint.titleLabel})
                 </h3>
                 <ul className="space-y-1.5 text-xs text-slate-200">
                   {activeBlueprint.form_checks.map((check, i) => (
@@ -821,81 +928,10 @@ function WorkoutStudioContent() {
           </div>
         )}
 
-        {/* Tab 2: 5-Keyframe Sequence & 22-Bone Rigging JSON Inspector */}
-        {blueprintViewTab === 'specs' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-            <div className="lg:col-span-7 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#F59E0B]">
-                  Urutan Pose 3D ({activeBlueprint.animation.fps} FPS · {activeBlueprint.animation.duration_seconds}s Loop)
-                </h3>
-                <a
-                  href={activeBlueprint.jsonFileUrl}
-                  download={`${activeBlueprint.id}.json`}
-                  className="text-xs font-bold text-[#F97316] hover:underline"
-                >
-                  Unduh {activeBlueprint.id}.json
-                </a>
-              </div>
-
-              <div className="space-y-2">
-                {activeBlueprint.animation.keyframes.map((kf) => (
-                  <div
-                    key={kf.frame}
-                    className="p-3 rounded-xl bg-[#141923] border border-[#232C3F] flex items-start gap-3"
-                  >
-                    <span className="px-2.5 py-1 rounded-lg bg-[#F97316]/20 border border-[#F97316]/40 text-[#F59E0B] text-xs font-extrabold tabular-nums shrink-0">
-                      Frame {kf.frame}
-                    </span>
-                    <div>
-                      <p className="text-xs font-bold text-white font-mono">{kf.pose}</p>
-                      <p className="text-xs text-slate-300 mt-0.5">{kf.description}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="lg:col-span-5 space-y-4">
-              <div className="rounded-2xl bg-[#141923] border border-[#232C3F] p-4">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#F59E0B] mb-2">
-                  Kontrol IK / FK ({activeBlueprint.rigging.controls.length} Kontrol)
-                </h3>
-                <div className="flex flex-wrap gap-1.5">
-                  {activeBlueprint.rigging.controls.map((ctrl) => (
-                    <span
-                      key={ctrl}
-                      className="px-2.5 py-1 rounded-lg bg-[#0D1017] border border-[#2A344B] text-[11px] font-mono text-amber-300"
-                    >
-                      {ctrl}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-2xl bg-[#141923] border border-[#232C3F] p-4">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-300 mb-2">
-                  Hierarki Tulang Wajib ({activeBlueprint.rigging.required_bones.length} Bones)
-                </h3>
-                <div className="flex flex-wrap gap-1.5">
-                  {activeBlueprint.rigging.required_bones.map((bone) => (
-                    <span
-                      key={bone}
-                      className="px-2 py-0.5 rounded-md bg-[#0D1017] border border-[#1E2638] text-[10px] font-mono text-slate-300"
-                    >
-                      {bone}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 3: High-Resolution Blueprint Reference Sheet */}
+        {/* Tab 2: High-Resolution Blueprint Reference Sheet */}
         {blueprintViewTab === 'diagram' && (
-          <div className="rounded-2xl bg-[#080A0F] border border-[#1E2638] p-3 sm:p-4">
-            <div className="relative w-full aspect-[16/15] max-h-[680px] rounded-xl overflow-hidden bg-[#080A0F]">
+          <div className="rounded-2xl bg-[#050912] border border-[#1E293B] p-3 sm:p-4">
+            <div className="relative w-full aspect-[16/15] max-h-[680px] rounded-xl overflow-hidden bg-[#050912]">
               <Image
                 src={BLUEPRINT_IMAGE_URL}
                 alt="3D Model Blueprint Reference — 01 Push-Up, 02 Squat, 03 Pull-Up"
@@ -904,6 +940,15 @@ function WorkoutStudioContent() {
                 referrerPolicy="no-referrer"
               />
             </div>
+          </div>
+        )}
+
+        {/* Tab 3: Master AI_BUILD_PROMPT.md Content */}
+        {blueprintViewTab === 'prompt' && (
+          <div className="rounded-2xl bg-[#050912] border border-[#1E293B] p-4 overflow-x-auto max-h-[460px] overflow-y-auto">
+            <pre className="text-[11px] sm:text-xs font-mono text-slate-200 whitespace-pre-wrap leading-relaxed">
+              {AI_BUILD_PROMPT_MD}
+            </pre>
           </div>
         )}
       </div>
@@ -916,8 +961,8 @@ export default function WorkoutPage() {
     <Suspense
       fallback={
         <BiomechanicalLoader
-          label="MEMUAT STUDIO 3D 1024-BIT HD"
-          sublabel="Menyiapkan Engine Biomekanik & Peta Aktivasi Otot..."
+          label="MEMUAT STUDIO 3D HUMAN IK"
+          sublabel="Menyiapkan Model Manusia Anatomis 180 cm & Peta Aktivasi Otot..."
         />
       }
     >

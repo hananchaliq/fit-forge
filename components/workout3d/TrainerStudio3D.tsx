@@ -2,1363 +2,2073 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import type { AnimationClipName, MuscleGroup } from '@/data/exerciseClipMap';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { AnimationClipName, MuscleGroup } from '@/data/exerciseClipMap';
+import { BLUEPRINT_EXERCISES } from '@/data/blueprintPack';
 
 export type CameraPreset = 'front' | 'side' | 'back' | 'top';
 
-interface TrainerStudio3DProps {
+export interface TrainerStudio3DProps {
   clip: AnimationClipName;
   biomechanicalVariant?: string;
+  exerciseName?: string;
   primaryMuscles: MuscleGroup[];
   secondaryMuscles: MuscleGroup[];
   timeScale: number;
   isPaused: boolean;
   cameraPreset: CameraPreset;
   debugMuscleMask?: boolean;
+  lockedFrame?: number | null; // 0, 15, 30, 45, 60 or null for continuous loop
+  quadView?: boolean; // 4-angle Blueprint Split View (Front, Side, Back, Top)
+  onReady?: () => void;
 }
 
-const MUSCLE_ORDER: MuscleGroup[] = [
-  'chest',
-  'back_lats',
-  'shoulders',
-  'biceps',
-  'triceps',
-  'abs',
-  'glutes',
-  'quads',
-  'hamstrings',
-  'calves',
-  'forearms',
-];
-
-const DEBUG_COLORS: Record<MuscleGroup, number> = {
-  chest: 0xef4444,
-  back_lats: 0x22c55e,
-  shoulders: 0x3b82f6,
-  biceps: 0xa855f7,
-  triceps: 0xec4899,
-  abs: 0xf59e0b,
-  glutes: 0x14b8a6,
-  quads: 0xf97316,
-  hamstrings: 0x06b6d4,
-  calves: 0x84cc16,
-  forearms: 0x6366f1,
-};
-
 /**
- * Generates a 1024x1024 High-Definition Anatomical Muscle Striation Albedo & Bump/Roughness Map
- * so every muscle belly renders with crisp myofibril fiber detail at any zoom angle.
+ * Analytical Two-Bone Inverse Kinematics Solver in World Space
+ * Places `midPos` (elbow or knee) at the exact law-of-cosines intersection
+ * between `rootPos` (shoulder/hip) and `endPos` (hand/ankle), oriented toward `polePos`.
  */
-function create1024MuscleTextureSet(maxAnisotropy: number) {
-  const size = 1024;
+function solveTwoBoneIK(
+  rootPos: THREE.Vector3,
+  endPos: THREE.Vector3,
+  len1: number,
+  len2: number,
+  polePos: THREE.Vector3
+): THREE.Vector3 {
+  const diff = new THREE.Vector3().subVectors(endPos, rootPos);
+  const distSq = diff.lengthSq();
+  const minDist = Math.abs(len1 - len2) + 0.004;
+  const maxDist = len1 + len2 - 0.002;
+  const rawDist = Math.sqrt(distSq);
+  const d = Math.max(minDist, Math.min(maxDist, rawDist));
 
-  // 1. 1024x1024 Albedo Fiber Striation Canvas
-  const albedoCanvas = document.createElement('canvas');
-  albedoCanvas.width = size;
-  albedoCanvas.height = size;
-  const aCtx = albedoCanvas.getContext('2d');
-
-  // 2. 1024x1024 Bump / Micro-Roughness Striation Canvas
-  const bumpCanvas = document.createElement('canvas');
-  bumpCanvas.width = size;
-  bumpCanvas.height = size;
-  const bCtx = bumpCanvas.getContext('2d');
-
-  if (aCtx && bCtx) {
-    // Base neutral studio tone for albedo (multiplied by material.color)
-    const baseGrad = aCtx.createLinearGradient(0, 0, 0, size);
-    baseGrad.addColorStop(0, '#d8e0ea');
-    baseGrad.addColorStop(0.12, '#f8fafc');
-    baseGrad.addColorStop(0.5, '#ffffff');
-    baseGrad.addColorStop(0.88, '#f8fafc');
-    baseGrad.addColorStop(1, '#cbd5e1');
-    aCtx.fillStyle = baseGrad;
-    aCtx.fillRect(0, 0, size, size);
-
-    bCtx.fillStyle = '#808080';
-    bCtx.fillRect(0, 0, size, size);
-
-    // Draw 512 high-resolution longitudinal muscle fiber striations across 1024px width
-    for (let i = 0; i < 512; i++) {
-      const x = (i / 512) * size;
-      const wave = Math.sin(i * 0.45) * 4;
-      const intensity = 0.08 + ((i * 17) % 10) * 0.012;
-
-      aCtx.strokeStyle =
-        i % 2 === 0
-          ? `rgba(255, 255, 255, ${intensity})`
-          : `rgba(30, 41, 59, ${intensity * 1.15})`;
-      aCtx.lineWidth = i % 6 === 0 ? 2.2 : 1.1;
-      aCtx.beginPath();
-      aCtx.moveTo(x, 0);
-      aCtx.bezierCurveTo(
-        x + wave,
-        size * 0.33,
-        x - wave,
-        size * 0.66,
-        x,
-        size
-      );
-      aCtx.stroke();
-
-      // Bump height ridges
-      bCtx.strokeStyle =
-        i % 2 === 0 ? 'rgba(235, 235, 235, 0.35)' : 'rgba(25, 25, 25, 0.35)';
-      bCtx.lineWidth = i % 4 === 0 ? 2.4 : 1.2;
-      bCtx.beginPath();
-      bCtx.moveTo(x, 0);
-      bCtx.bezierCurveTo(
-        x + wave,
-        size * 0.33,
-        x - wave,
-        size * 0.66,
-        x,
-        size
-      );
-      bCtx.stroke();
-    }
-
-    // Subtle anatomical fascicle cross-bands & tendon insertion shading at top/bottom
-    const tendonTop = aCtx.createLinearGradient(0, 0, 0, 96);
-    tendonTop.addColorStop(0, 'rgba(15, 23, 42, 0.28)');
-    tendonTop.addColorStop(1, 'rgba(15, 23, 42, 0)');
-    aCtx.fillStyle = tendonTop;
-    aCtx.fillRect(0, 0, size, 96);
-
-    const tendonBot = aCtx.createLinearGradient(0, size - 96, 0, size);
-    tendonBot.addColorStop(0, 'rgba(15, 23, 42, 0)');
-    tendonBot.addColorStop(1, 'rgba(15, 23, 42, 0.28)');
-    aCtx.fillStyle = tendonBot;
-    aCtx.fillRect(0, size - 96, size, 96);
+  const dir = diff.clone();
+  if (rawDist > 1e-5) {
+    dir.divideScalar(rawDist);
+  } else {
+    dir.set(0, -1, 0);
   }
 
-  const albedoTex = new THREE.CanvasTexture(albedoCanvas);
-  albedoTex.colorSpace = THREE.SRGBColorSpace;
-  albedoTex.wrapS = THREE.RepeatWrapping;
-  albedoTex.wrapT = THREE.ClampToEdgeWrapping;
-  albedoTex.repeat.set(2, 1);
-  albedoTex.anisotropy = maxAnisotropy;
+  const cosAngle = Math.max(
+    -1,
+    Math.min(1, (len1 * len1 + d * d - len2 * len2) / (2 * len1 * d))
+  );
+  const angle = Math.acos(cosAngle);
 
-  const bumpTex = new THREE.CanvasTexture(bumpCanvas);
-  bumpTex.wrapS = THREE.RepeatWrapping;
-  bumpTex.wrapT = THREE.ClampToEdgeWrapping;
-  bumpTex.repeat.set(2, 1);
-  bumpTex.anisotropy = maxAnisotropy;
-
-  return { albedoTex, bumpTex };
-}
-
-/**
- * Generates a 1024x1024 High-Definition Biomechanical Floor Calibration Dial Texture
- */
-function create1024FloorDialTexture(maxAnisotropy: number) {
-  const size = 1024;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-
-  if (ctx) {
-    const cx = size / 2;
-    const cy = size / 2;
-
-    // Soft radial dark studio base + contact shadow core
-    const bgGrad = ctx.createRadialGradient(cx, cy, 24, cx, cy, cx);
-    bgGrad.addColorStop(0, 'rgba(0, 0, 0, 0.82)');
-    bgGrad.addColorStop(0.28, 'rgba(12, 12, 16, 0.55)');
-    bgGrad.addColorStop(0.75, 'rgba(18, 18, 24, 0.2)');
-    bgGrad.addColorStop(1, 'rgba(18, 18, 24, 0)');
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, size, size);
-
-    // Concentric precision rings
-    const radii = [140, 240, 340, 430, 470];
-    radii.forEach((r, idx) => {
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.strokeStyle =
-        idx === 3
-          ? 'rgba(249, 115, 22, 0.55)'
-          : idx === 4
-            ? 'rgba(245, 158, 11, 0.35)'
-            : 'rgba(148, 163, 184, 0.16)';
-      ctx.lineWidth = idx === 3 ? 3.5 : 1.5;
-      ctx.stroke();
-    });
-
-    // 360-degree radial calibration ticks
-    for (let deg = 0; deg < 360; deg += 5) {
-      const rad = (deg * Math.PI) / 180;
-      const isMajor = deg % 30 === 0;
-      const isMid = deg % 15 === 0;
-      const rInner = isMajor ? 408 : isMid ? 416 : 422;
-      const rOuter = 430;
-
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(rad) * rInner, cy + Math.sin(rad) * rInner);
-      ctx.lineTo(cx + Math.cos(rad) * rOuter, cy + Math.sin(rad) * rOuter);
-      ctx.strokeStyle = isMajor
-        ? 'rgba(245, 158, 11, 0.75)'
-        : 'rgba(148, 163, 184, 0.28)';
-      ctx.lineWidth = isMajor ? 2.5 : 1.2;
-      ctx.stroke();
-    }
-
-    // Crosshair biomechanical alignment axes
-    ctx.strokeStyle = 'rgba(249, 115, 22, 0.22)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(cx - 460, cy);
-    ctx.lineTo(cx + 460, cy);
-    ctx.moveTo(cx, cy - 460);
-    ctx.lineTo(cx, cy + 460);
-    ctx.stroke();
+  const toPole = new THREE.Vector3().subVectors(polePos, rootPos);
+  const proj = dir.clone().multiplyScalar(toPole.dot(dir));
+  const bendDir = toPole.sub(proj);
+  if (bendDir.lengthSq() < 1e-6) {
+    bendDir.set(0, 0, 1);
+  } else {
+    bendDir.normalize();
   }
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = maxAnisotropy;
-  return tex;
+  return rootPos
+    .clone()
+    .addScaledVector(dir, Math.cos(angle) * len1)
+    .addScaledVector(bendDir, Math.sin(angle) * len1);
 }
 
 /**
- * Creates a 1024-Bit HD MeshPhysicalMaterial extended via `onBeforeCompile`
- * with striated fiber texture, bump detail, clearcoat sheen, and Fresnel rim glow.
+ * Orthonormal basis alignment for a bone mesh whose local +Y runs from `originPos` (s=0)
+ * to `targetEndPos` (s=1) and whose local +Z faces `anteriorDir`.
  */
-function createMuscleShaderMaterial(
-  muscleGroup: MuscleGroup,
-  albedoTex: THREE.CanvasTexture,
-  bumpTex: THREE.CanvasTexture
+function alignBoneUpForward(
+  obj: THREE.Object3D,
+  originPos: THREE.Vector3,
+  targetEndPos: THREE.Vector3,
+  anteriorDir: THREE.Vector3
 ) {
-  const uniforms = {
-    uTime: { value: 0 },
-    uPrimaryWeight: { value: 0 },
-    uSecondaryWeight: { value: 0 },
-    uDebugMode: { value: 0 },
-    uDebugColor: { value: new THREE.Color(DEBUG_COLORS[muscleGroup]) },
+  obj.position.copy(originPos);
+  const yAxis = new THREE.Vector3().subVectors(targetEndPos, originPos);
+  if (yAxis.lengthSq() < 1e-6) {
+    yAxis.set(0, 1, 0);
+  } else {
+    yAxis.normalize();
+  }
+
+  const xAxis = new THREE.Vector3().crossVectors(yAxis, anteriorDir);
+  if (xAxis.lengthSq() < 1e-6) {
+    const fallback =
+      Math.abs(yAxis.y) < 0.9
+        ? new THREE.Vector3(0, 1, 0)
+        : new THREE.Vector3(1, 0, 0);
+    xAxis.crossVectors(yAxis, fallback);
+  }
+  xAxis.normalize();
+
+  const zAxis = new THREE.Vector3().crossVectors(xAxis, yAxis).normalize();
+  const rotMat = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
+  obj.quaternion.setFromRotationMatrix(rotMat);
+}
+
+interface LoftSection {
+  s: number;
+  rx: number;
+  rzAnt: number;
+  rzPost: number;
+  cx?: number;
+  cz?: number;
+  pinchCenterZ?: number;
+}
+
+function catmullRom(p0: number, p1: number, p2: number, p3: number, t: number): number {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return (
+    0.5 *
+    (2 * p1 +
+      (-p0 + p2) * t +
+      (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+      (-p0 + 3 * p1 - 3 * p2 + p3) * t3)
+  );
+}
+
+function sampleSections(sections: LoftSection[], s: number): LoftSection {
+  const clamped = Math.max(0, Math.min(1, s));
+  let idx = 0;
+  for (let i = 0; i < sections.length - 1; i++) {
+    if (clamped >= sections[i].s && clamped <= sections[i + 1].s) {
+      idx = i;
+      break;
+    }
+  }
+  const s0 = sections[Math.max(0, idx - 1)];
+  const s1 = sections[idx];
+  const s2 = sections[Math.min(sections.length - 1, idx + 1)];
+  const s3 = sections[Math.min(sections.length - 1, idx + 2)];
+  const span = Math.max(1e-5, s2.s - s1.s);
+  const localT = Math.max(0, Math.min(1, (clamped - s1.s) / span));
+
+  return {
+    s: clamped,
+    rx: Math.max(0.002, catmullRom(s0.rx, s1.rx, s2.rx, s3.rx, localT)),
+    rzAnt: Math.max(0.002, catmullRom(s0.rzAnt, s1.rzAnt, s2.rzAnt, s3.rzAnt, localT)),
+    rzPost: Math.max(0.002, catmullRom(s0.rzPost, s1.rzPost, s2.rzPost, s3.rzPost, localT)),
+    cx: catmullRom(s0.cx || 0, s1.cx || 0, s2.cx || 0, s3.cx || 0, localT),
+    cz: catmullRom(s0.cz || 0, s1.cz || 0, s2.cz || 0, s3.cz || 0, localT),
+    pinchCenterZ: catmullRom(
+      s0.pinchCenterZ || 0,
+      s1.pinchCenterZ || 0,
+      s2.pinchCenterZ || 0,
+      s3.pinchCenterZ || 0,
+      localT
+    ),
   };
+}
 
-  const mat = new THREE.MeshPhysicalMaterial({
-    color: new THREE.Color(0x52637a),
-    map: albedoTex,
-    bumpMap: bumpTex,
-    bumpScale: 0.018,
-    roughnessMap: bumpTex,
-    roughness: 0.42,
-    metalness: 0.24,
-    clearcoat: 0.45,
-    clearcoatRoughness: 0.22,
-  });
+function createSculptedLoftGeometry(
+  length: number,
+  sections: LoftSection[],
+  radialSegs: number,
+  heightSegs: number,
+  sculptFn: (
+    s: number,
+    theta: number,
+    nx: number,
+    nz: number,
+    pos: { x: number; y: number; z: number }
+  ) => void,
+  groupFn: (s: number, nx: number, nz: number) => number,
+  vertexShadeFn?: (s: number, nx: number, nz: number, matGroup: number) => [number, number, number]
+): THREE.BufferGeometry {
+  const numCols = radialSegs + 1;
+  const numRows = heightSegs + 1;
+  const positions = new Float32Array(numRows * numCols * 3);
+  const colors = new Float32Array(numRows * numCols * 3);
+  const uvs = new Float32Array(numRows * numCols * 2);
 
-  mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uTime = uniforms.uTime;
-    shader.uniforms.uPrimaryWeight = uniforms.uPrimaryWeight;
-    shader.uniforms.uSecondaryWeight = uniforms.uSecondaryWeight;
-    shader.uniforms.uDebugMode = uniforms.uDebugMode;
-    shader.uniforms.uDebugColor = uniforms.uDebugColor;
+  for (let r = 0; r < numRows; r++) {
+    const s = r / heightSegs;
+    const sec = sampleSections(sections, s);
+    const y = s * length;
 
-    shader.fragmentShader =
-      `
-      uniform float uTime;
-      uniform float uPrimaryWeight;
-      uniform float uSecondaryWeight;
-      uniform float uDebugMode;
-      uniform vec3 uDebugColor;
-      ` + shader.fragmentShader;
+    for (let c = 0; c < numCols; c++) {
+      const u = c / radialSegs;
+      const theta = u * Math.PI * 2;
+      const nx = Math.cos(theta);
+      const nz = Math.sin(theta);
 
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <emissivemap_fragment>',
-      `
-      #include <emissivemap_fragment>
-      vec3 viewDir = normalize(vViewPosition);
-      float fresnel = pow(1.0 - abs(dot(normal, viewDir)), 2.4);
+      let x = nx * sec.rx + (sec.cx || 0);
+      const rz = nz >= 0 ? sec.rzAnt : sec.rzPost;
+      let z = nz * rz + (sec.cz || 0);
 
-      if (uDebugMode > 0.5) {
-        diffuseColor.rgb = uDebugColor;
-        totalEmissiveRadiance += uDebugColor * (0.35 + fresnel * 0.45);
-      } else {
-        float pulse = 0.5 + 0.5 * sin(uTime * 3.0);
-        vec3 primaryCol = mix(vec3(0.937, 0.267, 0.267), vec3(0.976, 0.451, 0.086), pulse);
-        vec3 secondaryCol = vec3(0.961, 0.620, 0.043);
-        if (uPrimaryWeight > 0.01) {
-          diffuseColor.rgb = mix(diffuseColor.rgb, primaryCol, uPrimaryWeight * 0.72);
-          totalEmissiveRadiance += primaryCol * (0.68 + 0.38 * pulse + fresnel * 0.55) * uPrimaryWeight;
-        } else if (uSecondaryWeight > 0.01) {
-          diffuseColor.rgb = mix(diffuseColor.rgb, secondaryCol, uSecondaryWeight * 0.52);
-          totalEmissiveRadiance += secondaryCol * (0.38 + fresnel * 0.35) * uSecondaryWeight;
+      if (sec.pinchCenterZ) {
+        const centerFactor = Math.exp(-nx * nx * 14);
+        if (nz >= 0) {
+          z -= sec.pinchCenterZ * centerFactor * nz;
         } else {
-          totalEmissiveRadiance += vec3(0.22, 0.32, 0.48) * fresnel * 0.18;
+          z += sec.pinchCenterZ * 0.85 * centerFactor * -nz;
         }
       }
-      `
-    );
-  };
 
-  mat.userData.muscleUniforms = uniforms;
-  return mat;
+      const pt = { x, y, z };
+      sculptFn(s, theta, nx, nz, pt);
+
+      const vIdx = (r * numCols + c) * 3;
+      positions[vIdx] = pt.x;
+      positions[vIdx + 1] = pt.y;
+      positions[vIdx + 2] = pt.z;
+
+      const matG = groupFn(s, nx, nz);
+      const [cr, cg, cb] = vertexShadeFn ? vertexShadeFn(s, nx, nz, matG) : [1, 1, 1];
+      colors[vIdx] = cr;
+      colors[vIdx + 1] = cg;
+      colors[vIdx + 2] = cb;
+
+      const uvIdx = (r * numCols + c) * 2;
+      uvs[uvIdx] = u;
+      uvs[uvIdx + 1] = s;
+    }
+  }
+
+  const buckets: Map<number, number[]> = new Map();
+  for (let r = 0; r < heightSegs; r++) {
+    const sMid = (r + 0.5) / heightSegs;
+    for (let c = 0; c < radialSegs; c++) {
+      const thetaMid = ((c + 0.5) / radialSegs) * Math.PI * 2;
+      const nx = Math.cos(thetaMid);
+      const nz = Math.sin(thetaMid);
+      const g = groupFn(sMid, nx, nz);
+
+      const a = r * numCols + c;
+      const b = r * numCols + c + 1;
+      const d = (r + 1) * numCols + c;
+      const e = (r + 1) * numCols + c + 1;
+
+      let list = buckets.get(g);
+      if (!list) {
+        list = [];
+        buckets.set(g, list);
+      }
+      list.push(a, b, d, b, e, d);
+    }
+  }
+
+  const allIndices: number[] = [];
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+
+  const sortedGroups = Array.from(buckets.keys()).sort((a, b) => a - b);
+  for (const g of sortedGroups) {
+    const list = buckets.get(g)!;
+    const start = allIndices.length;
+    for (let i = 0; i < list.length; i++) {
+      allIndices.push(list[i]);
+    }
+    geo.addGroup(start, list.length, g);
+  }
+
+  geo.setIndex(allIndices);
+  geo.computeVertexNormals();
+
+  const normAttr = geo.getAttribute('normal') as THREE.BufferAttribute;
+  for (let r = 0; r < numRows; r++) {
+    const i0 = r * numCols;
+    const i1 = r * numCols + radialSegs;
+    const nx = (normAttr.getX(i0) + normAttr.getX(i1)) * 0.5;
+    const ny = (normAttr.getY(i0) + normAttr.getY(i1)) * 0.5;
+    const nz = (normAttr.getZ(i0) + normAttr.getZ(i1)) * 0.5;
+    const len = Math.hypot(nx, ny, nz) || 1;
+    normAttr.setXYZ(i0, nx / len, ny / len, nz / len);
+    normAttr.setXYZ(i1, nx / len, ny / len, nz / len);
+  }
+  normAttr.needsUpdate = true;
+
+  return geo;
 }
 
 export function TrainerStudio3D({
-  clip,
+  clip: clipName,
   biomechanicalVariant = 'standard',
+  exerciseName = '',
   primaryMuscles,
   secondaryMuscles,
-  timeScale,
+  timeScale: tempoScale,
   isPaused,
   cameraPreset,
-  debugMuscleMask = false,
+  debugMuscleMask: showMaskDebug = false,
+  lockedFrame: activeKeyframe = null,
+  quadView = false,
+  onReady,
 }: TrainerStudio3DProps) {
-  const mountRef = useRef<HTMLDivElement | null>(null);
-  const [modelSource, setModelSource] = useState<'procedural' | 'glb'>('procedural');
-  const [fpsWarning, setFpsWarning] = useState(false);
+  const isPlaying = !isPaused;
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const frameBadgeRef = useRef<HTMLSpanElement | null>(null);
+  const [webGLSupported, setWebGLSupported] = useState(true);
 
-  // Store latest props in ref so WebGL canvas never tears down on UI state changes
-  const propsRef = useRef({
-    clip,
+  const stateRef = useRef({
+    clipName,
     biomechanicalVariant,
+    exerciseName,
     primaryMuscles,
     secondaryMuscles,
-    timeScale,
-    isPaused,
+    tempoScale,
+    isPlaying,
     cameraPreset,
-    debugMuscleMask,
+    showMaskDebug,
+    activeKeyframe,
+    quadView,
   });
 
   useEffect(() => {
-    propsRef.current = {
-      clip,
+    stateRef.current = {
+      clipName,
       biomechanicalVariant,
+      exerciseName,
       primaryMuscles,
       secondaryMuscles,
-      timeScale,
-      isPaused,
+      tempoScale,
+      isPlaying,
       cameraPreset,
-      debugMuscleMask,
+      showMaskDebug,
+      activeKeyframe,
+      quadView,
     };
   }, [
-    clip,
+    clipName,
     biomechanicalVariant,
+    exerciseName,
     primaryMuscles,
     secondaryMuscles,
-    timeScale,
-    isPaused,
+    tempoScale,
+    isPlaying,
     cameraPreset,
-    debugMuscleMask,
+    showMaskDebug,
+    activeKeyframe,
+    quadView,
   ]);
 
+  const sceneRef = useRef<{
+    camera: THREE.PerspectiveCamera;
+    controls: OrbitControls;
+    updateMuscleMaterials: () => void;
+    applyCameraPreset: (preset: CameraPreset) => void;
+  } | null>(null);
+
   useEffect(() => {
-    const container = mountRef.current;
+    if (sceneRef.current) {
+      sceneRef.current.updateMuscleMaterials();
+    }
+  }, [primaryMuscles, secondaryMuscles, showMaskDebug, clipName]);
+
+  useEffect(() => {
+    if (sceneRef.current) {
+      sceneRef.current.applyCameraPreset(cameraPreset);
+    }
+  }, [cameraPreset, clipName]);
+
+  useEffect(() => {
+    const container = containerRef.current;
     if (!container) return;
 
-    let frameId = 0;
-    let disposed = false;
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        powerPreference: 'high-performance',
+      });
+    } catch {
+      setWebGLSupported(false);
+      return;
+    }
 
-    const isSoftwareGl = (() => {
-      try {
-        const probe = document.createElement('canvas');
-        const gl = probe.getContext('webgl2') || probe.getContext('webgl');
-        if (!gl) return true;
-        const ext = gl.getExtension('WEBGL_debug_renderer_info');
-        const param = ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER;
-        const gpu = String(gl.getParameter(param));
-        gl.getExtension('WEBGL_lose_context')?.loseContext();
-        return /SwiftShader|llvmpipe|softpipe|Software|Basic Render/i.test(gpu);
-      } catch {
-        return true;
-      }
-    })();
-
-    const renderer = new THREE.WebGLRenderer({
-      antialias: !isSoftwareGl,
-      powerPreference: 'high-performance',
-    });
-
-    const width = container.clientWidth || 960;
-    const height = container.clientHeight || 600;
+    const width = container.clientWidth || 800;
+    const height = container.clientHeight || 520;
     renderer.setSize(width, height);
-    renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio, 2.0));
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.18;
-    renderer.shadowMap.enabled = !isSoftwareGl;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.96;
 
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
 
-    const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
-
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0b0c10);
-    scene.fog = new THREE.FogExp2(0x0b0c10, 0.065);
+    scene.background = new THREE.Color(0x060b16);
+    scene.fog = new THREE.FogExp2(0x060b16, 0.055);
 
-    const pmremGenerator = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.035).texture;
-    pmremGenerator.dispose();
-
-    const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 60);
-    camera.position.set(1.58, 1.44, 2.72);
-
+    const camera = new THREE.PerspectiveCamera(34, width / height, 0.1, 50);
+    const auxCamera = new THREE.PerspectiveCamera(34, width / height, 0.1, 50);
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(0, 0.82, 0);
-    controls.enableDamping = !isSoftwareGl;
+    controls.enableDamping = true;
     controls.dampingFactor = 0.07;
-    controls.minDistance = 1.45;
-    controls.maxDistance = 6.0;
     controls.maxPolarAngle = Math.PI / 2 - 0.02;
-    controls.update();
+    controls.minDistance = 1.4;
+    controls.maxDistance = 6.5;
 
-    let manualOrbitActive = false;
-    let lastPresetWatched: CameraPreset = propsRef.current.cameraPreset;
-    controls.addEventListener('start', () => {
-      manualOrbitActive = true;
-    });
+    // Studio Blueprint Lighting — sculpted dramatic contrast matching reference_blueprint.png
+    const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.42);
+    scene.add(ambientLight);
 
-    // Studio 3-Point + Rim Lighting Rig for High-Contrast Anatomical Striation Clarity
-    const hemiLight = new THREE.HemisphereLight(0x93c5fd, 0x0e0e12, 0.85);
+    const hemiLight = new THREE.HemisphereLight(0xe2e8f0, 0x090d16, 0.45);
+    hemiLight.position.set(0, 4, 0);
     scene.add(hemiLight);
 
-    const keyLight = new THREE.DirectionalLight(0xfff7ed, 2.6);
-    keyLight.position.set(2.6, 4.8, 3.4);
-    if (!isSoftwareGl) {
-      keyLight.castShadow = true;
-      keyLight.shadow.mapSize.set(1024, 1024);
-      const d = 2.1;
-      keyLight.shadow.camera.left = -d;
-      keyLight.shadow.camera.right = d;
-      keyLight.shadow.camera.top = d;
-      keyLight.shadow.camera.bottom = -d;
-      keyLight.shadow.bias = -0.0005;
-      keyLight.shadow.normalBias = 0.02;
-    }
+    const keyLight = new THREE.DirectionalLight(0xf8fafc, 1.45);
+    keyLight.position.set(2.4, 4.4, 2.8);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.width = 2048;
+    keyLight.shadow.mapSize.height = 2048;
+    keyLight.shadow.camera.near = 0.5;
+    keyLight.shadow.camera.far = 12;
+    const d = 2.4;
+    keyLight.shadow.camera.left = -d;
+    keyLight.shadow.camera.right = d;
+    keyLight.shadow.camera.top = d;
+    keyLight.shadow.camera.bottom = -d;
+    keyLight.shadow.bias = -0.0005;
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0x60a5fa, 0.95);
-    fillLight.position.set(-2.8, 2.2, 1.8);
+    const fillLight = new THREE.DirectionalLight(0x60a5fa, 0.65);
+    fillLight.position.set(-2.8, 2.4, -2.0);
     scene.add(fillLight);
 
-    const rimLight = new THREE.SpotLight(0xf59e0b, 4.8, 14, Math.PI / 3.5, 0.45, 1.4);
-    rimLight.position.set(-2.0, 3.4, -2.6);
+    const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.95);
+    rimLight.position.set(0, 3.2, -3.2);
     scene.add(rimLight);
 
-    // Obsidian Studio Floor + 1024x1024 Biomechanical Calibration Dial
+    // Blueprint Floor & Architectural Grid
     const floorGeo = new THREE.CircleGeometry(6.5, 64);
     const floorMat = new THREE.MeshStandardMaterial({
-      color: 0x101217,
-      roughness: 0.72,
-      metalness: 0.25,
+      color: 0x091122,
+      roughness: 0.86,
+      metalness: 0.14,
     });
-    const floorMesh = new THREE.Mesh(floorGeo, floorMat);
-    floorMesh.rotation.x = -Math.PI / 2;
-    floorMesh.receiveShadow = !isSoftwareGl;
-    scene.add(floorMesh);
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
 
-    const floorDialTex = create1024FloorDialTexture(maxAnisotropy);
-    const floorDialMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(3.2, 3.2),
-      new THREE.MeshBasicMaterial({
-        map: floorDialTex,
-        transparent: true,
-        depthWrite: false,
-        polygonOffset: true,
-        polygonOffsetFactor: -1,
-        polygonOffsetUnits: -1,
-      })
-    );
-    floorDialMesh.rotation.x = -Math.PI / 2;
-    floorDialMesh.position.y = 0.012;
-    scene.add(floorDialMesh);
+    const gridHelper = new THREE.GridHelper(6.0, 24, 0x0284c7, 0x1e293b);
+    gridHelper.position.y = 0.002;
+    scene.add(gridHelper);
 
-    // 1024x1024 Muscle Striation Texture Set & Per-Muscle Physical Materials
-    const { albedoTex, bumpTex } = create1024MuscleTextureSet(maxAnisotropy);
-    const muscleMaterials: Record<MuscleGroup, THREE.MeshPhysicalMaterial> = {} as Record<
-      MuscleGroup,
-      THREE.MeshPhysicalMaterial
-    >;
-    MUSCLE_ORDER.forEach((m) => {
-      muscleMaterials[m] = createMuscleShaderMaterial(m, albedoTex, bumpTex);
+    const ringGeo = new THREE.RingGeometry(0.95, 0.975, 64);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xea580c,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.5,
     });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.004;
+    scene.add(ring);
 
-    // Track mesh groups per muscle so we can apply real-time isometric/isotonic contraction bulge
-    const muscleMeshesMap: Record<MuscleGroup, THREE.Mesh[]> = {
-      chest: [],
-      back_lats: [],
-      shoulders: [],
-      biceps: [],
-      triceps: [],
-      abs: [],
-      glutes: [],
-      quads: [],
-      hamstrings: [],
-      calves: [],
-      forearms: [],
-    };
-
-    function addMuscleMesh(
-      parent: THREE.Object3D,
-      geo: THREE.BufferGeometry,
-      group: MuscleGroup,
-      pos: [number, number, number],
-      scale: [number, number, number] = [1, 1, 1],
-      rot: [number, number, number] = [0, 0, 0]
-    ) {
-      const mesh = new THREE.Mesh(geo, muscleMaterials[group]);
-      mesh.position.set(pos[0], pos[1], pos[2]);
-      mesh.scale.set(scale[0], scale[1], scale[2]);
-      mesh.rotation.set(rot[0], rot[1], rot[2]);
-      mesh.userData.baseScale = new THREE.Vector3(scale[0], scale[1], scale[2]);
-      parent.add(mesh);
-      muscleMeshesMap[group].push(mesh);
-      return mesh;
-    }
-
-    const jointMat = new THREE.MeshPhysicalMaterial({
-      color: 0x1e293b,
-      roughness: 0.28,
-      metalness: 0.82,
-      clearcoat: 0.6,
-    });
-
-    const boneTendonMat = new THREE.MeshStandardMaterial({
-      color: 0x334155,
-      roughness: 0.45,
-      metalness: 0.4,
-    });
-
-    const visorMat = new THREE.MeshStandardMaterial({
-      color: 0xf97316,
-      emissive: 0xf59e0b,
-      emissiveIntensity: 0.85,
-      roughness: 0.15,
-      metalness: 0.9,
-    });
-
-    const chromePropMat = new THREE.MeshPhysicalMaterial({
-      color: 0xe2e8f0,
-      roughness: 0.18,
-      metalness: 0.94,
-      clearcoat: 0.8,
-    });
-
-    const platePropMat = new THREE.MeshStandardMaterial({
-      color: 0x18181b,
-      roughness: 0.42,
-      metalness: 0.55,
+    // Base Materials (vertexColors enabled for anatomical muscle definition & grooves)
+    const skinMat = new THREE.MeshStandardMaterial({
+      color: 0x9aa6b8,
+      roughness: 0.46,
+      metalness: 0.14,
+      vertexColors: true,
     });
 
     const shortsMat = new THREE.MeshStandardMaterial({
-      color: 0x16181d,
+      color: 0x181c24,
       roughness: 0.78,
+      metalness: 0.06,
+      vertexColors: true,
+    });
+
+    const trimWhiteMat = new THREE.MeshStandardMaterial({
+      color: 0xf1f5f9,
+      roughness: 0.42,
+      metalness: 0.1,
+    });
+
+    const hairMat = new THREE.MeshStandardMaterial({
+      color: 0x141820,
+      roughness: 0.82,
+      metalness: 0.06,
+      vertexColors: true,
+    });
+
+    const shoeDarkMat = new THREE.MeshStandardMaterial({
+      color: 0x11151c,
+      roughness: 0.65,
       metalness: 0.12,
     });
 
-    // === OVERHEAD PULL-UP BAR RIG (bar_ref for 03. PULL-UP Blueprint) ===
-    const pullupBarGroup = new THREE.Group();
-    pullupBarGroup.visible = false;
-    scene.add(pullupBarGroup);
-
-    const overheadBarMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.018, 0.018, 1.38, 24),
-      chromePropMat
-    );
-    overheadBarMesh.rotation.z = Math.PI / 2;
-    overheadBarMesh.position.set(0, 2.04, 0.02);
-    pullupBarGroup.add(overheadBarMesh);
-
-    [-0.26, 0.26].forEach((gripX) => {
-      const gripSleeve = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.022, 0.022, 0.16, 20),
-        platePropMat
-      );
-      gripSleeve.rotation.z = Math.PI / 2;
-      gripSleeve.position.set(gripX, 2.04, 0.02);
-      pullupBarGroup.add(gripSleeve);
+    const equipMetalMat = new THREE.MeshStandardMaterial({
+      color: 0x64748b,
+      roughness: 0.25,
+      metalness: 0.85,
     });
 
-    [-0.66, 0.66].forEach((postX) => {
-      const uprightPost = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.026, 0.03, 2.12, 20),
-        platePropMat
-      );
-      uprightPost.position.set(postX, 1.06, 0.02);
-      pullupBarGroup.add(uprightPost);
+    const equipChromeMat = new THREE.MeshStandardMaterial({
+      color: 0xe2e8f0,
+      roughness: 0.18,
+      metalness: 0.92,
     });
 
-    // === 1024-BIT HIGH-DEFINITION SCULPTED ANATOMICAL MANNEQUIN (28 SUBMESHES) ===
-    const rootPivot = new THREE.Group();
-    scene.add(rootPivot);
-
-    const hipsPivot = new THREE.Group();
-    hipsPivot.position.set(0, 0.96, 0);
-    rootPivot.add(hipsPivot);
-
-    // Pelvis Core & Matte Charcoal Athletic Shorts Waistband (Clothes: Black #16181D)
-    const pelvisCore = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.152, 0.142, 0.16, 28),
-      shortsMat
-    );
-    hipsPivot.add(pelvisCore);
-
-    const gluteGeo = new THREE.SphereGeometry(0.105, 32, 24);
-    addMuscleMesh(hipsPivot, gluteGeo, 'glutes', [-0.082, -0.015, -0.058], [0.95, 1.08, 0.92]);
-    addMuscleMesh(hipsPivot, gluteGeo, 'glutes', [0.082, -0.015, -0.058], [0.95, 1.08, 0.92]);
-
-    // Spine / Torso Pivot
-    const spinePivot = new THREE.Group();
-    spinePivot.position.set(0, 0.07, 0);
-    hipsPivot.add(spinePivot);
-
-    // Inner Ribcage & Thoracic Core
-    const ribcageCore = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.175, 0.135, 0.44, 32),
-      boneTendonMat
-    );
-    ribcageCore.position.set(0, 0.25, 0);
-    ribcageCore.scale.set(1.08, 1.0, 0.78);
-    spinePivot.add(ribcageCore);
-
-    // Sculpted 6-Pack Rectus Abdominis (3 pairs) + Left/Right External Obliques
-    const abSegGeo = new THREE.SphereGeometry(0.044, 24, 20);
-    const abHeights = [0.24, 0.165, 0.09];
-    abHeights.forEach((yPos, rowIdx) => {
-      const widthScale = rowIdx === 0 ? 1.15 : rowIdx === 1 ? 1.08 : 0.98;
-      addMuscleMesh(
-        spinePivot,
-        abSegGeo,
-        'abs',
-        [-0.042, yPos, 0.098],
-        [widthScale, 0.85, 0.62]
-      );
-      addMuscleMesh(
-        spinePivot,
-        abSegGeo,
-        'abs',
-        [0.042, yPos, 0.098],
-        [widthScale, 0.85, 0.62]
-      );
+    const equipDarkMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a,
+      roughness: 0.72,
+      metalness: 0.2,
     });
 
-    // External Obliques (Flanks)
-    const obliqueGeo = new THREE.CapsuleGeometry(0.042, 0.16, 12, 24);
-    addMuscleMesh(spinePivot, obliqueGeo, 'abs', [-0.125, 0.16, 0.035], [0.75, 1, 0.85], [0, 0, -0.18]);
-    addMuscleMesh(spinePivot, obliqueGeo, 'abs', [0.125, 0.16, 0.035], [0.75, 1, 0.85], [0, 0, 0.18]);
-
-    // Sculpted Pectoralis Major (Left & Right Chest Plates + Upper Clavicular Head)
-    const pecGeo = new THREE.SphereGeometry(0.108, 36, 28);
-    addMuscleMesh(
-      spinePivot,
-      pecGeo,
+    const muscleIds: MuscleGroup[] = [
       'chest',
-      [-0.088, 0.375, 0.082],
-      [1.08, 0.84, 0.68],
-      [0.08, 0.15, -0.08]
-    );
-    addMuscleMesh(
-      spinePivot,
-      pecGeo,
-      'chest',
-      [0.088, 0.375, 0.082],
-      [1.08, 0.84, 0.68],
-      [0.08, -0.15, 0.08]
-    );
-
-    // Sculpted V-Taper Latissimus Dorsi + Trapezius + Erector Spinae
-    const latGeo = new THREE.CapsuleGeometry(0.088, 0.24, 16, 28);
-    addMuscleMesh(
-      spinePivot,
-      latGeo,
       'back_lats',
-      [-0.105, 0.29, -0.055],
-      [1.05, 1.0, 0.72],
-      [0.06, 0, 0.28]
-    );
-    addMuscleMesh(
-      spinePivot,
-      latGeo,
-      'back_lats',
-      [0.105, 0.29, -0.055],
-      [1.05, 1.0, 0.72],
-      [0.06, 0, -0.28]
-    );
+      'shoulders',
+      'biceps',
+      'triceps',
+      'forearms',
+      'abs',
+      'glutes',
+      'quads',
+      'hamstrings',
+      'calves',
+    ];
 
-    // Upper Trapezius Yoke
-    const trapGeo = new THREE.SphereGeometry(0.095, 28, 22);
-    addMuscleMesh(
-      spinePivot,
-      trapGeo,
-      'back_lats',
-      [0, 0.455, -0.045],
-      [1.65, 0.62, 0.78]
-    );
-
-    // Clavicles (Collarbones)
-    const clavicleGeo = new THREE.CylinderGeometry(0.016, 0.016, 0.38, 16);
-    const clavicleMesh = new THREE.Mesh(clavicleGeo, jointMat);
-    clavicleMesh.rotation.z = Math.PI / 2;
-    clavicleMesh.position.set(0, 0.465, 0.045);
-    spinePivot.add(clavicleMesh);
-
-    // Sculpted Anatomical Neck & High-Definition Head with Athletic Visor
-    const neckMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.056, 0.068, 0.11, 24),
-      boneTendonMat
-    );
-    neckMesh.position.set(0, 0.54, 0);
-    spinePivot.add(neckMesh);
-
-    const headGroup = new THREE.Group();
-    headGroup.position.set(0, 0.665, 0.01);
-    spinePivot.add(headGroup);
-
-    const craniumMesh = new THREE.Mesh(new THREE.SphereGeometry(0.108, 36, 32), jointMat);
-    craniumMesh.scale.set(0.92, 1.12, 0.98);
-    headGroup.add(craniumMesh);
-
-    const jawMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.078, 0.052, 0.09, 24),
-      jointMat
-    );
-    jawMesh.position.set(0, -0.045, 0.022);
-    headGroup.add(jawMesh);
-
-    const visorMesh = new THREE.Mesh(
-      new THREE.TorusGeometry(0.088, 0.014, 16, 32, Math.PI * 0.85),
-      visorMat
-    );
-    visorMesh.rotation.x = Math.PI / 2;
-    visorMesh.rotation.z = -Math.PI * 0.425;
-    visorMesh.position.set(0, 0.015, 0.022);
-    headGroup.add(visorMesh);
-
-    // Left & Right Sculpted Arms (3-Head Deltoid + Biceps + Horseshoe Triceps + Tapered Forearms + Dumbbell Prop)
-    function buildSculptedArm(side: -1 | 1) {
-      const shoulderPivot = new THREE.Group();
-      shoulderPivot.position.set(side * 0.235, 0.44, 0);
-      spinePivot.add(shoulderPivot);
-
-      // 3-Head Deltoid Cap
-      const deltGeo = new THREE.SphereGeometry(0.086, 32, 24);
-      addMuscleMesh(
-        shoulderPivot,
-        deltGeo,
-        'shoulders',
-        [side * 0.015, -0.01, 0],
-        [0.98, 1.15, 0.96]
-      );
-
-      // Humerus Bone Core
-      const humerusCore = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.028, 0.024, 0.24, 16),
-        boneTendonMat
-      );
-      humerusCore.position.set(0, -0.14, 0);
-      shoulderPivot.add(humerusCore);
-
-      // Anterior Upper Arm = Dual-Head Biceps Brachii
-      const bicepGeo = new THREE.CapsuleGeometry(0.046, 0.145, 16, 28);
-      addMuscleMesh(
-        shoulderPivot,
-        bicepGeo,
-        'biceps',
-        [0, -0.14, 0.026],
-        [0.96, 1.0, 0.92]
-      );
-
-      // Posterior Upper Arm = Horseshoe Triceps Brachii
-      const tricepGeo = new THREE.CapsuleGeometry(0.048, 0.15, 16, 28);
-      addMuscleMesh(
-        shoulderPivot,
-        tricepGeo,
-        'triceps',
-        [0, -0.135, -0.026],
-        [1.02, 1.0, 0.94]
-      );
-
-      // Elbow Joint Sphere + Pivot
-      const elbowPivot = new THREE.Group();
-      elbowPivot.position.set(0, -0.275, 0);
-      shoulderPivot.add(elbowPivot);
-
-      const elbowCap = new THREE.Mesh(new THREE.SphereGeometry(0.042, 20, 20), jointMat);
-      elbowPivot.add(elbowCap);
-
-      // Tapered Brachioradialis & Flexor Forearm
-      const forearmGeo = new THREE.CapsuleGeometry(0.044, 0.175, 16, 28);
-      addMuscleMesh(
-        elbowPivot,
-        forearmGeo,
-        'forearms',
-        [0, -0.125, 0.006],
-        [0.95, 1.0, 0.88]
-      );
-
-      // Sculpted Hand / Fist
-      const handMesh = new THREE.Mesh(new THREE.SphereGeometry(0.044, 20, 20), jointMat);
-      handMesh.scale.set(0.85, 1.1, 0.75);
-      handMesh.position.set(0, -0.255, 0.01);
-      elbowPivot.add(handMesh);
-
-      // Contextual 3D Dumbbell Prop in Hand
-      const dumbbellGroup = new THREE.Group();
-      dumbbellGroup.position.set(0, -0.26, 0.015);
-      elbowPivot.add(dumbbellGroup);
-
-      const handle = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.014, 0.014, 0.22, 16),
-        chromePropMat
-      );
-      handle.rotation.z = Math.PI / 2;
-      dumbbellGroup.add(handle);
-
-      [-0.085, 0.085].forEach((xOff) => {
-        const plateOuter = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.058, 0.058, 0.026, 24),
-          platePropMat
-        );
-        plateOuter.rotation.z = Math.PI / 2;
-        plateOuter.position.x = xOff;
-        dumbbellGroup.add(plateOuter);
-
-        const plateInner = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.046, 0.046, 0.018, 24),
-          platePropMat
-        );
-        plateInner.rotation.z = Math.PI / 2;
-        plateInner.position.x = xOff * 0.72;
-        dumbbellGroup.add(plateInner);
-      });
-
-      return { shoulderPivot, elbowPivot, dumbbellGroup };
-    }
-
-    const leftArm = buildSculptedArm(-1);
-    const rightArm = buildSculptedArm(1);
-
-    // Left & Right Sculpted Legs (3-Head Quads + Hamstrings + Patella Knee + Gastrocnemius Calves + Athletic Footwear)
-    function buildSculptedLeg(side: -1 | 1) {
-      const hipLegPivot = new THREE.Group();
-      hipLegPivot.position.set(side * 0.115, -0.04, 0);
-      hipsPivot.add(hipLegPivot);
-
-      // Femur Core & Matte Charcoal Athletic Shorts Leg Sleeve
-      const femurCore = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.042, 0.036, 0.38, 16),
-        boneTendonMat
-      );
-      femurCore.position.set(0, -0.21, 0);
-      hipLegPivot.add(femurCore);
-
-      const shortsLegSleeve = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.082, 0.076, 0.17, 24),
-        shortsMat
-      );
-      shortsLegSleeve.position.set(0, -0.095, 0.004);
-      hipLegPivot.add(shortsLegSleeve);
-
-      // Anterior Thigh = Rectus Femoris + Vastus Lateralis + Vastus Medialis (Teardrop)
-      const quadMainGeo = new THREE.CapsuleGeometry(0.068, 0.24, 16, 32);
-      addMuscleMesh(
-        hipLegPivot,
-        quadMainGeo,
-        'quads',
-        [0, -0.205, 0.03],
-        [1.04, 1.0, 0.95]
-      );
-
-      // Vastus Medialis Teardrop above knee
-      const vmoGeo = new THREE.SphereGeometry(0.048, 24, 20);
-      addMuscleMesh(
-        hipLegPivot,
-        vmoGeo,
-        'quads',
-        [-side * 0.032, -0.34, 0.042],
-        [0.88, 1.25, 0.85]
-      );
-
-      // Posterior Thigh = Biceps Femoris & Semitendinosus Hamstrings
-      const hamstringGeo = new THREE.CapsuleGeometry(0.064, 0.24, 16, 28);
-      addMuscleMesh(
-        hipLegPivot,
-        hamstringGeo,
-        'hamstrings',
-        [0, -0.21, -0.028],
-        [0.98, 1.0, 0.92]
-      );
-
-      // Knee Joint + Patella Cap
-      const kneePivot = new THREE.Group();
-      kneePivot.position.set(0, -0.44, 0);
-      hipLegPivot.add(kneePivot);
-
-      const patellaMesh = new THREE.Mesh(new THREE.SphereGeometry(0.052, 24, 24), jointMat);
-      patellaMesh.scale.set(0.95, 0.9, 0.88);
-      kneePivot.add(patellaMesh);
-
-      // Tibia Bone Core
-      const tibiaCore = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.034, 0.026, 0.36, 16),
-        boneTendonMat
-      );
-      tibiaCore.position.set(0, -0.21, 0.01);
-      kneePivot.add(tibiaCore);
-
-      // Sculpted Gastrocnemius Dual-Head Diamond Calf + Soleus
-      const calfUpperGeo = new THREE.SphereGeometry(0.058, 28, 24);
-      addMuscleMesh(
-        kneePivot,
-        calfUpperGeo,
-        'calves',
-        [0, -0.145, -0.026],
-        [0.96, 1.45, 0.92]
-      );
-
-      const calfLowerGeo = new THREE.CapsuleGeometry(0.044, 0.18, 16, 24);
-      addMuscleMesh(
-        kneePivot,
-        calfLowerGeo,
-        'calves',
-        [0, -0.23, -0.015],
-        [0.88, 1.0, 0.85]
-      );
-
-      // Sculpted Athletic Shoe & Sole
-      const shoeGroup = new THREE.Group();
-      shoeGroup.position.set(0, -0.43, 0.045);
-      kneePivot.add(shoeGroup);
-
-      const shoeUpper = new THREE.Mesh(
-        new THREE.CapsuleGeometry(0.044, 0.11, 12, 20),
-        jointMat
-      );
-      shoeUpper.rotation.x = Math.PI / 2;
-      shoeUpper.scale.set(1.05, 1.0, 0.72);
-      shoeGroup.add(shoeUpper);
-
-      const shoeSole = new THREE.Mesh(
-        new THREE.BoxGeometry(0.096, 0.024, 0.22),
-        visorMat
-      );
-      shoeSole.position.set(0, -0.026, 0);
-      shoeGroup.add(shoeSole);
-
-      return { hipLegPivot, kneePivot };
-    }
-
-    const leftLeg = buildSculptedLeg(-1);
-    const rightLeg = buildSculptedLeg(1);
-
-    if (!isSoftwareGl) {
-      rootPivot.traverse((obj) => {
-        if ((obj as THREE.Mesh).isMesh) {
-          obj.castShadow = true;
-          obj.receiveShadow = true;
-        }
-      });
-      renderer.compile(scene, camera);
-    }
-
-    // Optional GLB inspection: check manifest & probe /models/trainer.glb
-    let glbMixer: THREE.AnimationMixer | null = null;
-    fetch('/models/manifest.json')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((manifest) => {
-        if (!manifest?.model || !manifest?.glbPlaced || disposed) return;
-        const loader = new GLTFLoader();
-        loader.load(
-          manifest.model,
-          (gltf) => {
-            if (disposed) return;
-            rootPivot.visible = false;
-            scene.add(gltf.scene);
-            glbMixer = new THREE.AnimationMixer(gltf.scene);
-            if (gltf.animations.length > 0) {
-              glbMixer.clipAction(gltf.animations[0]).play();
-            }
-            setModelSource('glb');
-          },
-          undefined,
-          () => {
-            // Keep procedural 1024-Bit HD anatomical mannequin active
-          }
-        );
-      })
-      .catch(() => {});
-
-    const presetCameraTargets: Record<CameraPreset, THREE.Vector3> = {
-      front: new THREE.Vector3(1.52, 1.42, 2.68),
-      side: new THREE.Vector3(3.05, 1.16, 0.35),
-      back: new THREE.Vector3(-1.32, 1.42, -2.75),
-      top: new THREE.Vector3(0.01, 3.65, 0.38),
+    const debugColors: Record<MuscleGroup, number> = {
+      chest: 0xff2222,
+      back_lats: 0x0088ff,
+      shoulders: 0xffaa00,
+      biceps: 0xff00ff,
+      triceps: 0x00ffcc,
+      forearms: 0x88ff00,
+      abs: 0xffff00,
+      glutes: 0xaa00ff,
+      quads: 0x00ff44,
+      hamstrings: 0xff6600,
+      calves: 0x00ccff,
     };
 
-    let lastFrameTime = performance.now();
-    let simTime = 0.55;
-    let lowFpsFrames = 0;
+    const muscleMaterials: Record<MuscleGroup, THREE.MeshStandardMaterial> = {} as Record<
+      MuscleGroup,
+      THREE.MeshStandardMaterial
+    >;
 
-    function afterDraw(cb: () => void) {
-      const gl = renderer.getContext() as WebGL2RenderingContext;
-      if (!gl || typeof gl.fenceSync !== 'function') {
-        frameId = window.setTimeout(cb, 80);
-        return;
-      }
-      const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-      gl.flush();
-      const poll = () => {
-        if (disposed) return;
-        const state = sync && gl.getSyncParameter(sync, gl.SYNC_STATUS);
-        if (state === gl.UNSIGNALED) {
-          frameId = window.setTimeout(poll, 5);
-        } else {
-          if (sync) gl.deleteSync(sync);
-          frameId = window.setTimeout(cb, 80);
+    muscleIds.forEach((id) => {
+      muscleMaterials[id] = new THREE.MeshStandardMaterial({
+        color: 0x9aa6b8,
+        roughness: 0.46,
+        metalness: 0.14,
+        vertexColors: true,
+      });
+    });
+
+    // Shorts-aware glute material: stays black shorts when glutes are inactive, glows Crimson when active
+    const shortsGlutesMat = new THREE.MeshStandardMaterial({
+      color: 0x181c24,
+      roughness: 0.78,
+      metalness: 0.06,
+      vertexColors: true,
+    });
+
+    // ============================================================================
+    // ANATOMICAL LOFTS (180cm / 70kg Athletic Male Proportions)
+    // ============================================================================
+    const TORSO_LEN = 0.56;
+    const HEAD_NECK_LEN = 0.25;
+    const UPPER_ARM_LEN = 0.30;
+    const FOREARM_LEN = 0.27;
+    const THIGH_LEN = 0.43;
+    const CALF_LEN = 0.41;
+
+    // 1. CONTINUOUS SCULPTED TORSO (Pelvis + Shorts + 6-Pack Abs + Pectorals + Lats + Traps)
+    function buildTorsoMesh(): THREE.Mesh {
+      const sections: LoftSection[] = [
+        { s: 0.0, rx: 0.142, rzAnt: 0.095, rzPost: 0.105, pinchCenterZ: 0.015 },
+        { s: 0.08, rx: 0.162, rzAnt: 0.106, rzPost: 0.128, pinchCenterZ: 0.024 },
+        { s: 0.19, rx: 0.152, rzAnt: 0.102, rzPost: 0.112, pinchCenterZ: 0.012 },
+        { s: 0.30, rx: 0.138, rzAnt: 0.098, rzPost: 0.098, pinchCenterZ: 0.010 },
+        { s: 0.45, rx: 0.150, rzAnt: 0.106, rzPost: 0.106, pinchCenterZ: 0.012 },
+        { s: 0.62, rx: 0.176, rzAnt: 0.124, rzPost: 0.118, pinchCenterZ: 0.018 },
+        { s: 0.76, rx: 0.196, rzAnt: 0.132, rzPost: 0.122, pinchCenterZ: 0.022 },
+        { s: 0.87, rx: 0.205, rzAnt: 0.112, rzPost: 0.108, pinchCenterZ: 0.008 },
+        { s: 0.95, rx: 0.112, rzAnt: 0.080, rzPost: 0.082, pinchCenterZ: 0.002 },
+        { s: 1.0, rx: 0.062, rzAnt: 0.060, rzPost: 0.062, pinchCenterZ: 0.0 },
+      ];
+
+      // Groups: 0: skin, 1: shorts, 2: trimWhite, 3: chest, 4: abs, 5: back_lats, 6: shoulders, 7: glutes(shorts)
+      const groupFn = (s: number, nx: number, nz: number): number => {
+        const absX = Math.abs(nx);
+        const isAnt = nz >= 0;
+
+        if (s < 0.22) {
+          if (s >= 0.20 && s < 0.22) return 2;
+          if (absX > 0.93) return 2;
+          if (!isAnt && s < 0.19 && absX > 0.14 && absX < 0.90) return 7;
+          return 1;
+        }
+
+        if (s >= 0.76 && s <= 0.93 && absX > 0.72) {
+          return 6; // shoulders
+        }
+        if (isAnt && s >= 0.56 && s <= 0.86 && absX >= 0.05 && absX <= 0.82 && nz > 0.20) {
+          return 3; // chest
+        }
+        if (isAnt && s >= 0.23 && s < 0.56 && absX <= 0.68 && nz > 0.26) {
+          return 4; // abs
+        }
+        if (!isAnt && s >= 0.30 && s <= 0.88 && absX >= 0.06 && nz < -0.15) {
+          return 5; // back_lats
+        }
+        return 0;
+      };
+
+      const sculptFn = (
+        s: number,
+        _theta: number,
+        nx: number,
+        nz: number,
+        pos: { x: number; y: number; z: number }
+      ) => {
+        const absX = Math.abs(nx);
+
+        if (nz > 0.15 && s > 0.55 && s < 0.87 && absX > 0.05 && absX < 0.84) {
+          const pecS = Math.sin(((s - 0.55) / 0.32) * Math.PI);
+          const pecX = Math.sin(((absX - 0.05) / 0.79) * Math.PI);
+          const lowerShelf = s < 0.65 ? Math.sin(((s - 0.55) / 0.10) * (Math.PI * 0.5)) : 1.0;
+          pos.z += 0.022 * pecS * pecX * lowerShelf * nz;
+        }
+
+        if (nz > 0.32 && s > 0.24 && s < 0.55 && absX > 0.05 && absX < 0.45) {
+          const rowPhase = ((s - 0.24) / 0.31) * 3 * Math.PI;
+          const abRow = Math.pow(Math.max(0, Math.sin(rowPhase)), 0.75);
+          const abCol = Math.sin(((absX - 0.05) / 0.40) * Math.PI);
+          pos.z += 0.012 * abRow * abCol * nz;
+        }
+
+        if (nz > -0.1 && nz < 0.65 && s > 0.32 && s < 0.62 && absX > 0.55 && absX < 0.92) {
+          const ribWave = Math.max(0, Math.sin(((s - 0.32) / 0.30) * 4 * Math.PI));
+          pos.x += (nx > 0 ? 1 : -1) * 0.005 * ribWave;
+        }
+
+        if (nz < -0.15 && s > 0.32 && s < 0.86) {
+          if (absX > 0.12 && absX < 0.88) {
+            const latS = Math.sin(((s - 0.32) / 0.54) * Math.PI);
+            const latX = Math.sin(((absX - 0.12) / 0.76) * Math.PI);
+            pos.z -= 0.018 * latS * latX * -nz;
+            pos.x += (nx > 0 ? 1 : -1) * 0.010 * latS * latX;
+          }
+        }
+
+        if (nz < -0.2 && s > 0.02 && s < 0.19 && absX > 0.12 && absX < 0.86) {
+          const gluteS = Math.sin(((s - 0.02) / 0.17) * Math.PI);
+          const gluteX = Math.sin(((absX - 0.12) / 0.74) * Math.PI);
+          pos.z -= 0.020 * gluteS * gluteX * -nz;
         }
       };
-      frameId = window.setTimeout(poll, 5);
-    }
 
-    function applyProceduralKinematics(
-      activeClip: AnimationClipName,
-      variant: string,
-      t: number
-    ) {
-      // Reset base transforms
-      hipsPivot.position.set(0, 0.94, 0);
-      hipsPivot.rotation.set(0, 0, 0);
-      spinePivot.rotation.set(0, 0, 0);
-      leftArm.shoulderPivot.rotation.set(0, 0, 0.12);
-      rightArm.shoulderPivot.rotation.set(0, 0, -0.12);
-      leftArm.elbowPivot.rotation.set(0, 0, 0);
-      rightArm.elbowPivot.rotation.set(0, 0, 0);
-      leftLeg.hipLegPivot.rotation.set(0, 0, 0);
-      rightLeg.hipLegPivot.rotation.set(0, 0, 0);
-      leftLeg.kneePivot.rotation.set(0, 0, 0);
-      rightLeg.kneePivot.rotation.set(0, 0, 0);
+      const vertexShadeFn = (
+        s: number,
+        nx: number,
+        nz: number,
+        matGroup: number
+      ): [number, number, number] => {
+        const absX = Math.abs(nx);
+        let shade = 0.92;
 
-      // Show overhead pull-up bar only for 'pullup' clip
-      pullupBarGroup.visible = activeClip === 'pullup';
-
-      // Show dumbbells only for weighted upper/lower variants
-      const showDumbbells =
-        activeClip !== 'pullup' &&
-        (variant === 'curl' ||
-          variant === 'tricep_ext' ||
-          variant === 'overhead_push' ||
-          variant === 'row_pull' ||
-          variant === 'hinge' ||
-          activeClip === 'lunge');
-      leftArm.dumbbellGroup.visible = showDumbbells;
-      rightArm.dumbbellGroup.visible = showDumbbells;
-
-      const phase = Math.sin(t * 3.2);
-      const halfPhase = 0.5 + 0.5 * Math.sin(t * 3.2); // 0..1
-
-      if (activeClip === 'pullup') {
-        // 03. PULL-UP Blueprint Cycle: Frame 0 (active_hang) -> Frame 15 (scapular_pull) -> Frame 30 (top_chin_over_bar) -> Frame 45 (lowering) -> Frame 60 (hang_return)
-        const pullHeight = halfPhase;
-        hipsPivot.position.set(0, 0.94 + pullHeight * 0.42, 0);
-        spinePivot.rotation.x = -pullHeight * 0.14;
-        leftArm.shoulderPivot.rotation.set(-2.95 + pullHeight * 1.28, 0, 0.28 + pullHeight * 0.22);
-        rightArm.shoulderPivot.rotation.set(-2.95 + pullHeight * 1.28, 0, -0.28 - pullHeight * 0.22);
-        leftArm.elbowPivot.rotation.x = -0.12 - pullHeight * 1.72;
-        rightArm.elbowPivot.rotation.x = -0.12 - pullHeight * 1.72;
-        leftLeg.hipLegPivot.rotation.x = 0.06;
-        rightLeg.hipLegPivot.rotation.x = 0.06;
-        leftLeg.kneePivot.rotation.x = 0.18 + pullHeight * 0.12;
-        rightLeg.kneePivot.rotation.x = 0.18 + pullHeight * 0.12;
-      } else if (activeClip === 'pushup' || activeClip === 'diamond_pushup') {
-        const isNarrow = activeClip === 'diamond_pushup' || variant === 'narrow_press';
-        const depth = halfPhase;
-        hipsPivot.position.set(0, 0.32 + depth * 0.22, -0.15);
-        hipsPivot.rotation.x = Math.PI / 2 - 0.18 - depth * 0.12;
-        const flare = isNarrow ? 0.25 : 0.65;
-        leftArm.shoulderPivot.rotation.set(-1.35 + depth * 0.35, 0, flare);
-        rightArm.shoulderPivot.rotation.set(-1.35 + depth * 0.35, 0, -flare);
-        leftArm.elbowPivot.rotation.x = -1.45 * (1 - depth);
-        rightArm.elbowPivot.rotation.x = -1.45 * (1 - depth);
-      } else if (activeClip === 'squat') {
-        const squatDepth = halfPhase;
-        if (variant === 'hinge') {
-          hipsPivot.position.set(0, 0.92 - squatDepth * 0.08, -squatDepth * 0.14);
-          spinePivot.rotation.x = squatDepth * 1.15;
-          leftLeg.hipLegPivot.rotation.x = -squatDepth * 0.25;
-          rightLeg.hipLegPivot.rotation.x = -squatDepth * 0.25;
-          leftLeg.kneePivot.rotation.x = squatDepth * 0.35;
-          rightLeg.kneePivot.rotation.x = squatDepth * 0.35;
-          leftArm.shoulderPivot.rotation.x = -squatDepth * 0.95;
-          rightArm.shoulderPivot.rotation.x = -squatDepth * 0.95;
-        } else {
-          hipsPivot.position.set(0, 0.94 - squatDepth * 0.38, -squatDepth * 0.1);
-          spinePivot.rotation.x = squatDepth * 0.32;
-          leftLeg.hipLegPivot.rotation.x = -squatDepth * 1.35;
-          rightLeg.hipLegPivot.rotation.x = -squatDepth * 1.35;
-          leftLeg.kneePivot.rotation.x = squatDepth * 1.65;
-          rightLeg.kneePivot.rotation.x = squatDepth * 1.65;
-          leftArm.shoulderPivot.rotation.x = -squatDepth * 1.25;
-          rightArm.shoulderPivot.rotation.x = -squatDepth * 1.25;
+        if (nz > 0.25 && absX < 0.09 && s > 0.24 && s < 0.86) {
+          shade -= 0.28 * (1 - absX / 0.09);
         }
-      } else if (activeClip === 'lunge') {
-        const lungeDepth = halfPhase;
-        hipsPivot.position.set(0, 0.92 - lungeDepth * 0.28, 0);
-        leftLeg.hipLegPivot.rotation.x = -0.55 - lungeDepth * 0.55;
-        leftLeg.kneePivot.rotation.x = 0.65 + lungeDepth * 0.75;
-        rightLeg.hipLegPivot.rotation.x = 0.45 + lungeDepth * 0.35;
-        rightLeg.kneePivot.rotation.x = 0.55 + lungeDepth * 0.65;
-        leftArm.shoulderPivot.rotation.x = 0.15;
-        rightArm.shoulderPivot.rotation.x = 0.15;
-        leftArm.elbowPivot.rotation.x = -0.25;
-        rightArm.elbowPivot.rotation.x = -0.25;
-      } else if (activeClip === 'plank') {
-        hipsPivot.position.set(0, 0.36 + Math.sin(t * 2) * 0.015, -0.15);
-        hipsPivot.rotation.x = Math.PI / 2 - 0.14;
-        leftArm.shoulderPivot.rotation.set(-1.35, 0, 0.2);
-        rightArm.shoulderPivot.rotation.set(-1.35, 0, -0.2);
-        leftArm.elbowPivot.rotation.x = -1.35;
-        rightArm.elbowPivot.rotation.x = -1.35;
-      } else if (activeClip === 'mountain_climber') {
-        hipsPivot.position.set(0, 0.44, -0.15);
-        hipsPivot.rotation.x = Math.PI / 2 - 0.22;
-        leftArm.shoulderPivot.rotation.set(-1.38, 0, 0.18);
-        rightArm.shoulderPivot.rotation.set(-1.38, 0, -0.18);
-        const legDrive = Math.sin(t * 6.0);
-        leftLeg.hipLegPivot.rotation.x = legDrive > 0 ? -legDrive * 1.35 : 0;
-        leftLeg.kneePivot.rotation.x = legDrive > 0 ? legDrive * 1.55 : 0.1;
-        rightLeg.hipLegPivot.rotation.x = legDrive < 0 ? legDrive * 1.35 : 0;
-        rightLeg.kneePivot.rotation.x = legDrive < 0 ? -legDrive * 1.55 : 0.1;
-      } else if (activeClip === 'crunch') {
-        hipsPivot.position.set(0, 0.22, 0);
-        hipsPivot.rotation.x = -Math.PI / 2 + 0.15;
-        spinePivot.rotation.x = halfPhase * 0.65;
-        leftLeg.hipLegPivot.rotation.x = -0.85;
-        rightLeg.hipLegPivot.rotation.x = -0.85;
-        leftLeg.kneePivot.rotation.x = 1.45;
-        rightLeg.kneePivot.rotation.x = 1.45;
-        leftArm.shoulderPivot.rotation.set(-0.9, 0, 0.5);
-        rightArm.shoulderPivot.rotation.set(-0.9, 0, -0.5);
-        leftArm.elbowPivot.rotation.x = -1.5;
-        rightArm.elbowPivot.rotation.x = -1.5;
-      } else if (activeClip === 'glute_bridge') {
-        const lift = halfPhase;
-        hipsPivot.position.set(0, 0.24 + lift * 0.26, 0);
-        hipsPivot.rotation.x = -Math.PI / 2 + lift * 0.35;
-        spinePivot.rotation.x = -lift * 0.25;
-        leftLeg.hipLegPivot.rotation.x = -0.65 + lift * 0.45;
-        rightLeg.hipLegPivot.rotation.x = -0.65 + lift * 0.45;
-        leftLeg.kneePivot.rotation.x = 1.65;
-        rightLeg.kneePivot.rotation.x = 1.65;
-      } else if (activeClip === 'burpee') {
-        const cycle = (t * 0.7) % 1;
-        if (cycle < 0.45) {
-          hipsPivot.position.set(0, 0.38, -0.15);
-          hipsPivot.rotation.x = Math.PI / 2 - 0.15;
-          leftArm.shoulderPivot.rotation.set(-1.35, 0, 0.25);
-          rightArm.shoulderPivot.rotation.set(-1.35, 0, -0.25);
-        } else {
-          const jump = Math.sin(((cycle - 0.45) / 0.55) * Math.PI);
-          hipsPivot.position.set(0, 0.94 + jump * 0.32, 0);
-          leftArm.shoulderPivot.rotation.set(-2.6 * jump, 0, 0.2);
-          rightArm.shoulderPivot.rotation.set(-2.6 * jump, 0, -0.2);
+        if (nz > 0.25 && s > 0.54 && s < 0.60 && absX > 0.08 && absX < 0.80) {
+          const groove = 1 - Math.abs(s - 0.57) / 0.03;
+          shade -= 0.30 * Math.max(0, groove);
         }
-      } else if (activeClip === 'jog') {
-        const runStride = Math.sin(t * 5.2);
-        hipsPivot.position.y = 0.94 + Math.abs(runStride) * 0.05;
-        spinePivot.rotation.x = 0.12;
-        leftArm.shoulderPivot.rotation.x = runStride * 0.65;
-        rightArm.shoulderPivot.rotation.x = -runStride * 0.65;
-        leftArm.elbowPivot.rotation.x = -1.1;
-        rightArm.elbowPivot.rotation.x = -1.1;
-        leftLeg.hipLegPivot.rotation.x = -runStride * 0.65;
-        rightLeg.hipLegPivot.rotation.x = runStride * 0.65;
-        leftLeg.kneePivot.rotation.x = runStride < 0 ? -runStride * 1.1 : 0.2;
-        rightLeg.kneePivot.rotation.x = runStride > 0 ? runStride * 1.1 : 0.2;
-      } else if (activeClip === 'stretch_flow') {
-        if (variant === 'curl') {
-          leftArm.elbowPivot.rotation.x = -0.2 - halfPhase * 1.95;
-          rightArm.elbowPivot.rotation.x = -0.2 - halfPhase * 1.95;
-        } else if (variant === 'tricep_ext') {
-          leftArm.shoulderPivot.rotation.x = -0.15;
-          rightArm.shoulderPivot.rotation.x = -0.15;
-          leftArm.elbowPivot.rotation.x = -1.65 * (1 - halfPhase);
-          rightArm.elbowPivot.rotation.x = -1.65 * (1 - halfPhase);
-        } else if (variant === 'overhead_push') {
-          leftArm.shoulderPivot.rotation.set(-halfPhase * 2.5, 0, 0.45 + halfPhase * 0.5);
-          rightArm.shoulderPivot.rotation.set(-halfPhase * 2.5, 0, -0.45 - halfPhase * 0.5);
-          leftArm.elbowPivot.rotation.x = -1.1 * (1 - halfPhase);
-          rightArm.elbowPivot.rotation.x = -1.1 * (1 - halfPhase);
-        } else if (variant === 'row_pull') {
-          spinePivot.rotation.x = 0.25;
-          leftArm.shoulderPivot.rotation.set(-1.35 + halfPhase * 1.45, 0, 0.35);
-          rightArm.shoulderPivot.rotation.set(-1.35 + halfPhase * 1.45, 0, -0.35);
-          leftArm.elbowPivot.rotation.x = -halfPhase * 1.55;
-          rightArm.elbowPivot.rotation.x = -halfPhase * 1.55;
-        } else {
-          spinePivot.rotation.z = phase * 0.22;
-          leftArm.shoulderPivot.rotation.z = 0.4 + halfPhase * 1.4;
-          rightArm.shoulderPivot.rotation.z = -0.4 - halfPhase * 1.4;
+        if (nz > 0.15 && s > 0.65 && s < 0.88 && absX > 0.70 && absX < 0.80) {
+          shade -= 0.22;
         }
-      } else {
-        const lift = halfPhase;
-        hipsPivot.position.y = 0.94 + lift * 0.06;
-        leftArm.shoulderPivot.rotation.z = 0.14 + Math.sin(t * 1.5) * 0.03;
-        rightArm.shoulderPivot.rotation.z = -0.14 - Math.sin(t * 1.5) * 0.03;
-      }
-    }
-
-    function tick() {
-      if (disposed) return;
-      const now = performance.now();
-      const dt = Math.min((now - lastFrameTime) / 1000, 0.1);
-      lastFrameTime = now;
-      const currentProps = propsRef.current;
-
-      if (!isSoftwareGl && dt > 0.03) {
-        lowFpsFrames += 1;
-        if (lowFpsFrames > 45 && renderer.shadowMap.enabled) {
-          renderer.shadowMap.enabled = false;
-          setFpsWarning(true);
-        }
-      } else {
-        lowFpsFrames = Math.max(0, lowFpsFrames - 1);
-      }
-
-      if (!currentProps.isPaused) {
-        simTime += dt * currentProps.timeScale;
-      }
-
-      if (currentProps.cameraPreset !== lastPresetWatched) {
-        lastPresetWatched = currentProps.cameraPreset;
-        manualOrbitActive = false;
-      }
-      if (!manualOrbitActive) {
-        const targetCam = presetCameraTargets[currentProps.cameraPreset];
-        const dampFactor = 1 - Math.exp(-6 * dt);
-        camera.position.lerp(targetCam, dampFactor);
-        if (camera.position.distanceTo(targetCam) < 0.03) {
-          manualOrbitActive = true;
-        }
-      }
-
-      controls.update();
-
-      // Update muscle highlight shader uniforms + dynamic isotonic muscle contraction bulge
-      const lerpAlpha = dt <= 0.001 ? 1.0 : 1 - Math.exp(-8 * dt);
-      const pulse = 0.5 + 0.5 * Math.sin(simTime * 3.2);
-      MUSCLE_ORDER.forEach((m) => {
-        const mat = muscleMaterials[m];
-        const u = mat.userData.muscleUniforms;
-        if (!u) return;
-        const isPrimary = currentProps.primaryMuscles.includes(m) ? 1.0 : 0.0;
-        const isSecondary = currentProps.secondaryMuscles.includes(m) ? 1.0 : 0.0;
-        u.uTime.value = simTime;
-        u.uPrimaryWeight.value += (isPrimary - u.uPrimaryWeight.value) * lerpAlpha;
-        u.uSecondaryWeight.value += (isSecondary - u.uSecondaryWeight.value) * lerpAlpha;
-        u.uDebugMode.value = currentProps.debugMuscleMask ? 1.0 : 0.0;
-
-        // Dynamic anatomical contraction bulge (+10% peak volume on primary muscles, +4% on secondary)
-        const bulgeFactor =
-          1.0 +
-          u.uPrimaryWeight.value * (0.04 + 0.075 * pulse) +
-          u.uSecondaryWeight.value * (0.02 + 0.03 * pulse);
-        muscleMeshesMap[m].forEach((mesh) => {
-          const base = mesh.userData.baseScale as THREE.Vector3 | undefined;
-          if (base) {
-            mesh.scale.set(
-              base.x * bulgeFactor,
-              base.y * (1 + (bulgeFactor - 1) * 0.4),
-              base.z * bulgeFactor
-            );
+        if (nz > 0.30 && s > 0.24 && s < 0.55 && absX < 0.44) {
+          for (const gS of [0.33, 0.43, 0.52]) {
+            const dist = Math.abs(s - gS);
+            if (dist < 0.022) {
+              shade -= 0.26 * (1 - dist / 0.022);
+            }
           }
-        });
-
-        // Update PBR emissive & diffuse color directly so all GPUs show vivid striated muscle glow
-        if (currentProps.debugMuscleMask) {
-          mat.color.setHex(DEBUG_COLORS[m]);
-          mat.emissive.setHex(DEBUG_COLORS[m]);
-          mat.emissiveIntensity = 0.45;
-        } else if (u.uPrimaryWeight.value > 0.05) {
-          mat.color.setHex(0xef4444).lerp(new THREE.Color(0xf97316), pulse);
-          mat.emissive.setHex(0xef4444).lerp(new THREE.Color(0xf97316), pulse);
-          mat.emissiveIntensity = (0.72 + 0.36 * pulse) * u.uPrimaryWeight.value;
-        } else if (u.uSecondaryWeight.value > 0.05) {
-          mat.color.setHex(0xf59e0b);
-          mat.emissive.setHex(0xf59e0b);
-          mat.emissiveIntensity = 0.45 * u.uSecondaryWeight.value;
-        } else {
-          mat.color.setHex(0x52637a);
-          mat.emissive.setHex(0x000000);
-          mat.emissiveIntensity = 0;
+          if (absX > 0.38 && absX < 0.46) {
+            shade -= 0.24 * (1 - Math.abs(absX - 0.42) / 0.04);
+          }
         }
+        if (nz > 0.0 && nz < 0.70 && s > 0.36 && s < 0.60 && absX > 0.46 && absX < 0.85) {
+          const ribGroove = Math.abs(Math.sin(((s - 0.36) / 0.24) * 3 * Math.PI));
+          if (ribGroove < 0.25) shade -= 0.18;
+        }
+        if (nz < -0.25 && s > 0.25 && s < 0.88) {
+          if (absX < 0.10) {
+            shade -= 0.26 * (1 - absX / 0.10);
+          }
+          if (s > 0.60 && s < 0.84 && absX > 0.42 && absX < 0.54) {
+            shade -= 0.18;
+          }
+        }
+        if (matGroup === 1 || matGroup === 7) {
+          shade = 0.90 + 0.08 * Math.sin(nx * 6);
+          if (nz < -0.2 && absX < 0.12) shade -= 0.25;
+        }
+
+        const clamped = Math.max(0.48, Math.min(1.06, shade));
+        return [clamped, clamped, clamped];
+      };
+
+      const geo = createSculptedLoftGeometry(
+        TORSO_LEN,
+        sections,
+        64,
+        80,
+        sculptFn,
+        groupFn,
+        vertexShadeFn
+      );
+
+      const materials = [
+        skinMat,
+        shortsMat,
+        trimWhiteMat,
+        muscleMaterials.chest,
+        muscleMaterials.abs,
+        muscleMaterials.back_lats,
+        muscleMaterials.shoulders,
+        shortsGlutesMat,
+      ];
+
+      const mesh = new THREE.Mesh(geo, materials);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
+    }
+
+    // 2. CONTINUOUS SCULPTED HEAD & NECK (Complete 360° Athletic Hair + Facial Features)
+    function buildHeadNeckMesh(): THREE.Mesh {
+      const sections: LoftSection[] = [
+        { s: 0.0, rx: 0.060, rzAnt: 0.058, rzPost: 0.060 },
+        { s: 0.18, rx: 0.055, rzAnt: 0.055, rzPost: 0.056 },
+        { s: 0.30, rx: 0.058, rzAnt: 0.064, rzPost: 0.060 },
+        { s: 0.38, rx: 0.066, rzAnt: 0.092, rzPost: 0.072 },
+        { s: 0.52, rx: 0.076, rzAnt: 0.095, rzPost: 0.086 },
+        { s: 0.66, rx: 0.079, rzAnt: 0.092, rzPost: 0.092 },
+        { s: 0.82, rx: 0.076, rzAnt: 0.086, rzPost: 0.088 },
+        { s: 0.94, rx: 0.054, rzAnt: 0.058, rzPost: 0.060 },
+        { s: 1.0, rx: 0.002, rzAnt: 0.002, rzPost: 0.002 },
+      ];
+
+      const groupFn = (s: number, nx: number, nz: number): number => {
+        const absX = Math.abs(nx);
+        if (s >= 0.75) return 1;
+        if (s >= 0.62 && (nz < 0.38 || absX > 0.72)) return 1;
+        if (s >= 0.42 && nz < -0.18) return 1;
+        return 0;
+      };
+
+      const sculptFn = (
+        s: number,
+        _theta: number,
+        nx: number,
+        nz: number,
+        pos: { x: number; y: number; z: number }
+      ) => {
+        const absX = Math.abs(nx);
+        if (nz > 0.68 && s > 0.48 && s < 0.66 && absX < 0.22) {
+          const noseS = Math.sin(((s - 0.48) / 0.18) * Math.PI);
+          const noseX = Math.cos((absX / 0.22) * (Math.PI * 0.5));
+          pos.z += 0.017 * noseS * noseX;
+        }
+        if (nz > 0.55 && s > 0.63 && s < 0.71 && absX < 0.62) {
+          pos.z += 0.007 * Math.sin(((s - 0.63) / 0.08) * Math.PI);
+        }
+        if (nz > 0.55 && s > 0.57 && s < 0.64 && absX > 0.18 && absX < 0.54) {
+          pos.z -= 0.006;
+        }
+        if (nz > 0.35 && s > 0.35 && s < 0.46 && absX < 0.58) {
+          pos.z += 0.008 * Math.sin(((s - 0.35) / 0.11) * Math.PI);
+        }
+        if (absX > 0.90 && Math.abs(nz) < 0.32 && s > 0.50 && s < 0.65) {
+          pos.x += (nx > 0 ? 1 : -1) * 0.009 * Math.sin(((s - 0.50) / 0.15) * Math.PI);
+        }
+      };
+
+      const vertexShadeFn = (
+        s: number,
+        nx: number,
+        nz: number,
+        matGroup: number
+      ): [number, number, number] => {
+        if (matGroup === 1) {
+          return [0.92, 0.94, 0.98];
+        }
+        const absX = Math.abs(nx);
+        let shade = 0.94;
+        if (nz > 0.55 && s > 0.58 && s < 0.65 && absX > 0.18 && absX < 0.52) {
+          shade -= 0.28;
+        }
+        if (nz > 0.1 && s > 0.26 && s < 0.36) {
+          shade -= 0.22;
+        }
+        if (nz > 0.65 && s > 0.43 && s < 0.47 && absX < 0.28) {
+          shade -= 0.18;
+        }
+        if (nz > 0.2 && s < 0.26 && absX > 0.25 && absX < 0.45) {
+          shade -= 0.14;
+        }
+        const c = Math.max(0.52, Math.min(1.04, shade));
+        return [c, c, c];
+      };
+
+      const geo = createSculptedLoftGeometry(
+        HEAD_NECK_LEN,
+        sections,
+        40,
+        52,
+        sculptFn,
+        groupFn,
+        vertexShadeFn
+      );
+      const mesh = new THREE.Mesh(geo, [skinMat, hairMat]);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
+    }
+
+    // 3. CONTINUOUS SCULPTED UPPER ARM (Elbow s=0 to Rounded Shoulder Deltoid Cap s=1)
+    function buildUpperArmMesh(): THREE.Mesh {
+      const sections: LoftSection[] = [
+        { s: 0.0, rx: 0.044, rzAnt: 0.044, rzPost: 0.045 },
+        { s: 0.18, rx: 0.050, rzAnt: 0.054, rzPost: 0.054 },
+        { s: 0.44, rx: 0.058, rzAnt: 0.068, rzPost: 0.064 },
+        { s: 0.68, rx: 0.064, rzAnt: 0.068, rzPost: 0.066 },
+        { s: 0.85, rx: 0.074, rzAnt: 0.074, rzPost: 0.072 },
+        { s: 0.96, rx: 0.056, rzAnt: 0.056, rzPost: 0.056 },
+        { s: 1.0, rx: 0.015, rzAnt: 0.015, rzPost: 0.015 },
+      ];
+
+      // Groups: 0: skin, 1: biceps, 2: triceps, 3: shoulders
+      const groupFn = (s: number, _nx: number, nz: number): number => {
+        if (s >= 0.68) return 3; // shoulders
+        if (s >= 0.14 && s < 0.68) {
+          if (nz >= 0.08) return 1; // biceps
+          if (nz <= -0.08) return 2; // triceps
+        }
+        return 0;
+      };
+
+      const sculptFn = (
+        s: number,
+        _theta: number,
+        _nx: number,
+        nz: number,
+        pos: { x: number; y: number; z: number }
+      ) => {
+        if (nz > 0.2 && s > 0.20 && s < 0.66) {
+          pos.z += 0.010 * Math.sin(((s - 0.20) / 0.46) * Math.PI) * nz;
+        }
+        if (nz < -0.2 && s > 0.24 && s < 0.68) {
+          pos.z -= 0.011 * Math.sin(((s - 0.24) / 0.44) * Math.PI) * -nz;
+        }
+      };
+
+      const vertexShadeFn = (
+        s: number,
+        nx: number,
+        nz: number
+      ): [number, number, number] => {
+        let shade = 0.93;
+        if (Math.abs(nz) < 0.16 && s > 0.15 && s < 0.68) {
+          shade -= 0.22 * (1 - Math.abs(nz) / 0.16);
+        }
+        if (s > 0.65 && s < 0.72 && Math.abs(nx) > 0.3) {
+          shade -= 0.18;
+        }
+        const c = Math.max(0.52, Math.min(1.04, shade));
+        return [c, c, c];
+      };
+
+      const geo = createSculptedLoftGeometry(
+        UPPER_ARM_LEN + 0.025,
+        sections,
+        32,
+        44,
+        sculptFn,
+        groupFn,
+        vertexShadeFn
+      );
+      const mesh = new THREE.Mesh(geo, [
+        skinMat,
+        muscleMaterials.biceps,
+        muscleMaterials.triceps,
+        muscleMaterials.shoulders,
+      ]);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
+    }
+
+    // 4. CONTINUOUS SCULPTED FOREARM & HAND (Wrist s=0 to Rounded Elbow Cap s=1)
+    function buildForearmMesh(isLeft: boolean): THREE.Group {
+      const group = new THREE.Group();
+      const sections: LoftSection[] = [
+        { s: 0.0, rx: 0.030, rzAnt: 0.024, rzPost: 0.024 },
+        { s: 0.22, rx: 0.034, rzAnt: 0.030, rzPost: 0.030 },
+        { s: 0.62, rx: 0.045, rzAnt: 0.043, rzPost: 0.043 },
+        { s: 0.88, rx: 0.045, rzAnt: 0.044, rzPost: 0.045 },
+        { s: 1.0, rx: 0.020, rzAnt: 0.020, rzPost: 0.024 },
+      ];
+
+      const groupFn = (s: number): number => (s >= 0.16 && s <= 0.88 ? 1 : 0);
+
+      const sculptFn = (
+        s: number,
+        _theta: number,
+        nx: number,
+        _nz: number,
+        pos: { x: number; y: number; z: number }
+      ) => {
+        if (s > 0.38 && s < 0.86) {
+          pos.x += nx * 0.005 * Math.sin(((s - 0.38) / 0.48) * Math.PI);
+        }
+      };
+
+      const geo = createSculptedLoftGeometry(FOREARM_LEN + 0.015, sections, 28, 36, sculptFn, groupFn);
+      const mesh = new THREE.Mesh(geo, [skinMat, muscleMaterials.forearms]);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+
+      const handGroup = new THREE.Group();
+      handGroup.name = 'wrist_hand';
+      const palmGeo = new THREE.BoxGeometry(0.072, 0.078, 0.026);
+      const palm = new THREE.Mesh(palmGeo, skinMat);
+      palm.position.set(0, -0.036, 0);
+      palm.castShadow = true;
+      handGroup.add(palm);
+
+      for (let f = 0; f < 4; f++) {
+        const fGeo = new THREE.CapsuleGeometry(0.0072, 0.040, 8, 8);
+        const finger = new THREE.Mesh(fGeo, skinMat);
+        finger.position.set(-0.024 + f * 0.016, -0.084, 0.003);
+        handGroup.add(finger);
+      }
+      const thumbGeo = new THREE.CapsuleGeometry(0.0085, 0.032, 8, 8);
+      const thumb = new THREE.Mesh(thumbGeo, skinMat);
+      const sideSign = isLeft ? -1 : 1;
+      thumb.position.set(sideSign * 0.040, -0.042, 0.012);
+      thumb.rotation.z = sideSign * 0.48;
+      handGroup.add(thumb);
+
+      group.add(handGroup);
+      return group;
+    }
+
+    // 5. CONTINUOUS SCULPTED THIGH (Knee s=0 to Hip Socket s=1)
+    function buildThighMesh(): THREE.Mesh {
+      const sections: LoftSection[] = [
+        { s: 0.0, rx: 0.058, rzAnt: 0.058, rzPost: 0.058 },
+        { s: 0.16, rx: 0.070, rzAnt: 0.072, rzPost: 0.068 },
+        { s: 0.45, rx: 0.088, rzAnt: 0.092, rzPost: 0.088 },
+        { s: 0.72, rx: 0.098, rzAnt: 0.098, rzPost: 0.098 },
+        { s: 0.92, rx: 0.102, rzAnt: 0.096, rzPost: 0.102 },
+        { s: 1.0, rx: 0.065, rzAnt: 0.065, rzPost: 0.065 },
+      ];
+
+      // Groups: 0: skin, 1: shorts, 2: trimWhite, 3: quads, 4: hamstrings
+      const groupFn = (s: number, nx: number, nz: number): number => {
+        const absX = Math.abs(nx);
+        if (s >= 0.56) {
+          if (s < 0.585) return 2;
+          if (absX > 0.93) return 2;
+          return 1;
+        }
+        if (s >= 0.10 && s < 0.56) {
+          if (nz >= 0.06) return 3; // quads
+          if (nz <= -0.06) return 4; // hamstrings
+        }
+        return 0;
+      };
+
+      const sculptFn = (
+        s: number,
+        _theta: number,
+        nx: number,
+        nz: number,
+        pos: { x: number; y: number; z: number }
+      ) => {
+        if (nz > 0.15 && s > 0.12 && s < 0.78) {
+          const quadProfile = Math.sin(((s - 0.12) / 0.66) * Math.PI);
+          pos.z += 0.015 * quadProfile * nz;
+          pos.x += nx * 0.008 * quadProfile;
+        }
+        if (nz < -0.15 && s > 0.18 && s < 0.78) {
+          pos.z -= 0.013 * Math.sin(((s - 0.18) / 0.60) * Math.PI) * -nz;
+        }
+      };
+
+      const vertexShadeFn = (
+        s: number,
+        nx: number,
+        nz: number,
+        matGroup: number
+      ): [number, number, number] => {
+        if (matGroup === 1) return [0.92, 0.92, 0.94];
+        const absX = Math.abs(nx);
+        let shade = 0.94;
+        if (nz > 0.35 && s > 0.14 && s < 0.55) {
+          if (absX > 0.32 && absX < 0.44) {
+            shade -= 0.22 * (1 - Math.abs(absX - 0.38) / 0.06);
+          }
+        }
+        if (Math.abs(nz) < 0.16 && s > 0.12 && s < 0.55) {
+          shade -= 0.20;
+        }
+        const c = Math.max(0.52, Math.min(1.04, shade));
+        return [c, c, c];
+      };
+
+      const geo = createSculptedLoftGeometry(
+        THIGH_LEN + 0.02,
+        sections,
+        36,
+        48,
+        sculptFn,
+        groupFn,
+        vertexShadeFn
+      );
+      const mesh = new THREE.Mesh(geo, [
+        skinMat,
+        shortsMat,
+        trimWhiteMat,
+        muscleMaterials.quads,
+        muscleMaterials.hamstrings,
+      ]);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
+    }
+
+    // 6. CONTINUOUS SCULPTED CALF & SHOE (Ankle s=0 to Patella Knee Cap s=1)
+    function buildCalfMesh(): THREE.Group {
+      const group = new THREE.Group();
+      const sections: LoftSection[] = [
+        { s: 0.0, rx: 0.036, rzAnt: 0.038, rzPost: 0.040 },
+        { s: 0.24, rx: 0.042, rzAnt: 0.044, rzPost: 0.046 },
+        { s: 0.62, rx: 0.060, rzAnt: 0.054, rzPost: 0.072 },
+        { s: 0.88, rx: 0.058, rzAnt: 0.058, rzPost: 0.058 },
+        { s: 1.0, rx: 0.032, rzAnt: 0.036, rzPost: 0.030 },
+      ];
+
+      const groupFn = (s: number, _nx: number, nz: number): number => {
+        if (s >= 0.34 && s <= 0.84 && nz < 0.12) return 1; // calves
+        return 0;
+      };
+
+      const sculptFn = (
+        s: number,
+        _theta: number,
+        _nx: number,
+        nz: number,
+        pos: { x: number; y: number; z: number }
+      ) => {
+        if (nz < -0.15 && s > 0.36 && s < 0.84) {
+          pos.z -= 0.015 * Math.sin(((s - 0.36) / 0.48) * Math.PI) * -nz;
+        }
+      };
+
+      const vertexShadeFn = (
+        s: number,
+        nx: number,
+        nz: number
+      ): [number, number, number] => {
+        let shade = 0.94;
+        if (nz < -0.4 && s > 0.45 && s < 0.80 && Math.abs(nx) < 0.12) {
+          shade -= 0.20;
+        }
+        const c = Math.max(0.55, Math.min(1.04, shade));
+        return [c, c, c];
+      };
+
+      const geo = createSculptedLoftGeometry(
+        CALF_LEN + 0.018,
+        sections,
+        32,
+        44,
+        sculptFn,
+        groupFn,
+        vertexShadeFn
+      );
+      const mesh = new THREE.Mesh(geo, [skinMat, muscleMaterials.calves]);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+
+      const shoeGroup = new THREE.Group();
+      shoeGroup.name = 'ankle_shoe';
+
+      const sockGeo = new THREE.CylinderGeometry(0.039, 0.041, 0.045, 20);
+      const sock = new THREE.Mesh(sockGeo, trimWhiteMat);
+      sock.position.set(0, 0.015, 0);
+      shoeGroup.add(sock);
+
+      const upperShoeGeo = new THREE.CapsuleGeometry(0.046, 0.125, 12, 16);
+      const upperShoe = new THREE.Mesh(upperShoeGeo, shoeDarkMat);
+      upperShoe.rotation.x = Math.PI / 2;
+      upperShoe.scale.set(1.02, 1.0, 0.78);
+      upperShoe.position.set(0, -0.042, 0.048);
+      upperShoe.castShadow = true;
+      shoeGroup.add(upperShoe);
+
+      const soleGeo = new THREE.CapsuleGeometry(0.049, 0.138, 10, 16);
+      const sole = new THREE.Mesh(soleGeo, trimWhiteMat);
+      sole.rotation.x = Math.PI / 2;
+      sole.scale.set(1.06, 1.0, 0.36);
+      sole.position.set(0, -0.074, 0.050);
+      sole.castShadow = true;
+      shoeGroup.add(sole);
+
+      group.add(shoeGroup);
+      return group;
+    }
+
+    // Assemble Character Root
+    const characterRoot = new THREE.Group();
+    scene.add(characterRoot);
+
+    const torsoMesh = buildTorsoMesh();
+    const headNeckMesh = buildHeadNeckMesh();
+    const upperArmL = buildUpperArmMesh();
+    const upperArmR = buildUpperArmMesh();
+    const forearmL = buildForearmMesh(true);
+    const forearmR = buildForearmMesh(false);
+    const thighL = buildThighMesh();
+    const thighR = buildThighMesh();
+    const calfL = buildCalfMesh();
+    const calfR = buildCalfMesh();
+
+    characterRoot.add(
+      torsoMesh,
+      headNeckMesh,
+      upperArmL,
+      upperArmR,
+      forearmL,
+      forearmR,
+      thighL,
+      thighR,
+      calfL,
+      calfR
+    );
+
+    // ============================================================================
+    // GYM EQUIPMENT PROPS (Pull-Up Bar `bar_ref`, Bench, Barbell, Dumbbells)
+    // ============================================================================
+    const equipmentRoot = new THREE.Group();
+    scene.add(equipmentRoot);
+
+    // 1. Fixed Overhead Pull-Up Bar Rig (`bar_ref` at Y = 2.10m)
+    const pullupRigGroup = new THREE.Group();
+    const postGeo = new THREE.CylinderGeometry(0.032, 0.032, 2.22, 20);
+    const postL = new THREE.Mesh(postGeo, equipDarkMat);
+    postL.position.set(-0.68, 1.11, 0);
+    postL.castShadow = true;
+    const postR = new THREE.Mesh(postGeo, equipDarkMat);
+    postR.position.set(0.68, 1.11, 0);
+    postR.castShadow = true;
+
+    const basePlateGeo = new THREE.BoxGeometry(0.24, 0.03, 0.56);
+    const baseL = new THREE.Mesh(basePlateGeo, equipDarkMat);
+    baseL.position.set(-0.68, 0.015, 0);
+    const baseR = new THREE.Mesh(basePlateGeo, equipDarkMat);
+    baseR.position.set(0.68, 0.015, 0);
+
+    const crossbarGeo = new THREE.CylinderGeometry(0.018, 0.018, 1.48, 24);
+    const crossbar = new THREE.Mesh(crossbarGeo, equipChromeMat);
+    crossbar.rotation.z = Math.PI / 2;
+    crossbar.position.set(0, 2.10, 0);
+    crossbar.castShadow = true;
+
+    const gripGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.16, 16);
+    const gripL = new THREE.Mesh(gripGeo, equipDarkMat);
+    gripL.rotation.z = Math.PI / 2;
+    gripL.position.set(-0.34, 2.10, 0);
+    const gripR = new THREE.Mesh(gripGeo, equipDarkMat);
+    gripR.rotation.z = Math.PI / 2;
+    gripR.position.set(0.34, 2.10, 0);
+
+    pullupRigGroup.add(postL, postR, baseL, baseR, crossbar, gripL, gripR);
+    pullupRigGroup.visible = false;
+    equipmentRoot.add(pullupRigGroup);
+
+    // 2. Weight Bench
+    const benchGroup = new THREE.Group();
+    const benchPad = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 1.24), equipDarkMat);
+    benchPad.position.set(0, 0.42, -0.10);
+    benchPad.castShadow = true;
+    benchPad.receiveShadow = true;
+    const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.40, 0.06), equipMetalMat);
+    leg1.position.set(0, 0.20, 0.40);
+    const leg2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.40, 0.06), equipMetalMat);
+    leg2.position.set(0, 0.20, -0.58);
+    benchGroup.add(benchPad, leg1, leg2);
+    benchGroup.visible = false;
+    equipmentRoot.add(benchGroup);
+
+    // 3. Barbell
+    const barbellGroup = new THREE.Group();
+    const barMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 1.75, 16), equipChromeMat);
+    barMesh.rotation.z = Math.PI / 2;
+    barbellGroup.add(barMesh);
+    [-0.64, -0.59, 0.59, 0.64].forEach((xOffset, idx) => {
+      const r = idx === 0 || idx === 3 ? 0.16 : 0.20;
+      const plate = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.032, 24), equipDarkMat);
+      plate.rotation.z = Math.PI / 2;
+      plate.position.x = xOffset;
+      plate.castShadow = true;
+      barbellGroup.add(plate);
+    });
+    barbellGroup.visible = false;
+    equipmentRoot.add(barbellGroup);
+
+    // 4. Dumbbells
+    const makeDumbbell = () => {
+      const g = new THREE.Group();
+      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.14, 12), equipChromeMat);
+      handle.rotation.z = Math.PI / 2;
+      g.add(handle);
+      [-0.06, 0.06].forEach((x) => {
+        const head = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.035, 16), equipDarkMat);
+        head.rotation.z = Math.PI / 2;
+        head.position.x = x;
+        g.add(head);
+      });
+      g.visible = false;
+      equipmentRoot.add(g);
+      return g;
+    };
+    const dumbbellL = makeDumbbell();
+    const dumbbellR = makeDumbbell();
+
+    // ============================================================================
+    // MUSCLE HIGHLIGHT UPDATER (Blueprint Crimson Red & Coral)
+    // ============================================================================
+    const updateMuscleMaterials = () => {
+      const { primaryMuscles: prim, secondaryMuscles: sec, showMaskDebug: debug } = stateRef.current;
+
+      muscleIds.forEach((id) => {
+        const mat = muscleMaterials[id];
+        if (!mat) return;
+
+        if (debug) {
+          mat.color.setHex(debugColors[id]);
+          mat.emissive.setHex(debugColors[id]);
+          mat.emissiveIntensity = 0.28;
+          mat.roughness = 0.35;
+        } else if (prim.includes(id)) {
+          // Primary Active Muscle -> Rich Blueprint Crimson Red (#DC2626)
+          mat.color.setHex(0xdc2626);
+          mat.emissive.setHex(0x991b1b);
+          mat.emissiveIntensity = 0.32;
+          mat.roughness = 0.36;
+          mat.metalness = 0.12;
+        } else if (sec.includes(id)) {
+          // Secondary Active Muscle -> Blueprint Coral Red (#EA580C)
+          mat.color.setHex(0xea580c);
+          mat.emissive.setHex(0x9a3412);
+          mat.emissiveIntensity = 0.22;
+          mat.roughness = 0.42;
+          mat.metalness = 0.12;
+        } else {
+          // Inactive -> Athletic Slate Skin (#9AA6B8)
+          mat.color.setHex(0x9aa6b8);
+          mat.emissive.setHex(0x000000);
+          mat.emissiveIntensity = 0.0;
+          mat.roughness = 0.46;
+          mat.metalness = 0.14;
+        }
+        mat.needsUpdate = true;
       });
 
-      if (glbMixer && !currentProps.isPaused) {
-        glbMixer.update(dt * currentProps.timeScale);
+      // Update shortsGlutesMat so glutes stay black shorts when inactive, and glow Crimson when active
+      if (debug) {
+        shortsGlutesMat.color.setHex(debugColors.glutes);
+        shortsGlutesMat.emissive.setHex(debugColors.glutes);
+        shortsGlutesMat.emissiveIntensity = 0.28;
+      } else if (prim.includes('glutes')) {
+        shortsGlutesMat.color.setHex(0xdc2626);
+        shortsGlutesMat.emissive.setHex(0x991b1b);
+        shortsGlutesMat.emissiveIntensity = 0.32;
+      } else if (sec.includes('glutes')) {
+        shortsGlutesMat.color.setHex(0xea580c);
+        shortsGlutesMat.emissive.setHex(0x9a3412);
+        shortsGlutesMat.emissiveIntensity = 0.22;
       } else {
-        applyProceduralKinematics(
-          currentProps.clip,
-          currentProps.biomechanicalVariant || 'standard',
-          simTime
-        );
+        shortsGlutesMat.color.setHex(0x181c24);
+        shortsGlutesMat.emissive.setHex(0x000000);
+        shortsGlutesMat.emissiveIntensity = 0.0;
+      }
+      shortsGlutesMat.needsUpdate = true;
+    };
+
+    // ============================================================================
+    // CAMERA PRESETS (Full-body framing from shoes to overhead bar with zero clipping)
+    // ============================================================================
+    const computeCameraView = (
+      preset: CameraPreset,
+      clip: AnimationClipName
+    ): { pos: THREE.Vector3; target: THREE.Vector3 } => {
+      const isGround =
+        clip === 'pushup' ||
+        clip === 'diamond_pushup' ||
+        clip === 'plank' ||
+        clip === 'mountain_climber' ||
+        clip === 'crunch' ||
+        clip === 'glute_bridge';
+      const isHanging = clip === 'pullup';
+
+      if (isGround) {
+        const target = new THREE.Vector3(0, 0.34, -0.12);
+        switch (preset) {
+          case 'front':
+            return { pos: new THREE.Vector3(0, 0.80, 1.95), target };
+          case 'side':
+            return { pos: new THREE.Vector3(2.25, 0.68, -0.12), target };
+          case 'back':
+            return { pos: new THREE.Vector3(0, 0.85, -2.15), target };
+          case 'top':
+            return { pos: new THREE.Vector3(0.01, 2.65, -0.12), target };
+        }
       }
 
-      renderer.render(scene, camera);
-
-      if (isSoftwareGl) {
-        afterDraw(tick);
-      } else {
-        frameId = requestAnimationFrame(tick);
+      if (isHanging) {
+        const target = new THREE.Vector3(0, 1.34, 0);
+        switch (preset) {
+          case 'front':
+            return { pos: new THREE.Vector3(0, 1.38, 3.35), target };
+          case 'side':
+            return { pos: new THREE.Vector3(3.25, 1.38, 0), target };
+          case 'back':
+            return { pos: new THREE.Vector3(0, 1.38, -3.35), target };
+          case 'top':
+            return { pos: new THREE.Vector3(0.01, 3.65, 0.05), target };
+        }
       }
+
+      const target = new THREE.Vector3(0, 0.94, 0);
+      switch (preset) {
+        case 'front':
+          return { pos: new THREE.Vector3(0, 1.02, 3.15), target };
+        case 'side':
+          return { pos: new THREE.Vector3(3.05, 0.98, 0), target };
+        case 'back':
+          return { pos: new THREE.Vector3(0, 1.02, -3.15), target };
+        case 'top':
+          return { pos: new THREE.Vector3(0.01, 3.25, 0.05), target };
+      }
+    };
+
+    const applyCameraPreset = (preset: CameraPreset) => {
+      const { pos, target } = computeCameraView(preset, stateRef.current.clipName);
+      camera.position.copy(pos);
+      controls.target.copy(target);
+      controls.update();
+    };
+
+    updateMuscleMaterials();
+    applyCameraPreset(stateRef.current.cameraPreset);
+
+    // ============================================================================
+    // BIOMECHANICAL IK POSE ENGINE (Blueprint 30 FPS / 60 Frames)
+    // ============================================================================
+    const applyProceduralPose = (
+      clip: AnimationClipName,
+      variant: string,
+      exName: string,
+      frame: number
+    ) => {
+      // Smooth cosine interpolation:
+      // Frame 0 = Start (p=0), Frame 15 = Mid (p=0.5), Frame 30 = Peak/Bottom (p=1.0), Frame 45 = Mid (p=0.5), Frame 60 = Return (p=0)
+      const norm = (frame % 60) / 60;
+      const p = 0.5 - 0.5 * Math.cos(norm * Math.PI * 2);
+
+      pullupRigGroup.visible = false;
+      benchGroup.visible = false;
+      barbellGroup.visible = false;
+      dumbbellL.visible = false;
+      dumbbellR.visible = false;
+
+      const hipsPos = new THREE.Vector3(0, 0.95, 0);
+      const shoulderCenter = new THREE.Vector3(0, 1.48, 0);
+      const torsoAnterior = new THREE.Vector3(0, 0, 1);
+      const headLookDir = new THREE.Vector3(0, 0, 1);
+
+      const handL = new THREE.Vector3(-0.24, 0.78, 0.08);
+      const handR = new THREE.Vector3(0.24, 0.78, 0.08);
+      const elbowPoleL = new THREE.Vector3(-0.34, 1.10, -0.25);
+      const elbowPoleR = new THREE.Vector3(0.34, 1.10, -0.25);
+
+      const footL = new THREE.Vector3(-0.14, 0.08, 0);
+      const footR = new THREE.Vector3(0.14, 0.08, 0);
+      const kneePoleL = new THREE.Vector3(-0.16, 0.52, 0.45);
+      const kneePoleR = new THREE.Vector3(0.16, 0.52, 0.45);
+
+      const nameLower = exName.toLowerCase();
+
+      // Special gym bench press check when exercise is Bench Press or Incline Dumbbell Press
+      if (nameLower.includes('bench press') || nameLower.includes('incline dumbbell')) {
+        benchGroup.visible = true;
+        benchGroup.position.set(0, 0, -0.10);
+        const press = 1 - p;
+        hipsPos.set(0, 0.48, -0.35);
+        shoulderCenter.set(0, 0.48, 0.20);
+        torsoAnterior.set(0, 1, 0);
+        headLookDir.set(0, 1, 0);
+
+        const barY = 0.62 + 0.26 * press;
+        const barZ = 0.18;
+        if (nameLower.includes('dumbbell')) {
+          dumbbellL.visible = true;
+          dumbbellR.visible = true;
+          handL.set(-0.24, barY, barZ);
+          handR.set(0.24, barY, barZ);
+          dumbbellL.position.copy(handL);
+          dumbbellR.position.copy(handR);
+        } else {
+          barbellGroup.visible = true;
+          barbellGroup.position.set(0, barY, barZ);
+          handL.set(-0.32, barY, barZ);
+          handR.set(0.32, barY, barZ);
+        }
+
+        elbowPoleL.set(-0.46, 0.30, 0.10);
+        elbowPoleR.set(0.46, 0.30, 0.10);
+        footL.set(-0.22, 0.08, -0.76);
+        footR.set(0.22, 0.08, -0.76);
+        kneePoleL.set(-0.24, 0.50, -0.68);
+        kneePoleR.set(0.24, 0.50, -0.68);
+      } else {
+        switch (clip) {
+          case 'pushup':
+          case 'diamond_pushup': {
+            // 01_push_up.json:
+            // Rigid straight plank pivoting around planted toes (z = -0.84, y = 0.10)
+            // Frame 0 (p=0): High Plank (lift=1, plank angle = 21.5 deg)
+            // Frame 30 (p=1): Bottom Position (lift=0, plank angle = 5.2 deg, elbows bent ~90 deg)
+            const lift = 1 - p;
+            const isDiamond =
+              clip === 'diamond_pushup' ||
+              variant === 'narrow_press' ||
+              nameLower.includes('diamond') ||
+              nameLower.includes('close-grip');
+            const isDecline = nameLower.includes('decline');
+            const isPike = variant === 'overhead_push' || nameLower.includes('pike');
+
+            const handSpread = isDiamond ? 0.10 : 0.25;
+            const footY = isDecline ? 0.40 : 0.10;
+            const footZ = -0.84;
+
+            if (isDecline) {
+              benchGroup.visible = true;
+              benchGroup.position.set(0, 0, -0.95);
+            }
+
+            if (isPike) {
+              hipsPos.set(0, 0.78 - 0.10 * p, -0.18);
+              shoulderCenter.set(0, 0.44 - 0.20 * p, 0.34);
+            } else {
+              const plankAngle = (5.2 + 16.3 * lift) * (Math.PI / 180);
+              const legDist = 0.815;
+              const hipY = footY + legDist * Math.sin(plankAngle);
+              const hipZ = footZ + legDist * Math.cos(plankAngle);
+              const chestY = hipY + TORSO_LEN * Math.sin(plankAngle);
+              const chestZ = hipZ + TORSO_LEN * Math.cos(plankAngle);
+
+              hipsPos.set(0, hipY, hipZ);
+              shoulderCenter.set(0, chestY, chestZ);
+            }
+
+            torsoAnterior.set(0, -1, 0.18).normalize();
+            headLookDir.set(0, -0.55, 0.83).normalize();
+
+            handL.set(-handSpread, 0.03, 0.50);
+            handR.set(handSpread, 0.03, 0.50);
+
+            const elbowSpread = isDiamond ? 0.24 : 0.44;
+            elbowPoleL.set(-elbowSpread, shoulderCenter.y + 0.18, 0.16);
+            elbowPoleR.set(elbowSpread, shoulderCenter.y + 0.18, 0.16);
+
+            footL.set(-0.11, footY, footZ);
+            footR.set(0.11, footY, footZ);
+            kneePoleL.set(-0.11, (hipsPos.y + footY) * 0.5 + 0.15, (hipsPos.z + footZ) * 0.5);
+            kneePoleR.set(0.11, (hipsPos.y + footY) * 0.5 + 0.15, (hipsPos.z + footZ) * 0.5);
+            break;
+          }
+
+          case 'squat': {
+            // 02_squat.json:
+            // Frame 0 (p=0): Neutral Standing (arms by sides)
+            // Frame 30 (p=1): Parallel Squat Bottom (hips descend & back, arms extended horizontally forward)
+            const isDeadlift = variant === 'hinge' || nameLower.includes('deadlift');
+            const depth = p;
+
+            if (isDeadlift) {
+              const hipY = 0.92 - 0.16 * depth;
+              const hipZ = -0.20 * depth;
+              hipsPos.set(0, hipY, hipZ);
+              const torsoAngle = 0.88 * depth;
+              shoulderCenter.set(
+                0,
+                hipY + Math.cos(torsoAngle) * TORSO_LEN,
+                hipZ + Math.sin(torsoAngle) * TORSO_LEN
+              );
+              torsoAnterior.set(0, -Math.sin(torsoAngle), Math.cos(torsoAngle)).normalize();
+              headLookDir.set(0, -0.25 * depth, 1).normalize();
+
+              const barY = 0.78 - 0.42 * depth;
+              barbellGroup.visible = true;
+              barbellGroup.position.set(0, barY, 0.14);
+              handL.set(-0.26, barY, 0.14);
+              handR.set(0.26, barY, 0.14);
+              elbowPoleL.set(-0.36, barY + 0.25, -0.10);
+              elbowPoleR.set(0.36, barY + 0.25, -0.10);
+
+              footL.set(-0.15, 0.08, 0);
+              footR.set(0.15, 0.08, 0);
+              kneePoleL.set(-0.16, 0.50, 0.36);
+              kneePoleR.set(0.16, 0.50, 0.36);
+            } else {
+              const hipY = 0.94 - 0.37 * depth;
+              const hipZ = -0.22 * depth;
+              hipsPos.set(0, hipY, hipZ);
+
+              const leanAngle = 0.42 * depth;
+              shoulderCenter.set(
+                0,
+                hipY + Math.cos(leanAngle) * TORSO_LEN,
+                hipZ + Math.sin(leanAngle) * TORSO_LEN
+              );
+              torsoAnterior.set(0, -Math.sin(leanAngle), Math.cos(leanAngle)).normalize();
+              headLookDir.set(0, 0.04, 1).normalize();
+
+              footL.set(-0.17, 0.08, 0.02);
+              footR.set(0.17, 0.08, 0.02);
+              kneePoleL.set(-0.23, 0.48, 0.58);
+              kneePoleR.set(0.23, 0.48, 0.58);
+
+              // Blueprint Counterbalance Arms:
+              // Frame 0: Arms straight down by sides of thighs
+              // Frame 30: Arms extended straight forward horizontally in front of shoulders
+              const armRaise = Math.pow(depth, 0.85);
+              const handY = 0.76 * (1 - armRaise) + (shoulderCenter.y - 0.02) * armRaise;
+              const handZ = 0.04 * (1 - armRaise) + (shoulderCenter.z + 0.50) * armRaise;
+              handL.set(-0.22 + 0.04 * armRaise, handY, handZ);
+              handR.set(0.22 - 0.04 * armRaise, handY, handZ);
+
+              elbowPoleL.set(
+                -0.28,
+                1.05 * (1 - armRaise) + (shoulderCenter.y - 0.22) * armRaise,
+                -0.18 * (1 - armRaise) + (shoulderCenter.z + 0.24) * armRaise
+              );
+              elbowPoleR.set(
+                0.28,
+                1.05 * (1 - armRaise) + (shoulderCenter.y - 0.22) * armRaise,
+                -0.18 * (1 - armRaise) + (shoulderCenter.z + 0.24) * armRaise
+              );
+            }
+            break;
+          }
+
+          case 'pullup': {
+            // 03_pull_up.json:
+            // Overhead bar `bar_ref` fixed at Y = 2.10m
+            // Frame 0 (p=0): Dead Hang (arms extended overhead, feet off floor)
+            // Frame 30 (p=1): Top Pull-Up (chin clears bar_ref, elbows driven down & out)
+            pullupRigGroup.visible = true;
+            const pull = p;
+
+            const hipY = 1.00 + 0.44 * pull;
+            const hipZ = -0.02 + 0.04 * pull;
+            hipsPos.set(0, hipY, hipZ);
+
+            const archAngle = -0.14 * pull;
+            shoulderCenter.set(
+              0,
+              hipY + Math.cos(archAngle) * TORSO_LEN,
+              hipZ + Math.sin(archAngle) * TORSO_LEN
+            );
+            torsoAnterior.set(0, -Math.sin(archAngle), Math.cos(archAngle)).normalize();
+            headLookDir.set(0, 0.18 * pull, 1).normalize();
+
+            handL.set(-0.34, 2.09, 0.0);
+            handR.set(0.34, 2.09, 0.0);
+            elbowPoleL.set(-0.62, shoulderCenter.y - 0.12, -0.18);
+            elbowPoleR.set(0.62, shoulderCenter.y - 0.12, -0.18);
+
+            footL.set(-0.10, hipY - 0.78, -0.08 - 0.06 * pull);
+            footR.set(0.10, hipY - 0.78, -0.08 - 0.06 * pull);
+            kneePoleL.set(-0.12, hipY - 0.38, 0.24);
+            kneePoleR.set(0.12, hipY - 0.38, 0.24);
+            break;
+          }
+
+          case 'lunge': {
+            const depth = p;
+            const hipY = 0.92 - 0.26 * depth;
+            hipsPos.set(0, hipY, 0);
+            shoulderCenter.set(0, hipY + TORSO_LEN, 0.03 * depth);
+            torsoAnterior.set(0, -0.05 * depth, 1).normalize();
+            headLookDir.set(0, 0, 1);
+
+            footL.set(-0.14, 0.08, 0.36);
+            footR.set(0.14, 0.08 + 0.04 * depth, -0.42);
+            kneePoleL.set(-0.16, 0.48, 0.78);
+            kneePoleR.set(0.16, 0.22, -0.10);
+
+            handL.set(-0.22, hipY + 0.08, 0.06);
+            handR.set(0.22, hipY + 0.08, 0.06);
+            elbowPoleL.set(-0.34, hipY + 0.28, -0.20);
+            elbowPoleR.set(0.34, hipY + 0.28, -0.20);
+            break;
+          }
+
+          case 'plank':
+          case 'mountain_climber':
+          case 'crunch':
+          case 'glute_bridge': {
+            if (clip === 'crunch' || clip === 'glute_bridge') {
+              const lift = p;
+              const isBridge = clip === 'glute_bridge';
+              hipsPos.set(0, isBridge ? 0.14 + 0.22 * lift : 0.12, -0.10);
+              shoulderCenter.set(
+                0,
+                isBridge ? 0.14 : 0.14 + 0.20 * lift,
+                isBridge ? 0.44 : 0.38 - 0.08 * lift
+              );
+              torsoAnterior.set(0, 1, isBridge ? 0.2 * lift : -0.35 * lift).normalize();
+              headLookDir.set(0, 0.85, -0.5).normalize();
+
+              handL.set(-0.22, isBridge ? 0.04 : shoulderCenter.y + 0.10, isBridge ? 0.0 : shoulderCenter.z + 0.06);
+              handR.set(0.22, isBridge ? 0.04 : shoulderCenter.y + 0.10, isBridge ? 0.0 : shoulderCenter.z + 0.06);
+              elbowPoleL.set(-0.42, shoulderCenter.y + 0.05, shoulderCenter.z - 0.10);
+              elbowPoleR.set(0.42, shoulderCenter.y + 0.05, shoulderCenter.z - 0.10);
+
+              footL.set(-0.14, 0.08, -0.68);
+              footR.set(0.14, 0.08, -0.68);
+              kneePoleL.set(-0.16, 0.52, -0.38);
+              kneePoleR.set(0.16, 0.52, -0.38);
+            } else {
+              const isClimber = clip === 'mountain_climber';
+              const plankAngle = 16 * (Math.PI / 180);
+              const footY = 0.10;
+              const footZ = -0.84;
+              const legDist = 0.815;
+              const hipY = footY + legDist * Math.sin(plankAngle);
+              const hipZ = footZ + legDist * Math.cos(plankAngle);
+              const chestY = hipY + TORSO_LEN * Math.sin(plankAngle);
+              const chestZ = hipZ + TORSO_LEN * Math.cos(plankAngle);
+
+              hipsPos.set(0, hipY, hipZ);
+              shoulderCenter.set(0, chestY, chestZ);
+              torsoAnterior.set(0, -1, 0.18).normalize();
+              headLookDir.set(0, -0.55, 0.83).normalize();
+
+              handL.set(-0.22, 0.03, 0.50);
+              handR.set(0.22, 0.03, 0.50);
+              elbowPoleL.set(-0.34, chestY + 0.10, 0.25);
+              elbowPoleR.set(0.34, chestY + 0.10, 0.25);
+
+              footL.set(-0.12, footY + (isClimber ? 0.12 * p : 0), footZ + (isClimber ? 0.38 * p : 0));
+              footR.set(0.12, footY + (isClimber ? 0.12 * (1 - p) : 0), footZ + (isClimber ? 0.38 * (1 - p) : 0));
+              kneePoleL.set(-0.12, hipY + 0.10, (hipZ + footL.z) * 0.5);
+              kneePoleR.set(0.12, hipY + 0.10, (hipZ + footR.z) * 0.5);
+            }
+            break;
+          }
+
+          case 'stretch_flow': {
+            if (variant === 'curl') {
+              hipsPos.set(0, 0.94, 0);
+              shoulderCenter.set(0, 0.94 + TORSO_LEN, 0);
+              torsoAnterior.set(0, 0, 1);
+              headLookDir.set(0, 0, 1);
+              dumbbellL.visible = true;
+              dumbbellR.visible = true;
+
+              const angle = 0.22 + p * 2.15;
+              const elbowY = 1.18;
+              const handY = elbowY - Math.cos(angle) * FOREARM_LEN;
+              const handZ = 0.04 + Math.sin(angle) * FOREARM_LEN;
+              handL.set(-0.23, handY, handZ);
+              handR.set(0.23, handY, handZ);
+              dumbbellL.position.copy(handL);
+              dumbbellR.position.copy(handR);
+
+              elbowPoleL.set(-0.26, 1.15, -0.18);
+              elbowPoleR.set(0.26, 1.15, -0.18);
+            } else if (variant === 'tricep_ext') {
+              hipsPos.set(0, 0.94, 0);
+              shoulderCenter.set(0, 0.94 + TORSO_LEN, 0);
+              torsoAnterior.set(0, 0, 1);
+              headLookDir.set(0, 0, 1);
+              dumbbellL.visible = true;
+              dumbbellR.visible = true;
+
+              const handY = 1.32 - 0.42 * p;
+              const handZ = 0.18 + 0.08 * p;
+              handL.set(-0.20, handY, handZ);
+              handR.set(0.20, handY, handZ);
+              dumbbellL.position.copy(handL);
+              dumbbellR.position.copy(handR);
+              elbowPoleL.set(-0.24, 1.18, -0.12);
+              elbowPoleR.set(0.24, 1.18, -0.12);
+            } else if (variant === 'overhead_push') {
+              hipsPos.set(0, 0.94, 0);
+              shoulderCenter.set(0, 0.94 + TORSO_LEN, 0);
+              torsoAnterior.set(0, 0, 1);
+              headLookDir.set(0, 0.08, 1).normalize();
+
+              if (nameLower.includes('lateral') || nameLower.includes('front')) {
+                dumbbellL.visible = true;
+                dumbbellR.visible = true;
+                const liftY = 0.82 + 0.64 * p;
+                const spread = nameLower.includes('front') ? 0.20 : 0.22 + 0.36 * p;
+                const fwd = nameLower.includes('front') ? 0.10 + 0.38 * p : 0.08;
+                handL.set(-spread, liftY, fwd);
+                handR.set(spread, liftY, fwd);
+                dumbbellL.position.copy(handL);
+                dumbbellR.position.copy(handR);
+              } else {
+                const barY = 1.50 + 0.44 * p;
+                const barZ = 0.14 - 0.08 * p;
+                barbellGroup.visible = true;
+                barbellGroup.position.set(0, barY, barZ);
+                handL.set(-0.30, barY, barZ);
+                handR.set(0.30, barY, barZ);
+              }
+              elbowPoleL.set(-0.46, 1.22, 0.14);
+              elbowPoleR.set(0.46, 1.22, 0.14);
+            } else if (variant === 'row_pull') {
+              const hipY = 0.86;
+              const hipZ = -0.14;
+              hipsPos.set(0, hipY, hipZ);
+              const torsoAngle = 0.62;
+              shoulderCenter.set(
+                0,
+                hipY + Math.cos(torsoAngle) * TORSO_LEN,
+                hipZ + Math.sin(torsoAngle) * TORSO_LEN
+              );
+              torsoAnterior.set(0, -Math.sin(torsoAngle), Math.cos(torsoAngle)).normalize();
+              headLookDir.set(0, -0.22, 0.97).normalize();
+
+              const barY = 0.58 + 0.28 * p;
+              const barZ = 0.24 - 0.12 * p;
+              barbellGroup.visible = true;
+              barbellGroup.position.set(0, barY, barZ);
+              handL.set(-0.28, barY, barZ);
+              handR.set(0.28, barY, barZ);
+              elbowPoleL.set(-0.42, shoulderCenter.y + 0.12, hipZ - 0.24);
+              elbowPoleR.set(0.42, shoulderCenter.y + 0.12, hipZ - 0.24);
+            } else {
+              hipsPos.set(0, 0.94, 0);
+              shoulderCenter.set(0, 0.94 + TORSO_LEN, 0);
+              torsoAnterior.set(0, 0, 1);
+              headLookDir.set(0, 0, 1);
+              handL.set(-0.24 - 0.25 * p, 0.90 + 0.55 * p, 0.14);
+              handR.set(0.24 + 0.25 * p, 0.90 + 0.55 * p, 0.14);
+              elbowPoleL.set(-0.40, 1.15, -0.18);
+              elbowPoleR.set(0.40, 1.15, -0.18);
+            }
+
+            footL.set(-0.15, 0.08, 0);
+            footR.set(0.15, 0.08, 0);
+            kneePoleL.set(-0.16, 0.52, 0.40);
+            kneePoleR.set(0.16, 0.52, 0.40);
+            break;
+          }
+
+          case 'burpee':
+          case 'jog':
+          case 'idle':
+          default: {
+            const bounce = clip === 'jog' || clip === 'burpee' ? 0.07 * p : 0.015 * p;
+            hipsPos.set(0, 0.94 + bounce, 0);
+            shoulderCenter.set(0, 0.94 + TORSO_LEN + bounce, 0);
+            torsoAnterior.set(0, 0, 1);
+            headLookDir.set(0, 0, 1);
+
+            const armSwing = clip === 'jog' ? 0.32 * (p - 0.5) : 0.08 * p;
+            handL.set(-0.24, 0.84 + bounce + 0.18 * p, 0.12 + armSwing);
+            handR.set(0.24, 0.84 + bounce + 0.18 * p, 0.12 - armSwing);
+            elbowPoleL.set(-0.34, 1.15, -0.20);
+            elbowPoleR.set(0.34, 1.15, -0.20);
+
+            footL.set(-0.15, 0.08 + (clip === 'jog' ? 0.10 * p : 0), 0);
+            footR.set(0.15, 0.08 + (clip === 'jog' ? 0.10 * (1 - p) : 0), 0);
+            kneePoleL.set(-0.16, 0.52, 0.40);
+            kneePoleR.set(0.16, 0.52, 0.40);
+            break;
+          }
+        }
+      }
+
+      // 1. Align Torso (hipsPos at s=0 -> shoulderCenter at s=1)
+      alignBoneUpForward(torsoMesh, hipsPos, shoulderCenter, torsoAnterior);
+
+      const torsoUp = new THREE.Vector3().subVectors(shoulderCenter, hipsPos).normalize();
+      const torsoRight = new THREE.Vector3().crossVectors(torsoUp, torsoAnterior).normalize();
+
+      // 2. Align Head & Neck (shoulderCenter at s=0 -> headTop at s=1)
+      const headTop = shoulderCenter
+        .clone()
+        .addScaledVector(torsoUp, HEAD_NECK_LEN * 0.92)
+        .addScaledVector(headLookDir, HEAD_NECK_LEN * 0.16);
+      alignBoneUpForward(headNeckMesh, shoulderCenter, headTop, headLookDir);
+
+      // 3. Shoulder & Hip Joint Sockets in World Space
+      const shoulderL = shoulderCenter
+        .clone()
+        .addScaledVector(torsoRight, -0.195)
+        .addScaledVector(torsoUp, -0.055);
+      const shoulderR = shoulderCenter
+        .clone()
+        .addScaledVector(torsoRight, 0.195)
+        .addScaledVector(torsoUp, -0.055);
+
+      const hipL = hipsPos
+        .clone()
+        .addScaledVector(torsoRight, -0.10)
+        .addScaledVector(torsoUp, 0.03);
+      const hipR = hipsPos
+        .clone()
+        .addScaledVector(torsoRight, 0.10)
+        .addScaledVector(torsoUp, 0.03);
+
+      // 4. Solve Two-Bone IK for Arms (`hand_ik_l`, `hand_ik_r`, `elbow_pole_l`, `elbow_pole_r`)
+      const elbowL = solveTwoBoneIK(shoulderL, handL, UPPER_ARM_LEN, FOREARM_LEN, elbowPoleL);
+      const elbowR = solveTwoBoneIK(shoulderR, handR, UPPER_ARM_LEN, FOREARM_LEN, elbowPoleR);
+
+      alignBoneUpForward(upperArmL, elbowL, shoulderL, torsoAnterior);
+      alignBoneUpForward(upperArmR, elbowR, shoulderR, torsoAnterior);
+      alignBoneUpForward(forearmL, handL, elbowL, torsoAnterior);
+      alignBoneUpForward(forearmR, handR, elbowR, torsoAnterior);
+
+      // Orient Hands at Wrist
+      const wristHandL = forearmL.getObjectByName('wrist_hand');
+      const wristHandR = forearmR.getObjectByName('wrist_hand');
+      if (wristHandL && wristHandR) {
+        if (clip === 'pushup' || clip === 'diamond_pushup' || clip === 'plank' || clip === 'mountain_climber') {
+          wristHandL.rotation.set(-Math.PI / 2.2, 0, 0);
+          wristHandR.rotation.set(-Math.PI / 2.2, 0, 0);
+        } else {
+          wristHandL.rotation.set(0, 0, 0);
+          wristHandR.rotation.set(0, 0, 0);
+        }
+      }
+
+      // 5. Solve Two-Bone IK for Legs (`foot_ik_l`, `foot_ik_r`)
+      const kneeL = solveTwoBoneIK(hipL, footL, THIGH_LEN, CALF_LEN, kneePoleL);
+      const kneeR = solveTwoBoneIK(hipR, footR, THIGH_LEN, CALF_LEN, kneePoleR);
+
+      const legAntL = new THREE.Vector3().subVectors(kneePoleL, hipL).normalize();
+      const legAntR = new THREE.Vector3().subVectors(kneePoleR, hipR).normalize();
+
+      alignBoneUpForward(thighL, kneeL, hipL, legAntL);
+      alignBoneUpForward(thighR, kneeR, hipR, legAntR);
+      alignBoneUpForward(calfL, footL, kneeL, legAntL);
+      alignBoneUpForward(calfR, footR, kneeR, legAntR);
+
+      // Keep Shoes planted flat on the floor or hanging naturally
+      const shoeL = calfL.getObjectByName('ankle_shoe');
+      const shoeR = calfR.getObjectByName('ankle_shoe');
+      if (shoeL && shoeR) {
+        if (clip === 'pushup' || clip === 'diamond_pushup' || clip === 'plank' || clip === 'mountain_climber') {
+          shoeL.rotation.set(Math.PI / 3.2, 0, 0);
+          shoeR.rotation.set(Math.PI / 3.2, 0, 0);
+        } else {
+          shoeL.rotation.set(0, 0, 0);
+          shoeR.rotation.set(0, 0, 0);
+        }
+      }
+    };
+
+    sceneRef.current = {
+      camera,
+      controls,
+      updateMuscleMaterials,
+      applyCameraPreset,
+    };
+
+    if (onReady) {
+      onReady();
     }
 
-    tick();
+    // ============================================================================
+    // RENDER LOOP (Single View & 4-Angle Blueprint Split View)
+    // ============================================================================
+    let rafId = 0;
+    let lastTime = performance.now();
+    let accumSec = 0;
 
-    const onResize = () => {
-      if (!container || disposed) return;
-      const w = container.clientWidth || 960;
-      const h = container.clientHeight || 600;
+    const tick = (now: number) => {
+      rafId = requestAnimationFrame(tick);
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+
+      const st = stateRef.current;
+      let frameFloat = 0;
+
+      if (st.activeKeyframe !== null && st.activeKeyframe !== undefined) {
+        frameFloat = st.activeKeyframe;
+      } else {
+        if (st.isPlaying) {
+          accumSec += dt * st.tempoScale;
+        }
+        frameFloat = (accumSec * 30) % 60;
+      }
+
+      const currentFrameInt = Math.round(frameFloat) % 60;
+      if (frameBadgeRef.current) {
+        frameBadgeRef.current.textContent = `FRAME ${String(currentFrameInt).padStart(2, '0')} / 60 · 30 FPS`;
+      }
+
+      applyProceduralPose(st.clipName, st.biomechanicalVariant, st.exerciseName, frameFloat);
+      controls.update();
+
+      const w = container.clientWidth || 800;
+      const h = container.clientHeight || 520;
+
+      if (!st.quadView) {
+        renderer.setScissorTest(false);
+        renderer.setViewport(0, 0, w, h);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.render(scene, camera);
+      } else {
+        renderer.setScissorTest(true);
+        const halfW = Math.floor(w / 2);
+        const halfH = Math.floor(h / 2);
+        auxCamera.aspect = halfW / Math.max(1, halfH);
+        auxCamera.updateProjectionMatrix();
+
+        const views: Array<{
+          preset: CameraPreset;
+          x: number;
+          y: number;
+        }> = [
+          { preset: 'front', x: 0, y: halfH },
+          { preset: 'side', x: halfW, y: halfH },
+          { preset: 'back', x: 0, y: 0 },
+          { preset: 'top', x: halfW, y: 0 },
+        ];
+
+        views.forEach((v) => {
+          const { pos, target } = computeCameraView(v.preset, st.clipName);
+          auxCamera.position.copy(pos);
+          auxCamera.lookAt(target);
+          renderer.setViewport(v.x, v.y, halfW, halfH);
+          renderer.setScissor(v.x, v.y, halfW, halfH);
+          renderer.render(scene, auxCamera);
+        });
+      }
+    };
+
+    rafId = requestAnimationFrame(tick);
+
+    const handleResize = () => {
+      if (!container) return;
+      const w = container.clientWidth || 800;
+      const h = container.clientHeight || 520;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     };
-    window.addEventListener('resize', onResize);
+    window.addEventListener('resize', handleResize);
 
     return () => {
-      disposed = true;
-      cancelAnimationFrame(frameId);
-      clearTimeout(frameId);
-      window.removeEventListener('resize', onResize);
-      albedoTex.dispose();
-      bumpTex.dispose();
-      floorDialTex.dispose();
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', handleResize);
       controls.dispose();
       renderer.dispose();
     };
   }, []);
 
+  if (!webGLSupported) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-[#060B16] text-white p-6 text-center">
+        <p className="text-sm font-bold text-red-400 mb-1">WebGL Tidak Tersedia</p>
+        <p className="text-xs text-neutral-400 max-w-md">
+          Perangkat atau peramban Anda tidak mendukung akselerasi 3D WebGL. Gunakan panduan langkah latihan dan peta otot 2D di sebelah kanan.
+        </p>
+      </div>
+    );
+  }
+
+  const bpSpec =
+    clipName === 'pushup' || clipName === 'diamond_pushup'
+      ? BLUEPRINT_EXERCISES[0]
+      : clipName === 'squat'
+      ? BLUEPRINT_EXERCISES[1]
+      : clipName === 'pullup'
+      ? BLUEPRINT_EXERCISES[2]
+      : null;
+
   return (
-    <div className="relative w-full h-full min-h-[480px] bg-[#0B0C10] rounded-2xl overflow-hidden border border-[#262626]">
-      {/* Dedicated empty canvas mount ref outside React HUD overlays */}
+    <div className="relative w-full h-full select-none overflow-hidden bg-[#060B16]">
       <div
-        ref={mountRef}
-        data-testid="workout-3d-canvas"
-        className="w-full h-full min-h-[480px]"
-        aria-label="Viewport Studio Latihan 3D 1024-Bit HD FitForge"
+        ref={containerRef}
+        data-testid="trainer-studio-3d-canvas"
+        className="w-full h-full cursor-grab active:cursor-grabbing"
       />
 
-      {/* Subtle Model Source & 1024-Bit HD Texture Badge (Top-Right, collision-free on mobile) */}
-      <div className="absolute top-3 right-3 flex items-center gap-1.5 pointer-events-none max-w-[46%] sm:max-w-none">
-        <span className="px-2 sm:px-2.5 py-1 rounded-lg bg-[#161616]/90 backdrop-blur-md border border-[#F59E0B]/40 text-[10px] sm:text-[11px] font-bold text-[#F59E0B] truncate">
-          {modelSource === 'glb'
-            ? 'Model: Mixamo GLB 1024-Bit'
-            : '1024-Bit HD Anatomical Striated Rig'}
-        </span>
-        {fpsWarning && (
-          <span className="hidden sm:inline-block px-2 py-1 rounded-lg bg-[#FEF3C7] text-[#B45309] text-[10px] font-semibold">
-            Mode Hemat GPU Aktif
+      {/* Minimal Top-Left Frame Telemetry Pill */}
+      <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-2">
+        <div className="px-2.5 py-1 rounded-lg bg-[#0B1324]/85 backdrop-blur-md border border-sky-500/25 flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+          <span
+            ref={frameBadgeRef}
+            className="text-[10px] font-mono font-bold text-sky-300 tracking-wider"
+          >
+            FRAME 00 / 60 · 30 FPS
           </span>
+        </div>
+        {bpSpec && (
+          <div className="hidden sm:flex px-2.5 py-1 rounded-lg bg-[#0B1324]/85 backdrop-blur-md border border-white/10 items-center gap-1.5">
+            <span className="text-[10px] font-semibold text-slate-300">
+              180 cm · 70 kg · IK Rig
+            </span>
+          </div>
         )}
       </div>
+
+      {/* Minimal Top-Right Muscle Status Pill */}
+      <div className="pointer-events-none absolute top-3 right-3 hidden sm:flex items-center gap-2">
+        <div className="px-2.5 py-1 rounded-lg bg-[#0B1324]/85 backdrop-blur-md border border-red-500/30 flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-[#DC2626]" />
+          <span className="text-[10px] font-bold text-slate-200">
+            Anatomical Human IK
+          </span>
+        </div>
+      </div>
+
+      {/* 4-Angle Blueprint Quadrant Labels when quadView is active */}
+      {quadView && (
+        <div className="pointer-events-none absolute inset-0 grid grid-cols-2 grid-rows-2">
+          <div className="border-r border-b border-sky-500/30 relative">
+            <span className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded bg-[#060B16]/90 border border-sky-500/30 text-[10px] font-bold text-sky-200 tracking-wide">
+              Front
+            </span>
+          </div>
+          <div className="border-b border-sky-500/30 relative">
+            <span className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded bg-[#060B16]/90 border border-sky-500/30 text-[10px] font-bold text-sky-200 tracking-wide">
+              Side
+            </span>
+          </div>
+          <div className="border-r border-sky-500/30 relative">
+            <span className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded bg-[#060B16]/90 border border-sky-500/30 text-[10px] font-bold text-sky-200 tracking-wide">
+              Back
+            </span>
+          </div>
+          <div className="relative">
+            <span className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded bg-[#060B16]/90 border border-sky-500/30 text-[10px] font-bold text-sky-200 tracking-wide">
+              Top
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+export default TrainerStudio3D;
