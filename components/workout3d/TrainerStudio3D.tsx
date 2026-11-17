@@ -10,6 +10,7 @@ export type CameraPreset = 'front' | 'side' | 'back' | 'top';
 
 export interface TrainerStudio3DProps {
   clip: AnimationClipName;
+  exerciseId?: string;
   biomechanicalVariant?: string;
   exerciseName?: string;
   primaryMuscles: MuscleGroup[];
@@ -28,7 +29,7 @@ export interface TrainerStudio3DProps {
  * Places `midPos` (elbow or knee) at the exact law-of-cosines intersection
  * between `rootPos` (shoulder/hip) and `endPos` (wrist/ankle), oriented toward `polePos`.
  */
-function solveTwoBoneIK(
+export function solveTwoBoneIK(
   rootPos: THREE.Vector3,
   endPos: THREE.Vector3,
   len1: number,
@@ -70,12 +71,12 @@ function solveTwoBoneIK(
 }
 
 /**
- * Computes a right-handed orthonormal basis where:
- * - `yAxis` points along `tangentDir`
- * - `zAxis` faces `anteriorDir` (front of body/limb)
- * - `xAxis` points to the character's left (`+X` in world space when facing `+Z`)
+ * Computes a right-handed orthonormal basis (det = +1) where:
+ * - `outY` points along `tangentDir`
+ * - `outZ` faces `anteriorHint` (anterior/front surface of body or limb)
+ * - `outX` = `outY × outZ`
  */
-function computeOrthonormalFrame(
+export function computeOrthonormalFrame(
   tangentDir: THREE.Vector3,
   anteriorHint: THREE.Vector3,
   outX: THREE.Vector3,
@@ -100,6 +101,39 @@ function computeOrthonormalFrame(
   outX.normalize();
 
   outZ.crossVectors(outX, outY).normalize();
+}
+
+/**
+ * Computes a gimbal-free anterior vector for a 2-bone limb from its pole vector.
+ * - For arms (`invertPole = true`), `polePos` is the back of the elbow (triceps/olecranon),
+ *   so the anterior surface (biceps/palm side) points AWAY from `polePos`.
+ * - For legs (`invertPole = false`), `polePos` is the front of the knee (patella/quads),
+ *   so the anterior surface (quads/shin) points TOWARD `polePos`.
+ */
+function computeLimbAnteriorFromPole(
+  rootPos: THREE.Vector3,
+  endPos: THREE.Vector3,
+  polePos: THREE.Vector3,
+  invertPole: boolean
+): THREE.Vector3 {
+  const axis = new THREE.Vector3().subVectors(endPos, rootPos);
+  if (axis.lengthSq() < 1e-6) {
+    axis.set(0, -1, 0);
+  } else {
+    axis.normalize();
+  }
+  const toPole = new THREE.Vector3().subVectors(polePos, rootPos);
+  const proj = axis.clone().multiplyScalar(toPole.dot(axis));
+  const perp = toPole.sub(proj);
+  if (perp.lengthSq() < 1e-6) {
+    perp.set(0, 0, 1);
+  } else {
+    perp.normalize();
+  }
+  if (invertPole) {
+    perp.negate();
+  }
+  return perp;
 }
 
 interface LoftSection {
@@ -218,7 +252,6 @@ function createContinuousSkinnedLoft(
     const y = s * refLength;
 
     for (let c = 0; c < numCols; c++) {
-      // Exact seam welding between c=0 and c=radialSegs
       const u = c === radialSegs ? 0 : c / radialSegs;
       const theta = u * Math.PI * 2;
       const nx = Math.cos(theta);
@@ -306,7 +339,6 @@ function createContinuousSkinnedLoft(
   geo.setIndex(allIndices);
   geo.computeVertexNormals();
 
-  // Seamless normal averaging across seam column (c=0 and c=radialSegs) and pole caps
   const normAttr = geo.getAttribute('normal') as THREE.BufferAttribute;
   normAttr.setUsage(THREE.DynamicDrawUsage);
   for (let r = 0; r < numRows; r++) {
@@ -320,7 +352,6 @@ function createContinuousSkinnedLoft(
     normAttr.setXYZ(i1, nx / len, ny / len, nz / len);
   }
 
-  // Save rest-pose normals so real-time deformation transforms both position and normals cleanly
   for (let i = 0; i < totalVerts; i++) {
     restNormX[i] = normAttr.getX(i);
     restNormY[i] = normAttr.getY(i);
@@ -441,7 +472,6 @@ function evaluateTwoBoneSkinnedRing(
     outCenter.lerpVectors(midPos, endPos, u);
     tangent.copy(seg2Dir);
   } else {
-    // Quadratic Bezier curve across the joint zone [sStart, sEnd]
     const t = (s - sStart) / (2 * blendHalfWidth);
     const u0 = sStart / jointS;
     const u1 = (sEnd - jointS) / (1 - jointS);
@@ -456,22 +486,18 @@ function evaluateTwoBoneSkinnedRing(
       .addScaledVector(midPos, 2 * omt * t)
       .addScaledVector(p2, t * t);
 
-    // Tangent of Quadratic Bezier: 2*(1-t)*(midPos - p0) + 2*t*(p2 - midPos)
     const d0 = new THREE.Vector3().subVectors(midPos, p0);
     const d1 = new THREE.Vector3().subVectors(p2, midPos);
     tangent.set(0, 0, 0).addScaledVector(d0, omt).addScaledVector(d1, t);
   }
 
-  // `tangent` points in the direction of increasing `s` (dC/ds: rootPos -> endPos).
-  // Using `tangent` directly as `outY` guarantees (outX, outY=dC/ds, outZ) is right-handed (det = +1)!
   const ant = new THREE.Vector3().lerpVectors(anteriorRoot, anteriorEnd, s).normalize();
   computeOrthonormalFrame(tangent, ant, outX, outY, outZ);
 
-  // Subtle patella / olecranon volume preservation when joint is flexed
   if (s > sStart && s < sEnd && jointBulgeForward !== 0) {
     const n1 = seg1Dir.clone().normalize();
     const n2 = seg2Dir.clone().normalize();
-    const bendFactor = Math.max(0, 0.5 * (1 - n1.dot(n2))); // 0 when straight, >0 when flexed
+    const bendFactor = Math.max(0, 0.5 * (1 - n1.dot(n2)));
     const bell = Math.sin(((s - sStart) / (2 * blendHalfWidth)) * Math.PI);
     outCenter.addScaledVector(outZ, jointBulgeForward * bendFactor * bell);
   }
@@ -479,6 +505,7 @@ function evaluateTwoBoneSkinnedRing(
 
 export function TrainerStudio3D({
   clip: clipName,
+  exerciseId = '',
   biomechanicalVariant = 'standard',
   exerciseName = '',
   primaryMuscles,
@@ -498,6 +525,7 @@ export function TrainerStudio3D({
 
   const stateRef = useRef({
     clipName,
+    exerciseId,
     biomechanicalVariant,
     exerciseName,
     primaryMuscles,
@@ -508,11 +536,13 @@ export function TrainerStudio3D({
     showMaskDebug,
     activeKeyframe,
     quadView,
+    onReady,
   });
 
   useEffect(() => {
     stateRef.current = {
       clipName,
+      exerciseId,
       biomechanicalVariant,
       exerciseName,
       primaryMuscles,
@@ -523,9 +553,11 @@ export function TrainerStudio3D({
       showMaskDebug,
       activeKeyframe,
       quadView,
+      onReady,
     };
   }, [
     clipName,
+    exerciseId,
     biomechanicalVariant,
     exerciseName,
     primaryMuscles,
@@ -536,6 +568,7 @@ export function TrainerStudio3D({
     showMaskDebug,
     activeKeyframe,
     quadView,
+    onReady,
   ]);
 
   const sceneRef = useRef<{
@@ -549,13 +582,13 @@ export function TrainerStudio3D({
     if (sceneRef.current) {
       sceneRef.current.updateMuscleMaterials();
     }
-  }, [primaryMuscles, secondaryMuscles, showMaskDebug, clipName]);
+  }, [primaryMuscles, secondaryMuscles, showMaskDebug, clipName, exerciseId]);
 
   useEffect(() => {
     if (sceneRef.current) {
       sceneRef.current.applyCameraPreset(cameraPreset);
     }
-  }, [cameraPreset, clipName]);
+  }, [cameraPreset, clipName, exerciseId]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -568,7 +601,7 @@ export function TrainerStudio3D({
         powerPreference: 'high-performance',
       });
     } catch {
-      setWebGLSupported(false);
+      queueMicrotask(() => setWebGLSupported(false));
       return;
     }
 
@@ -628,7 +661,7 @@ export function TrainerStudio3D({
     rimLight.position.set(0, 3.2, -3.2);
     scene.add(rimLight);
 
-    // Clean Blueprint Floor & Grid (Removed cluttering orange circle so Top view matches Blueprint)
+    // Clean Blueprint Floor & Grid
     const floorGeo = new THREE.CircleGeometry(6.5, 64);
     const floorMat = new THREE.MeshStandardMaterial({
       color: 0x080f1e,
@@ -766,31 +799,27 @@ export function TrainerStudio3D({
     const CALF_LEN = 0.41;
 
     // 1. UNIFIED AXIAL BODY MESH (Shorts Crotch Saddle s=0 -> Pelvis -> Waist -> Chest -> Neck -> Face -> Closed Skull Crown s=1)
-    // Because Pelvis Saddle, Torso, Neck, and Head are ONE continuous mesh deformed along the spine curve,
-    // the pelvis-to-thigh shorts saddle is 100% seamless, the neck NEVER separates, and the crown has zero seam holes!
     const buildUnifiedAxialBody = (): SkinnedLoftMeshData => {
-      // s ∈ [0.00, 0.70] = Shorts Crotch Saddle (-0.075m below hips) to Base of Neck (0.635m)
-      // s ∈ [0.70, 1.00] = Neck Base to Top of Skull Crown (0.25m)
       const sections: LoftSection[] = [
-        { s: 0.00, rx: 0.045, rzAnt: 0.052, rzPost: 0.058, pinchCenterZ: 0.006 }, // Closed shorts crotch saddle base
-        { s: 0.04, rx: 0.178, rzAnt: 0.106, rzPost: 0.122, pinchCenterZ: 0.022 }, // Lower pelvis enveloping upper thighs
-        { s: 0.09, rx: 0.168, rzAnt: 0.108, rzPost: 0.132, pinchCenterZ: 0.026 }, // Full gluteal & hip contour
-        { s: 0.16, rx: 0.152, rzAnt: 0.102, rzPost: 0.112, pinchCenterZ: 0.012 }, // Athletic shorts waistband
-        { s: 0.24, rx: 0.138, rzAnt: 0.098, rzPost: 0.098, pinchCenterZ: 0.010 }, // Narrow athletic waist
-        { s: 0.34, rx: 0.150, rzAnt: 0.108, rzPost: 0.106, pinchCenterZ: 0.014 }, // Mid ribcage & 6-pack abs
-        { s: 0.45, rx: 0.178, rzAnt: 0.126, rzPost: 0.118, pinchCenterZ: 0.020 }, // Lower pectoral shelf & lats flare
-        { s: 0.55, rx: 0.198, rzAnt: 0.134, rzPost: 0.124, pinchCenterZ: 0.022 }, // Full chest & wide V-taper lats
-        { s: 0.63, rx: 0.206, rzAnt: 0.112, rzPost: 0.108, pinchCenterZ: 0.008 }, // Clavicle / shoulder shelf
-        { s: 0.68, rx: 0.108, rzAnt: 0.076, rzPost: 0.078, pinchCenterZ: 0.002 }, // Trapezius slope
-        { s: 0.71, rx: 0.058, rzAnt: 0.056, rzPost: 0.058, pinchCenterZ: 0.000 }, // Base of neck
-        { s: 0.76, rx: 0.055, rzAnt: 0.055, rzPost: 0.056, pinchCenterZ: 0.000 }, // Mid neck
-        { s: 0.80, rx: 0.058, rzAnt: 0.068, rzPost: 0.060, pinchCenterZ: 0.000 }, // Sub-jaw
-        { s: 0.83, rx: 0.068, rzAnt: 0.094, rzPost: 0.074, pinchCenterZ: 0.000 }, // Jawline & chin
-        { s: 0.87, rx: 0.076, rzAnt: 0.096, rzPost: 0.088, pinchCenterZ: 0.000 }, // Cheekbones & ears
-        { s: 0.91, rx: 0.079, rzAnt: 0.092, rzPost: 0.092, pinchCenterZ: 0.000 }, // Brow ridge & cranium
-        { s: 0.95, rx: 0.074, rzAnt: 0.084, rzPost: 0.086, pinchCenterZ: 0.000 }, // Upper forehead
-        { s: 0.98, rx: 0.048, rzAnt: 0.052, rzPost: 0.054, pinchCenterZ: 0.000 }, // Crown dome
-        { s: 1.00, rx: 0.001, rzAnt: 0.001, rzPost: 0.001, pinchCenterZ: 0.000 }, // Closed top pole
+        { s: 0.00, rx: 0.045, rzAnt: 0.052, rzPost: 0.058, pinchCenterZ: 0.006 },
+        { s: 0.04, rx: 0.178, rzAnt: 0.106, rzPost: 0.122, pinchCenterZ: 0.022 },
+        { s: 0.09, rx: 0.168, rzAnt: 0.108, rzPost: 0.132, pinchCenterZ: 0.026 },
+        { s: 0.16, rx: 0.152, rzAnt: 0.102, rzPost: 0.112, pinchCenterZ: 0.012 },
+        { s: 0.24, rx: 0.138, rzAnt: 0.098, rzPost: 0.098, pinchCenterZ: 0.010 },
+        { s: 0.34, rx: 0.150, rzAnt: 0.108, rzPost: 0.106, pinchCenterZ: 0.014 },
+        { s: 0.45, rx: 0.178, rzAnt: 0.126, rzPost: 0.118, pinchCenterZ: 0.020 },
+        { s: 0.55, rx: 0.198, rzAnt: 0.134, rzPost: 0.124, pinchCenterZ: 0.022 },
+        { s: 0.63, rx: 0.206, rzAnt: 0.112, rzPost: 0.108, pinchCenterZ: 0.008 },
+        { s: 0.68, rx: 0.108, rzAnt: 0.076, rzPost: 0.078, pinchCenterZ: 0.002 },
+        { s: 0.71, rx: 0.058, rzAnt: 0.056, rzPost: 0.058, pinchCenterZ: 0.000 },
+        { s: 0.76, rx: 0.055, rzAnt: 0.055, rzPost: 0.056, pinchCenterZ: 0.000 },
+        { s: 0.80, rx: 0.058, rzAnt: 0.068, rzPost: 0.060, pinchCenterZ: 0.000 },
+        { s: 0.83, rx: 0.068, rzAnt: 0.094, rzPost: 0.074, pinchCenterZ: 0.000 },
+        { s: 0.87, rx: 0.076, rzAnt: 0.096, rzPost: 0.088, pinchCenterZ: 0.000 },
+        { s: 0.91, rx: 0.079, rzAnt: 0.092, rzPost: 0.092, pinchCenterZ: 0.000 },
+        { s: 0.95, rx: 0.074, rzAnt: 0.084, rzPost: 0.086, pinchCenterZ: 0.000 },
+        { s: 0.98, rx: 0.048, rzAnt: 0.052, rzPost: 0.054, pinchCenterZ: 0.000 },
+        { s: 1.00, rx: 0.001, rzAnt: 0.001, rzPost: 0.001, pinchCenterZ: 0.000 },
       ];
 
       // Groups: 0: skin, 1: shorts, 2: shortsTrim, 3: chest, 4: abs, 5: back_lats, 6: shoulders, 7: glutes(shorts), 8: hair
@@ -798,36 +827,30 @@ export function TrainerStudio3D({
         const absX = Math.abs(nx);
         const isAnt = nz >= 0;
 
-        // Head & Hair region (s >= 0.78)
         if (s >= 0.78) {
-          if (s >= 0.93) return 8; // Full crown hair
-          if (s >= 0.89 && (nz < 0.36 || absX > 0.70)) return 8; // Hairline & temples
-          if (s >= 0.83 && nz < -0.15) return 8; // Back of head hair
-          return 0; // Face & neck skin
+          if (s >= 0.93) return 8;
+          if (s >= 0.89 && (nz < 0.36 || absX > 0.70)) return 8;
+          if (s >= 0.83 && nz < -0.15) return 8;
+          return 0;
         }
 
-        // Athletic shorts cover pelvis saddle from s=0.00 up to s=0.18
         if (s < 0.18) {
-          if (s >= 0.162 && s < 0.18) return 2; // Subtle dark charcoal waistband trim
-          if (!isAnt && s >= 0.02 && s < 0.155 && absX > 0.12 && absX < 0.90) return 7; // Glutes
-          return 1; // Shorts
+          if (s >= 0.162 && s < 0.18) return 2;
+          if (!isAnt && s >= 0.02 && s < 0.155 && absX > 0.12 && absX < 0.90) return 7;
+          return 1;
         }
 
-        // Shoulder / Clavicle deltoid attachment
         if (s >= 0.54 && s <= 0.67 && absX > 0.72) {
-          return 6; // shoulders
+          return 6;
         }
-        // Pectorals (Chest)
         if (isAnt && s >= 0.40 && s <= 0.62 && absX >= 0.05 && absX <= 0.82 && nz > 0.20) {
-          return 3; // chest
+          return 3;
         }
-        // 6-Pack Abs & Obliques
-        if (isAnt && s >= 0.165 && s < 0.40 && absX <= 0.68 && nz > 0.26) {
-          return 4; // abs
+        if (isAnt && s >= 0.18 && s < 0.40 && absX <= 0.68 && nz > 0.26) {
+          return 4;
         }
-        // Latissimus Dorsi & Back
         if (!isAnt && s >= 0.22 && s <= 0.65 && absX >= 0.06 && nz < -0.15) {
-          return 5; // back_lats
+          return 5;
         }
         return 0;
       };
@@ -843,40 +866,34 @@ export function TrainerStudio3D({
 
         if (s < 0.70) {
           const ts = s / 0.70;
-          // Pectoralis Major plates
           if (nz > 0.15 && ts > 0.55 && ts < 0.87 && absX > 0.05 && absX < 0.84) {
             const pecS = Math.sin(((ts - 0.55) / 0.32) * Math.PI);
             const pecX = Math.sin(((absX - 0.05) / 0.79) * Math.PI);
             const lowerShelf = ts < 0.65 ? Math.sin(((ts - 0.55) / 0.10) * (Math.PI * 0.5)) : 1.0;
             pos.z += 0.022 * pecS * pecX * lowerShelf * nz;
           }
-          // 6-Pack Rectus Abdominis
           if (nz > 0.32 && ts > 0.24 && ts < 0.55 && absX > 0.05 && absX < 0.45) {
             const rowPhase = ((ts - 0.24) / 0.31) * 3 * Math.PI;
             const abRow = Math.pow(Math.max(0, Math.sin(rowPhase)), 0.75);
             const abCol = Math.sin(((absX - 0.05) / 0.40) * Math.PI);
             pos.z += 0.012 * abRow * abCol * nz;
           }
-          // Serratus ribs
           if (nz > -0.1 && nz < 0.65 && ts > 0.32 && ts < 0.62 && absX > 0.55 && absX < 0.92) {
             const ribWave = Math.max(0, Math.sin(((ts - 0.32) / 0.30) * 4 * Math.PI));
             pos.x += (nx > 0 ? 1 : -1) * 0.005 * ribWave;
           }
-          // Latissimus Dorsi V-taper
           if (nz < -0.15 && ts > 0.32 && ts < 0.86 && absX > 0.12 && absX < 0.88) {
             const latS = Math.sin(((ts - 0.32) / 0.54) * Math.PI);
             const latX = Math.sin(((absX - 0.12) / 0.76) * Math.PI);
             pos.z -= 0.018 * latS * latX * -nz;
             pos.x += (nx > 0 ? 1 : -1) * 0.010 * latS * latX;
           }
-          // Gluteal contour
           if (nz < -0.2 && ts > 0.02 && ts < 0.19 && absX > 0.12 && absX < 0.86) {
             const gluteS = Math.sin(((ts - 0.02) / 0.17) * Math.PI);
             const gluteX = Math.sin(((absX - 0.12) / 0.74) * Math.PI);
             pos.z -= 0.020 * gluteS * gluteX * -nz;
           }
         } else {
-          // Head & Facial Features (hs ∈ [0, 1])
           const hs = (s - 0.70) / 0.30;
           if (nz > 0.68 && hs > 0.46 && hs < 0.66 && absX < 0.22) {
             const noseS = Math.sin(((hs - 0.46) / 0.20) * Math.PI);
@@ -979,34 +996,33 @@ export function TrainerStudio3D({
     };
 
     // 2. CONTINUOUS SKINNED ARM MESH (Shoulder Deltoid Cap s=0 -> Elbow s=0.48 -> Wrist s=0.88 -> Hand Tip s=1.0)
-    // One continuous mesh per arm! The elbow and wrist bend via Quadratic Bezier skinning with ZERO break or gap!
     const buildSkinnedArm = (): SkinnedLoftMeshData => {
       const totalArmLen = UPPER_ARM_LEN + FOREARM_LEN + HAND_LEN; // 0.65m
       const sections: LoftSection[] = [
-        { s: 0.00, rx: 0.012, rzAnt: 0.012, rzPost: 0.012 }, // Closed shoulder socket dome
-        { s: 0.04, rx: 0.062, rzAnt: 0.062, rzPost: 0.060 }, // Deltoid upper cap
-        { s: 0.11, rx: 0.072, rzAnt: 0.072, rzPost: 0.070 }, // Full deltoid lateral sweep
-        { s: 0.20, rx: 0.062, rzAnt: 0.066, rzPost: 0.064 }, // Deltoid insertion
-        { s: 0.30, rx: 0.056, rzAnt: 0.068, rzPost: 0.064 }, // Bicep peak & tricep horseshoe
-        { s: 0.42, rx: 0.048, rzAnt: 0.052, rzPost: 0.052 }, // Lower humerus
-        { s: 0.48, rx: 0.045, rzAnt: 0.044, rzPost: 0.046 }, // Elbow joint center
-        { s: 0.56, rx: 0.047, rzAnt: 0.045, rzPost: 0.045 }, // Upper forearm brachioradialis
-        { s: 0.72, rx: 0.036, rzAnt: 0.032, rzPost: 0.032 }, // Mid forearm
-        { s: 0.86, rx: 0.029, rzAnt: 0.023, rzPost: 0.023 }, // Wrist joint
-        { s: 0.92, rx: 0.038, rzAnt: 0.016, rzPost: 0.018 }, // Palm of hand
-        { s: 0.98, rx: 0.032, rzAnt: 0.012, rzPost: 0.012 }, // Fingers
-        { s: 1.00, rx: 0.004, rzAnt: 0.004, rzPost: 0.004 }, // Closed fingertips
+        { s: 0.00, rx: 0.012, rzAnt: 0.012, rzPost: 0.012 },
+        { s: 0.04, rx: 0.062, rzAnt: 0.062, rzPost: 0.060 },
+        { s: 0.11, rx: 0.072, rzAnt: 0.072, rzPost: 0.070 },
+        { s: 0.20, rx: 0.062, rzAnt: 0.066, rzPost: 0.064 },
+        { s: 0.30, rx: 0.056, rzAnt: 0.068, rzPost: 0.064 },
+        { s: 0.42, rx: 0.048, rzAnt: 0.052, rzPost: 0.052 },
+        { s: 0.48, rx: 0.045, rzAnt: 0.044, rzPost: 0.046 },
+        { s: 0.56, rx: 0.047, rzAnt: 0.045, rzPost: 0.045 },
+        { s: 0.72, rx: 0.036, rzAnt: 0.032, rzPost: 0.032 },
+        { s: 0.86, rx: 0.029, rzAnt: 0.023, rzPost: 0.023 },
+        { s: 0.92, rx: 0.038, rzAnt: 0.016, rzPost: 0.018 },
+        { s: 0.98, rx: 0.032, rzAnt: 0.012, rzPost: 0.012 },
+        { s: 1.00, rx: 0.004, rzAnt: 0.004, rzPost: 0.004 },
       ];
 
       // Groups: 0: skin, 1: shoulders, 2: biceps, 3: triceps, 4: forearms
       const groupFn = (s: number, _nx: number, nz: number): number => {
-        if (s < 0.21) return 1; // shoulders (deltoids)
+        if (s < 0.21) return 1;
         if (s >= 0.21 && s < 0.45) {
-          if (nz >= 0.08) return 2; // biceps
-          if (nz <= -0.08) return 3; // triceps
+          if (nz >= 0.08) return 2;
+          if (nz <= -0.08) return 3;
         }
-        if (s >= 0.50 && s < 0.84) return 4; // forearms
-        return 0; // wrist & hand skin
+        if (s >= 0.50 && s < 0.84) return 4;
+        return 0;
       };
 
       const sculptFn = (
@@ -1016,15 +1032,12 @@ export function TrainerStudio3D({
         nz: number,
         pos: { x: number; y: number; z: number }
       ) => {
-        // Bicep peak
         if (nz > 0.2 && s > 0.20 && s < 0.44) {
           pos.z += 0.010 * Math.sin(((s - 0.20) / 0.24) * Math.PI) * nz;
         }
-        // Tricep sweep
         if (nz < -0.2 && s > 0.18 && s < 0.44) {
           pos.z -= 0.010 * Math.sin(((s - 0.18) / 0.26) * Math.PI) * -nz;
         }
-        // Forearm muscle contour
         if (s > 0.50 && s < 0.76) {
           pos.x += nx * 0.005 * Math.sin(((s - 0.50) / 0.26) * Math.PI);
         }
@@ -1036,15 +1049,12 @@ export function TrainerStudio3D({
         nz: number
       ): [number, number, number] => {
         let shade = 0.93;
-        // Lateral brachial groove separating biceps and triceps
         if (Math.abs(nz) < 0.16 && s > 0.18 && s < 0.46) {
           shade -= 0.22 * (1 - Math.abs(nz) / 0.16);
         }
-        // Deltoid insertion groove
         if (s > 0.19 && s < 0.23 && Math.abs(nx) > 0.3) {
           shade -= 0.18;
         }
-        // Finger grooves on hand
         if (s > 0.93 && Math.abs(Math.sin(nx * 10)) < 0.25) {
           shade -= 0.16;
         }
@@ -1073,39 +1083,38 @@ export function TrainerStudio3D({
     };
 
     // 3. CONTINUOUS SKINNED LEG MESH (Hip Socket s=0 -> Knee s=0.51 -> Ankle s=0.95 -> Foot/Shoe Base s=1.0)
-    // One continuous mesh per leg! Shorts, Quadriceps, Hamstrings, Patella Knee, and Gastrocnemius Calf bend seamlessly!
     const buildSkinnedLeg = (): SkinnedLoftMeshData => {
       const totalLegLen = THIGH_LEN + CALF_LEN; // 0.84m
       const sections: LoftSection[] = [
-        { s: 0.00, rx: 0.052, rzAnt: 0.052, rzPost: 0.052 }, // Closed hip socket inside pelvis shorts
-        { s: 0.05, rx: 0.095, rzAnt: 0.094, rzPost: 0.102 }, // Upper thigh nested smoothly inside pelvis saddle
-        { s: 0.20, rx: 0.102, rzAnt: 0.098, rzPost: 0.100 }, // Shorts leg hem
-        { s: 0.30, rx: 0.088, rzAnt: 0.094, rzPost: 0.088 }, // Mid quadriceps & hamstrings sweep
-        { s: 0.43, rx: 0.070, rzAnt: 0.072, rzPost: 0.068 }, // Vastus medialis teardrop above knee
-        { s: 0.51, rx: 0.058, rzAnt: 0.060, rzPost: 0.056 }, // Patella knee joint center
-        { s: 0.64, rx: 0.062, rzAnt: 0.054, rzPost: 0.074 }, // Gastrocnemius calf diamond peak
-        { s: 0.82, rx: 0.042, rzAnt: 0.044, rzPost: 0.046 }, // Achilles tendon taper
-        { s: 0.94, rx: 0.038, rzAnt: 0.040, rzPost: 0.040 }, // Athletic ankle sock
-        { s: 1.00, rx: 0.035, rzAnt: 0.038, rzPost: 0.038 }, // Ankle base into shoe
+        { s: 0.00, rx: 0.052, rzAnt: 0.052, rzPost: 0.052 },
+        { s: 0.05, rx: 0.095, rzAnt: 0.094, rzPost: 0.102 },
+        { s: 0.20, rx: 0.102, rzAnt: 0.098, rzPost: 0.100 },
+        { s: 0.30, rx: 0.088, rzAnt: 0.094, rzPost: 0.088 },
+        { s: 0.43, rx: 0.070, rzAnt: 0.072, rzPost: 0.068 },
+        { s: 0.51, rx: 0.058, rzAnt: 0.060, rzPost: 0.056 },
+        { s: 0.64, rx: 0.062, rzAnt: 0.054, rzPost: 0.074 },
+        { s: 0.82, rx: 0.042, rzAnt: 0.044, rzPost: 0.046 },
+        { s: 0.94, rx: 0.038, rzAnt: 0.040, rzPost: 0.040 },
+        { s: 1.00, rx: 0.035, rzAnt: 0.038, rzPost: 0.038 },
       ];
 
       // Groups: 0: skin, 1: shorts, 2: shortsTrim, 3: quads, 4: hamstrings, 5: calves, 6: trimWhite(sock)
       const groupFn = (s: number, _nx: number, nz: number): number => {
         if (s <= 0.22) {
-          if (s >= 0.205) return 2; // Subtle dark charcoal shorts hem trim
-          return 1; // Black athletic shorts
+          if (s >= 0.205) return 2;
+          return 1;
         }
         if (s > 0.22 && s < 0.47) {
-          if (nz >= 0.06) return 3; // quads
-          if (nz <= -0.06) return 4; // hamstrings
+          if (nz >= 0.06) return 3;
+          if (nz <= -0.06) return 4;
         }
         if (s >= 0.56 && s < 0.85 && nz < 0.12) {
-          return 5; // calves
+          return 5;
         }
         if (s >= 0.91) {
-          return 6; // White athletic crew sock at ankle
+          return 6;
         }
-        return 0; // Knee skin
+        return 0;
       };
 
       const sculptFn = (
@@ -1115,17 +1124,14 @@ export function TrainerStudio3D({
         nz: number,
         pos: { x: number; y: number; z: number }
       ) => {
-        // Quadriceps sweep
         if (nz > 0.15 && s > 0.14 && s < 0.46) {
           const quadProfile = Math.sin(((s - 0.14) / 0.32) * Math.PI);
           pos.z += 0.015 * quadProfile * nz;
           pos.x += nx * 0.008 * quadProfile;
         }
-        // Hamstrings belly
         if (nz < -0.15 && s > 0.16 && s < 0.46) {
           pos.z -= 0.013 * Math.sin(((s - 0.16) / 0.30) * Math.PI) * -nz;
         }
-        // Gastrocnemius calf peak
         if (nz < -0.15 && s > 0.56 && s < 0.82) {
           pos.z -= 0.015 * Math.sin(((s - 0.56) / 0.26) * Math.PI) * -nz;
         }
@@ -1140,15 +1146,12 @@ export function TrainerStudio3D({
         if (matGroup === 1 || matGroup === 2) return [0.92, 0.92, 0.94];
         const absX = Math.abs(nx);
         let shade = 0.94;
-        // Quadriceps rectus femoris / vastus separation grooves
         if (nz > 0.35 && s > 0.22 && s < 0.46 && absX > 0.32 && absX < 0.44) {
           shade -= 0.22 * (1 - Math.abs(absX - 0.38) / 0.06);
         }
-        // IT band lateral groove
         if (Math.abs(nz) < 0.16 && s > 0.22 && s < 0.46) {
           shade -= 0.20;
         }
-        // Gastrocnemius medial/lateral head split
         if (nz < -0.4 && s > 0.58 && s < 0.80 && absX < 0.12) {
           shade -= 0.20;
         }
@@ -1222,11 +1225,12 @@ export function TrainerStudio3D({
     );
 
     // ============================================================================
-    // GYM EQUIPMENT PROPS (Pull-Up Bar `bar_ref`, Bench, Barbell, Dumbbells)
+    // MODULAR GYM EQUIPMENT PROPS (Pull-Up Rig, Adjustable Bench, Dip Bars, Cable Bar, Barbell, Dumbbells, Towel)
     // ============================================================================
     const equipmentRoot = new THREE.Group();
     scene.add(equipmentRoot);
 
+    // 1. Pull-Up Rig (`pullupRigGroup`)
     const pullupRigGroup = new THREE.Group();
     const postGeo = new THREE.CylinderGeometry(0.032, 0.032, 2.22, 20);
     const postL = new THREE.Mesh(postGeo, equipDarkMat);
@@ -1260,19 +1264,47 @@ export function TrainerStudio3D({
     pullupRigGroup.visible = false;
     equipmentRoot.add(pullupRigGroup);
 
+    // 2. Adjustable Flat / Incline Bench (`benchGroup`)
     const benchGroup = new THREE.Group();
-    const benchPad = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 1.24), equipDarkMat);
-    benchPad.position.set(0, 0.42, -0.10);
-    benchPad.castShadow = true;
-    benchPad.receiveShadow = true;
-    const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.40, 0.06), equipMetalMat);
-    leg1.position.set(0, 0.20, 0.40);
-    const leg2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.40, 0.06), equipMetalMat);
-    leg2.position.set(0, 0.20, -0.58);
-    benchGroup.add(benchPad, leg1, leg2);
+    const benchSeatPad = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.06, 0.42), equipDarkMat);
+    benchSeatPad.position.set(0, 0.41, 0.22);
+    benchSeatPad.castShadow = true;
+    benchSeatPad.receiveShadow = true;
+
+    const benchBackPivot = new THREE.Group();
+    benchBackPivot.position.set(0, 0.41, -0.02);
+    const benchBackPad = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.06, 0.82), equipDarkMat);
+    benchBackPad.position.set(0, 0, -0.40);
+    benchBackPad.castShadow = true;
+    benchBackPad.receiveShadow = true;
+    benchBackPivot.add(benchBackPad);
+
+    const benchLegFront = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.40, 0.06), equipMetalMat);
+    benchLegFront.position.set(0, 0.20, 0.34);
+    const benchLegBack = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.40, 0.06), equipMetalMat);
+    benchLegBack.position.set(0, 0.20, -0.64);
+    benchGroup.add(benchSeatPad, benchBackPivot, benchLegFront, benchLegBack);
     benchGroup.visible = false;
     equipmentRoot.add(benchGroup);
 
+    // 3. Parallel Dip Station (`dipBarsGroup`)
+    const dipBarsGroup = new THREE.Group();
+    [-0.27, 0.27].forEach((xSide) => {
+      const upright = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 1.02, 16), equipDarkMat);
+      upright.position.set(xSide, 0.51, -0.25);
+      upright.castShadow = true;
+      const handleBar = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.020, 0.56, 16), equipChromeMat);
+      handleBar.rotation.x = Math.PI / 2;
+      handleBar.position.set(xSide, 1.01, -0.02);
+      handleBar.castShadow = true;
+      const baseFoot = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.025, 0.65), equipDarkMat);
+      baseFoot.position.set(xSide, 0.012, -0.08);
+      dipBarsGroup.add(upright, handleBar, baseFoot);
+    });
+    dipBarsGroup.visible = false;
+    equipmentRoot.add(dipBarsGroup);
+
+    // 4. Barbell (`barbellGroup`)
     const barbellGroup = new THREE.Group();
     const barMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 1.75, 16), equipChromeMat);
     barMesh.rotation.z = Math.PI / 2;
@@ -1288,6 +1320,17 @@ export function TrainerStudio3D({
     barbellGroup.visible = false;
     equipmentRoot.add(barbellGroup);
 
+    // 5. Cable Handle / Lat Pulldown Bar (`cableBarGroup`)
+    const cableBarGroup = new THREE.Group();
+    const cableHandleMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.96, 16), equipChromeMat);
+    cableHandleMesh.rotation.z = Math.PI / 2;
+    const cableWireMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 1.2, 8), equipMetalMat);
+    cableWireMesh.position.set(0, 0.6, 0);
+    cableBarGroup.add(cableHandleMesh, cableWireMesh);
+    cableBarGroup.visible = false;
+    equipmentRoot.add(cableBarGroup);
+
+    // 6. Dumbbells (`dumbbellL`, `dumbbellR`)
     const makeDumbbell = () => {
       const g = new THREE.Group();
       const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.14, 12), equipChromeMat);
@@ -1364,36 +1407,79 @@ export function TrainerStudio3D({
     };
 
     // ============================================================================
-    // CAMERA PRESETS (Full-body framing from shoes to overhead bar with zero clipping)
+    // CAMERA PRESETS (Exercise-Aware Full-Body Framing with Zero Clipping)
     // ============================================================================
     const computeCameraView = (
       preset: CameraPreset,
-      clip: AnimationClipName
+      clip: AnimationClipName,
+      exId: string
     ): { pos: THREE.Vector3; target: THREE.Vector3 } => {
-      const isGround =
+      const id = exId.toLowerCase();
+      const isGroundMat =
         clip === 'pushup' ||
         clip === 'diamond_pushup' ||
         clip === 'plank' ||
         clip === 'mountain_climber' ||
         clip === 'crunch' ||
-        clip === 'glute_bridge';
-      const isHanging = clip === 'pullup';
+        clip === 'glute_bridge' ||
+        id === 'superman_pulls' ||
+        id === 'reverse_snow_angels' ||
+        id === 'plank_downward_dog' ||
+        id === 'bodyweight_tricep_ext' ||
+        id === 'crunches' ||
+        id === 'leg_raises' ||
+        id === 'russian_twists' ||
+        id === 'glute_bridges';
 
-      if (isGround) {
-        const target = new THREE.Vector3(0, 0.34, -0.14);
+      const isBenchOrSeated =
+        id === 'bench_press' ||
+        id === 'incline_dumbbell_press' ||
+        id === 'chest_fly' ||
+        id === 'skull_crushers' ||
+        id === 'incline_curl' ||
+        id === 'leg_press' ||
+        id === 'leg_curl' ||
+        id === 'seated_cable_row' ||
+        id === 'chair_dips' ||
+        id === 'bench_dips' ||
+        id === 'dips' ||
+        id === 'doorframe_rows';
+
+      const isHangingOrOverhead =
+        id === 'pull_ups' ||
+        (clip === 'pullup' && id !== 'lat_pulldown') ||
+        id === 'overhead_press' ||
+        id === 'overhead_tricep_ext';
+
+      if (isGroundMat) {
+        const target = new THREE.Vector3(0, 0.34, -0.10);
         switch (preset) {
           case 'front':
-            return { pos: new THREE.Vector3(0, 0.80, 1.95), target };
+            return { pos: new THREE.Vector3(0, 0.82, 2.05), target };
           case 'side':
-            return { pos: new THREE.Vector3(2.25, 0.68, -0.14), target };
+            return { pos: new THREE.Vector3(2.30, 0.70, -0.10), target };
           case 'back':
-            return { pos: new THREE.Vector3(0, 0.85, -2.15), target };
+            return { pos: new THREE.Vector3(0, 0.86, -2.20), target };
           case 'top':
-            return { pos: new THREE.Vector3(0.01, 2.65, -0.14), target };
+            return { pos: new THREE.Vector3(0.01, 2.70, -0.10), target };
         }
       }
 
-      if (isHanging) {
+      if (isBenchOrSeated) {
+        const target = new THREE.Vector3(0, 0.62, 0.0);
+        switch (preset) {
+          case 'front':
+            return { pos: new THREE.Vector3(0, 0.96, 2.65), target };
+          case 'side':
+            return { pos: new THREE.Vector3(2.65, 0.88, 0.0), target };
+          case 'back':
+            return { pos: new THREE.Vector3(0, 0.96, -2.65), target };
+          case 'top':
+            return { pos: new THREE.Vector3(0.01, 2.95, 0.02), target };
+        }
+      }
+
+      if (isHangingOrOverhead) {
         const target = new THREE.Vector3(0, 1.24, 0);
         switch (preset) {
           case 'front':
@@ -1421,7 +1507,11 @@ export function TrainerStudio3D({
     };
 
     const applyCameraPreset = (preset: CameraPreset) => {
-      const { pos, target } = computeCameraView(preset, stateRef.current.clipName);
+      const { pos, target } = computeCameraView(
+        preset,
+        stateRef.current.clipName,
+        stateRef.current.exerciseId
+      );
       camera.position.copy(pos);
       controls.target.copy(target);
       controls.update();
@@ -1431,30 +1521,48 @@ export function TrainerStudio3D({
     applyCameraPreset(stateRef.current.cameraPreset);
 
     // ============================================================================
-    // BIOMECHANICAL IK & SKINNED DEFORMATION ENGINE (30 FPS / 60 Frames)
+    // 52-EXERCISE BIOMECHANICAL IK & SKINNED DEFORMATION ENGINE (30 FPS / 60 Frames)
     // ============================================================================
     const applyProceduralPose = (
       clip: AnimationClipName,
+      exId: string,
       variant: string,
       exName: string,
       frame: number
     ) => {
-      const norm = (frame % 60) / 60;
-      const p = 0.5 - 0.5 * Math.cos(norm * Math.PI * 2);
+      const norm = ((frame % 60) + 60) % 60 / 60;
+      const theta = norm * Math.PI * 2;
+      const p = 0.5 - 0.5 * Math.cos(theta); // Smooth 0 -> 1 -> 0 cycle
 
+      // Reset all equipment props each frame
       pullupRigGroup.visible = false;
+      crossbar.position.set(0, 2.10, 0);
+      gripL.position.set(-0.34, 2.10, 0);
+      gripR.position.set(0.34, 2.10, 0);
+
       benchGroup.visible = false;
+      benchGroup.position.set(0, 0, 0);
+      benchGroup.rotation.set(0, 0, 0);
+      benchBackPivot.rotation.set(0, 0, 0);
+
+      dipBarsGroup.visible = false;
       barbellGroup.visible = false;
+      barbellGroup.rotation.set(0, 0, 0);
+      cableBarGroup.visible = false;
+      cableBarGroup.rotation.set(0, 0, 0);
+
       dumbbellL.visible = false;
       dumbbellR.visible = false;
       dumbbellL.rotation.set(0, 0, 0);
       dumbbellR.rotation.set(0, 0, 0);
 
+      // Default standing anatomical state
       const hipsPos = new THREE.Vector3(0, 0.94, 0);
-      const shoulderCenter = new THREE.Vector3(0, 1.48, 0);
+      const shoulderCenter = new THREE.Vector3(0, 0.94 + TORSO_LEN, 0);
       const torsoAnterior = new THREE.Vector3(0, 0, 1);
       const headLookDir = new THREE.Vector3(0, 0, 1);
-      let spineArchOffset = 0.012; // Natural slight thoracic/lumbar curve
+      let spineArchOffset = 0.012;
+      let shoulderElevationOffset = 0.0; // For Shrugs
 
       const handL = new THREE.Vector3(-0.24, 0.76, 0.06);
       const handR = new THREE.Vector3(0.24, 0.76, 0.06);
@@ -1467,62 +1575,1108 @@ export function TrainerStudio3D({
       const footR = new THREE.Vector3(0.14, 0.075, 0);
       const kneePoleL = new THREE.Vector3(-0.16, 0.52, 0.50);
       const kneePoleR = new THREE.Vector3(0.16, 0.52, 0.50);
+      let directKneeL: THREE.Vector3 | null = null;
+      let directKneeR: THREE.Vector3 | null = null;
 
+      let footModeL: 'flat' | 'toes' | 'free' = 'flat';
+      let footModeR: 'flat' | 'toes' | 'free' = 'flat';
+      let anklePitchOffsetL = 0;
+      let anklePitchOffsetR = 0;
+
+      const id = exId.toLowerCase();
       const nameLower = exName.toLowerCase();
 
-      // Special Gym Exercises Check by Name
-      if (nameLower.includes('bench press') || nameLower.includes('incline dumbbell')) {
+      // =========================================================================
+      // DEDICATED 52-EXERCISE BIOMECHANICAL SOLVER
+      // Note on Supine (face-up) exercises:
+      // To preserve right-handed basis `torsoRight = torsoUp × torsoAnterior = (+1, 0, 0)`,
+      // whenever `torsoAnterior` points UP (`+Y`), `torsoUp` (hips -> shoulders) MUST point
+      // toward `-Z` (`shoulderCenter.z < hipsPos.z`) and feet point toward `+Z` (`foot.z > hipsPos.z`).
+      // =========================================================================
+
+      if (id === 'bench_press' || nameLower === 'bench press') {
+        // Flat Barbell Bench Press (Supine on flat bench, head at -Z, feet planted at +Z)
         benchGroup.visible = true;
-        benchGroup.position.set(0, 0, -0.10);
+        const press = 1 - p; // Frame 0 = lockout top, Frame 30 = bar at chest
+        hipsPos.set(0, 0.47, 0.18);
+        shoulderCenter.set(0, 0.47, -0.38);
+        torsoAnterior.set(0, 1, 0);
+        headLookDir.set(0, 1, 0);
+        spineArchOffset = 0.018;
+
+        const barY = 0.63 + 0.34 * press;
+        const barZ = -0.34;
+        barbellGroup.visible = true;
+        barbellGroup.position.set(0, barY, barZ);
+
+        handL.set(-0.33, barY, barZ);
+        handR.set(0.33, barY, barZ);
+        // Elbows tuck ~50 deg toward hips (+Z) and below bench
+        elbowPoleL.set(-0.46, 0.22, -0.14);
+        elbowPoleR.set(0.46, 0.22, -0.14);
+
+        footL.set(-0.23, 0.075, 0.62);
+        footR.set(0.23, 0.075, 0.62);
+        kneePoleL.set(-0.24, 0.56, 0.52);
+        kneePoleR.set(0.24, 0.56, 0.52);
+      } else if (id === 'incline_dumbbell_press' || nameLower.includes('incline dumbbell')) {
+        // 35° Incline Dumbbell Press
+        benchGroup.visible = true;
+        benchBackPivot.rotation.x = 0.60; // Raise backrest 35 degrees
         const press = 1 - p;
-        hipsPos.set(0, 0.48, -0.35);
-        shoulderCenter.set(0, 0.48, 0.20);
+        const incAngle = 0.60; // ~35 deg from horizontal
+        hipsPos.set(0, 0.45, 0.14);
+        shoulderCenter.set(
+          0,
+          0.45 + Math.sin(incAngle) * TORSO_LEN,
+          0.14 - Math.cos(incAngle) * TORSO_LEN
+        );
+        torsoAnterior.set(0, Math.cos(incAngle), Math.sin(incAngle)).normalize();
+        headLookDir.set(0, 0.65, 0.76).normalize();
+
+        dumbbellL.visible = true;
+        dumbbellR.visible = true;
+        const dbY = shoulderCenter.y + 0.08 + 0.34 * press;
+        const dbZ = shoulderCenter.z + 0.04;
+        const spreadX = 0.27 - 0.10 * press; // Converging arc at top
+        handL.set(-spreadX, dbY, dbZ);
+        handR.set(spreadX, dbY, dbZ);
+        dumbbellL.position.copy(handL);
+        dumbbellR.position.copy(handR);
+
+        elbowPoleL.set(-0.48, shoulderCenter.y - 0.24, shoulderCenter.z + 0.18);
+        elbowPoleR.set(0.48, shoulderCenter.y - 0.24, shoulderCenter.z + 0.18);
+
+        footL.set(-0.22, 0.075, 0.62);
+        footR.set(0.22, 0.075, 0.62);
+        kneePoleL.set(-0.23, 0.54, 0.48);
+        kneePoleR.set(0.23, 0.54, 0.48);
+      } else if (id === 'chest_fly' || nameLower.includes('chest fly')) {
+        // Supine Dumbbell Chest Fly on Flat Bench (Wide barrel-hug arc)
+        benchGroup.visible = true;
+        const open = p; // Frame 0 = dumbbells together over chest, Frame 30 = wide stretch
+        hipsPos.set(0, 0.47, 0.18);
+        shoulderCenter.set(0, 0.47, -0.38);
         torsoAnterior.set(0, 1, 0);
         headLookDir.set(0, 1, 0);
 
-        const barY = 0.62 + 0.28 * press;
-        const barZ = 0.18;
-        if (nameLower.includes('dumbbell')) {
-          dumbbellL.visible = true;
-          dumbbellR.visible = true;
-          handL.set(-0.25, barY, barZ);
-          handR.set(0.25, barY, barZ);
-          dumbbellL.position.copy(handL);
-          dumbbellR.position.copy(handR);
-        } else {
-          barbellGroup.visible = true;
-          barbellGroup.position.set(0, barY, barZ);
-          handL.set(-0.32, barY, barZ);
-          handR.set(0.32, barY, barZ);
-        }
+        dumbbellL.visible = true;
+        dumbbellR.visible = true;
+        const flyAngle = (12 + 68 * open) * (Math.PI / 180);
+        const reach = 0.52;
+        const sY = 0.47;
+        const sZ = -0.36;
+        handL.set(-0.19 - Math.sin(flyAngle) * reach, sY + Math.cos(flyAngle) * reach, sZ);
+        handR.set(0.19 + Math.sin(flyAngle) * reach, sY + Math.cos(flyAngle) * reach, sZ);
 
-        elbowPoleL.set(-0.48, 0.28, 0.08);
-        elbowPoleR.set(0.48, 0.28, 0.08);
-        footL.set(-0.22, 0.075, -0.76);
-        footR.set(0.22, 0.075, -0.76);
-        kneePoleL.set(-0.24, 0.52, -0.68);
-        kneePoleR.set(0.24, 0.52, -0.68);
-      } else if (nameLower.includes('dip')) {
-        // Chair Dips / Bench Dips / Gym Dips
+        dumbbellL.position.copy(handL);
+        dumbbellR.position.copy(handR);
+        dumbbellL.rotation.set(0, Math.PI / 2, 0);
+        dumbbellR.rotation.set(0, Math.PI / 2, 0);
+
+        elbowPoleL.set(-0.56, sY - 0.15, sZ + 0.08);
+        elbowPoleR.set(0.56, sY - 0.15, sZ + 0.08);
+
+        footL.set(-0.22, 0.075, 0.62);
+        footR.set(0.22, 0.075, 0.62);
+        kneePoleL.set(-0.23, 0.56, 0.52);
+        kneePoleR.set(0.23, 0.56, 0.52);
+      } else if (id === 'dips' || nameLower === 'dips') {
+        // Gym Parallel Bar Dips
+        dipBarsGroup.visible = true;
+        const dip = p; // Frame 0 = top lockout, Frame 30 = 90-deg bottom dip
+        const hipY = 0.92 - 0.24 * dip;
+        const lean = 0.22 + 0.10 * dip; // Forward chest lean
+        hipsPos.set(0, hipY, -0.06);
+        shoulderCenter.set(
+          0,
+          hipY + Math.cos(lean) * TORSO_LEN,
+          -0.06 + Math.sin(lean) * TORSO_LEN
+        );
+        torsoAnterior.set(0, -Math.sin(lean), Math.cos(lean)).normalize();
+        headLookDir.set(0, -0.15, 1).normalize();
+
+        handL.set(-0.27, 1.02, 0.04);
+        handR.set(0.27, 1.02, 0.04);
+        elbowPoleL.set(-0.34, shoulderCenter.y + 0.05, -0.45);
+        elbowPoleR.set(0.34, shoulderCenter.y + 0.05, -0.45);
+
+        // Knees bent at 90 degrees with feet tucked behind in air
+        directKneeL = new THREE.Vector3(-0.11, hipY - 0.40, -0.04);
+        directKneeR = new THREE.Vector3(0.11, hipY - 0.40, -0.04);
+        footL.set(-0.09, hipY - 0.36, -0.44);
+        footR.set(0.09, hipY - 0.36, -0.44);
+        kneePoleL.set(-0.11, hipY - 0.40, 0.35);
+        kneePoleR.set(0.11, hipY - 0.40, 0.35);
+        footModeL = 'free';
+        footModeR = 'free';
+      } else if (
+        id === 'chair_dips' ||
+        id === 'bench_dips' ||
+        nameLower.includes('chair dip') ||
+        nameLower.includes('bench dip')
+      ) {
+        // Chair / Bench Tricep Dips (Hands on bench behind back, heels extended in front)
         benchGroup.visible = true;
-        benchGroup.position.set(0, 0, -0.36);
+        benchGroup.rotation.y = Math.PI / 2;
+        benchGroup.position.set(0.10, 0, -0.34);
+
         const dip = p;
-        const hipY = 0.54 - 0.18 * dip;
+        const hipY = 0.50 - 0.20 * dip;
         hipsPos.set(0, hipY, 0.02);
         shoulderCenter.set(0, hipY + TORSO_LEN, -0.02);
         torsoAnterior.set(0, 0.06, 1).normalize();
         headLookDir.set(0, 0, 1);
 
-        handL.set(-0.23, 0.45, -0.14);
-        handR.set(0.23, 0.45, -0.14);
-        elbowPoleL.set(-0.28, 0.68, -0.52);
-        elbowPoleR.set(0.28, 0.68, -0.52);
+        handL.set(-0.22, 0.45, -0.16);
+        handR.set(0.22, 0.45, -0.16);
+        elbowPoleL.set(-0.26, 0.65, -0.58);
+        elbowPoleR.set(0.26, 0.65, -0.58);
 
-        footL.set(-0.13, 0.075, 0.66);
-        footR.set(0.13, 0.075, 0.66);
-        kneePoleL.set(-0.14, 0.42, 0.48);
-        kneePoleR.set(0.14, 0.42, 0.48);
+        footL.set(-0.12, 0.075, 0.68);
+        footR.set(0.12, 0.075, 0.68);
+        kneePoleL.set(-0.13, 0.38, 0.44);
+        kneePoleR.set(0.13, 0.38, 0.44);
+        footModeL = 'free';
+        footModeR = 'free';
+      } else if (
+        id === 'tricep_pushdown' ||
+        id === 'rope_pushdown' ||
+        nameLower.includes('pushdown')
+      ) {
+        // Standing Cable Tricep Pushdown / Rope Pushdown
+        const isRope = id === 'rope_pushdown' || nameLower.includes('rope');
+        const ext = 1 - p; // Frame 0 = flexed 100 deg, Frame 30 = full downward tricep lockout
+        hipsPos.set(0, 0.93, -0.04);
+        shoulderCenter.set(0, 0.93 + TORSO_LEN, 0.02);
+        torsoAnterior.set(0, -0.10, 1).normalize();
+        headLookDir.set(0, -0.18, 1).normalize();
+
+        // Elbows strictly pinned to the sides of the torso
+        const eL = new THREE.Vector3(-0.21, 1.15, 0.05);
+        const eR = new THREE.Vector3(0.21, 1.15, 0.05);
+        directElbowL = eL;
+        directElbowR = eR;
+        elbowPoleL.set(-0.25, 1.15, -0.30);
+        elbowPoleR.set(0.25, 1.15, -0.30);
+
+        const flexAngle = 0.18 + (1 - ext) * 1.55; // 10 deg lockout up to 99 deg flexion
+        const handY = eL.y - Math.cos(flexAngle) * FOREARM_LEN;
+        const handZ = eL.z + Math.sin(flexAngle) * FOREARM_LEN;
+        const spreadX = isRope ? 0.09 + 0.15 * ext : 0.18;
+
+        handL.set(-spreadX, handY, handZ);
+        handR.set(spreadX, handY, handZ);
+
+        if (!isRope) {
+          cableBarGroup.visible = true;
+          cableHandleMesh.scale.set(1, 0.48, 1);
+          cableBarGroup.position.set(0, handY, handZ);
+        }
+      } else if (id === 'overhead_tricep_ext' || nameLower.includes('overhead tricep')) {
+        // Standing Overhead Dumbbell Tricep Extension
+        hipsPos.set(0, 0.94, 0);
+        shoulderCenter.set(0, 0.94 + TORSO_LEN, 0);
+        torsoAnterior.set(0, 0, 1);
+        headLookDir.set(0, 0.08, 1).normalize();
+
+        const eL = new THREE.Vector3(-0.16, 1.72, 0.06);
+        const eR = new THREE.Vector3(0.16, 1.72, 0.06);
+        directElbowL = eL;
+        directElbowR = eR;
+        // Point of elbow faces forward/up (+Z/+Y), so anterior of forearm faces back
+        elbowPoleL.set(-0.18, 1.85, 0.35);
+        elbowPoleR.set(0.18, 1.85, 0.35);
+
+        const ext = 1 - p; // Frame 0 = overhead lockout, Frame 30 = deep stretch behind head
+        const angle = -0.65 + ext * 2.05;
+        const handY = eL.y + Math.sin(angle) * FOREARM_LEN;
+        const handZ = eL.z - Math.cos(angle) * FOREARM_LEN;
+        handL.set(-0.07, handY, handZ);
+        handR.set(0.07, handY, handZ);
+
+        dumbbellL.visible = true;
+        dumbbellL.position.set(0, handY, handZ);
+        dumbbellL.rotation.set(0, 0, Math.PI / 2);
+      } else if (id === 'skull_crushers' || nameLower.includes('skull crusher')) {
+        // Supine Lying EZ-Bar Tricep Extension (Skull Crushers) on Flat Bench
+        benchGroup.visible = true;
+        hipsPos.set(0, 0.47, 0.18);
+        shoulderCenter.set(0, 0.47, -0.38);
+        torsoAnterior.set(0, 1, 0);
+        headLookDir.set(0, 1, 0);
+
+        // Upper arms locked at 10 deg back toward head (-Z)
+        const eL = new THREE.Vector3(-0.19, 0.76, -0.41);
+        const eR = new THREE.Vector3(0.19, 0.76, -0.41);
+        directElbowL = eL;
+        directElbowR = eR;
+        elbowPoleL.set(-0.22, 0.90, -0.10);
+        elbowPoleR.set(0.22, 0.90, -0.10);
+
+        const ext = 1 - p; // Frame 0 = lockout, Frame 30 = bar lowered to forehead
+        const angle = -0.25 + ext * 1.75;
+        const barY = eL.y + Math.sin(angle) * FOREARM_LEN;
+        const barZ = eL.z - Math.cos(angle) * FOREARM_LEN;
+
+        barbellGroup.visible = true;
+        barbellGroup.position.set(0, barY, barZ);
+        handL.set(-0.19, barY, barZ);
+        handR.set(0.19, barY, barZ);
+
+        footL.set(-0.22, 0.075, 0.62);
+        footR.set(0.22, 0.075, 0.62);
+        kneePoleL.set(-0.23, 0.56, 0.52);
+        kneePoleR.set(0.23, 0.56, 0.52);
+      } else if (id === 'bodyweight_tricep_ext' || nameLower.includes('bodyweight tricep')) {
+        // Bodyweight Plank Tricep Extensions (Forearm-to-Palm Plank Hinge)
+        const lift = 1 - p; // Frame 0 = extended arms, Frame 30 = elbows on mat
+        const footY = 0.095;
+        const footZ = -0.84;
+        const plankAngle = (10 + 10 * lift) * (Math.PI / 180);
+        const legDist = 0.818;
+        const hipY = footY + legDist * Math.sin(plankAngle);
+        const hipZ = footZ + legDist * Math.cos(plankAngle);
+        const chestY = hipY + TORSO_LEN * Math.sin(plankAngle);
+        const chestZ = hipZ + TORSO_LEN * Math.cos(plankAngle);
+
+        hipsPos.set(0, hipY, hipZ);
+        shoulderCenter.set(0, chestY, chestZ);
+        torsoAnterior.set(0, -1, 0.18).normalize();
+        headLookDir.set(0, -0.55, 0.83).normalize();
+        spineArchOffset = 0.004;
+
+        handL.set(-0.18, 0.028, 0.56);
+        handR.set(0.18, 0.028, 0.56);
+        elbowPoleL.set(-0.20, 0.02, 0.10);
+        elbowPoleR.set(0.20, 0.02, 0.10);
+
+        footL.set(-0.11, footY, footZ);
+        footR.set(0.11, footY, footZ);
+        kneePoleL.set(-0.11, (hipY + footY) * 0.5 + 0.12, (hipZ + footZ) * 0.5);
+        kneePoleR.set(0.11, (hipY + footY) * 0.5 + 0.12, (hipZ + footZ) * 0.5);
+        footModeL = 'toes';
+        footModeR = 'toes';
+      } else if (
+        id === 'pike_pushup' ||
+        id === 'pike_press' ||
+        nameLower.includes('pike')
+      ) {
+        // Inverted-V Pike Push-Up / Pike Shoulder Press
+        const press = 1 - p; // Frame 0 = top pike, Frame 30 = crown of head near floor in front of hands
+        const footY = 0.095;
+        const footZ = -0.74;
+        const hipY = 0.90 - 0.06 * p;
+        const hipZ = -0.18 + 0.04 * p;
+        hipsPos.set(0, hipY, hipZ);
+
+        const chestY = 0.32 + 0.24 * press;
+        const chestZ = 0.34 - 0.08 * press;
+        shoulderCenter.set(0, chestY, chestZ);
+        torsoAnterior.set(0, -0.68, -0.73).normalize();
+        headLookDir.set(0, -0.82, 0.57).normalize();
+        spineArchOffset = 0.0;
+
+        handL.set(-0.25, 0.028, 0.44);
+        handR.set(0.25, 0.028, 0.44);
+        elbowPoleL.set(-0.42, chestY + 0.08, 0.18);
+        elbowPoleR.set(0.42, chestY + 0.08, 0.18);
+
+        footL.set(-0.13, footY, footZ);
+        footR.set(0.13, footY, footZ);
+        kneePoleL.set(-0.13, 0.52, -0.35);
+        kneePoleR.set(0.13, 0.52, -0.35);
+        footModeL = 'toes';
+        footModeR = 'toes';
+      } else if (id === 'plank_downward_dog' || nameLower.includes('downward-dog')) {
+        // Dynamic Plank-to-Downward-Dog Mobility Flow
+        const dog = p; // Frame 0 = High Plank, Frame 30 = Downward Dog Inverted-V
+        const footY = 0.095 - 0.015 * dog;
+        const footZ = -0.82 + 0.08 * dog;
+
+        const hipY = 0.31 + 0.58 * dog;
+        const hipZ = -0.28 + 0.10 * dog;
+        const chestY = 0.49 + 0.02 * dog;
+        const chestZ = 0.24 - 0.10 * dog;
+
+        hipsPos.set(0, hipY, hipZ);
+        shoulderCenter.set(0, chestY, chestZ);
+
+        const tUp = new THREE.Vector3().subVectors(shoulderCenter, hipsPos).normalize();
+        // Keep anterior pointing perpendicular to spine toward floor/legs
+        torsoAnterior.set(0, -tUp.z, tUp.y).normalize();
+        headLookDir.copy(torsoAnterior).lerp(new THREE.Vector3(0, -0.5, 0.86), 1 - dog).normalize();
+        spineArchOffset = 0.0;
+
+        handL.set(-0.23, 0.028, 0.48);
+        handR.set(0.23, 0.028, 0.48);
+        elbowPoleL.set(-0.36, chestY + 0.08, 0.20);
+        elbowPoleR.set(0.36, chestY + 0.08, 0.20);
+
+        footL.set(-0.13, footY, footZ);
+        footR.set(0.13, footY, footZ);
+        kneePoleL.set(-0.13, (hipY + footY) * 0.5 + 0.08, (hipZ + footZ) * 0.5 + 0.15);
+        kneePoleR.set(0.13, (hipY + footY) * 0.5 + 0.08, (hipZ + footZ) * 0.5 + 0.15);
+        footModeL = 'toes';
+        footModeR = 'toes';
+      } else if (id === 'lat_pulldown' || nameLower.includes('lat pulldown')) {
+        // Seated Wide-Grip Cable Lat Pulldown
+        benchGroup.visible = true;
+        benchBackPivot.visible = false; // Seat only
+        const pull = p; // Frame 0 = overhead stretch, Frame 30 = bar pulled to upper chest
+
+        hipsPos.set(0, 0.46, 0.08);
+        const leanBack = -0.24 * pull - 0.08;
+        shoulderCenter.set(
+          0,
+          0.46 + Math.cos(leanBack) * TORSO_LEN,
+          0.08 + Math.sin(leanBack) * TORSO_LEN
+        );
+        torsoAnterior.set(0, -Math.sin(leanBack), Math.cos(leanBack)).normalize();
+        headLookDir.set(0, 0.16 * pull, 1).normalize();
+        spineArchOffset = 0.018;
+
+        const barY = 1.62 - 0.48 * pull;
+        const barZ = 0.18;
+        cableBarGroup.visible = true;
+        cableHandleMesh.scale.set(1, 1, 1);
+        cableBarGroup.position.set(0, barY, barZ);
+
+        handL.set(-0.42, barY, barZ);
+        handR.set(0.42, barY, barZ);
+        elbowPoleL.set(-0.65, shoulderCenter.y - 0.18, -0.06);
+        elbowPoleR.set(0.65, shoulderCenter.y - 0.18, -0.06);
+
+        footL.set(-0.18, 0.075, 0.46);
+        footR.set(0.18, 0.075, 0.46);
+        kneePoleL.set(-0.19, 0.50, 0.58);
+        kneePoleR.set(0.19, 0.50, 0.58);
+      } else if (id === 'seated_cable_row' || nameLower.includes('seated cable row')) {
+        // Seated Horizontal Cable Row
+        const pull = p; // Frame 0 = forward reach stretch, Frame 30 = row handle at abdomen & scapula retracted
+        hipsPos.set(0, 0.14, -0.20);
+        const torsoLean = 0.18 * (1 - pull) - 0.06 * pull;
+        shoulderCenter.set(
+          0,
+          0.14 + Math.cos(torsoLean) * TORSO_LEN,
+          -0.20 + Math.sin(torsoLean) * TORSO_LEN
+        );
+        torsoAnterior.set(0, -Math.sin(torsoLean), Math.cos(torsoLean)).normalize();
+        headLookDir.set(0, 0, 1);
+        spineArchOffset = 0.016 * pull;
+
+        const handleZ = 0.34 - 0.36 * pull;
+        const handleY = 0.44;
+        handL.set(-0.12, handleY, handleZ);
+        handR.set(0.12, handleY, handleZ);
+        elbowPoleL.set(-0.36, 0.42, -0.60);
+        elbowPoleR.set(0.36, 0.42, -0.60);
+
+        footL.set(-0.14, 0.12, 0.58);
+        footR.set(0.14, 0.12, 0.58);
+        kneePoleL.set(-0.15, 0.36, 0.22);
+        kneePoleR.set(0.15, 0.36, 0.22);
+        footModeL = 'free';
+        footModeR = 'free';
+      } else if (id === 'doorframe_rows' || nameLower.includes('doorframe') || nameLower.includes('table row')) {
+        // Inverted Bodyweight / Table Row (Horizontal Pull Under Bar)
+        pullupRigGroup.visible = true;
+        crossbar.position.set(0, 1.08, 0.16);
+        gripL.position.set(-0.28, 1.08, 0.16);
+        gripR.position.set(0.28, 1.08, 0.16);
+
+        const pull = p; // Frame 0 = hanging under bar, Frame 30 = chest pulled to bar
+        const footZ = 0.72;
+        const footY = 0.075;
+        const bodyAngle = (24 + 18 * pull) * (Math.PI / 180);
+        const legDist = 0.80;
+        const hipY = footY + Math.sin(bodyAngle) * legDist;
+        const hipZ = footZ - Math.cos(bodyAngle) * legDist;
+        const chestY = hipY + Math.sin(bodyAngle) * TORSO_LEN;
+        const chestZ = hipZ - Math.cos(bodyAngle) * TORSO_LEN;
+
+        hipsPos.set(0, hipY, hipZ);
+        shoulderCenter.set(0, chestY, chestZ);
+        torsoAnterior.set(0, Math.cos(bodyAngle), Math.sin(bodyAngle)).normalize();
+        headLookDir.copy(torsoAnterior);
+
+        handL.set(-0.28, 1.07, 0.16);
+        handR.set(0.28, 1.07, 0.16);
+        elbowPoleL.set(-0.46, chestY - 0.22, chestZ - 0.18);
+        elbowPoleR.set(0.46, chestY - 0.22, chestZ - 0.18);
+
+        footL.set(-0.12, footY, footZ);
+        footR.set(0.12, footY, footZ);
+        kneePoleL.set(-0.12, (hipY + footY) * 0.5 + 0.15, (hipZ + footZ) * 0.5 + 0.15);
+        kneePoleR.set(0.12, (hipY + footY) * 0.5 + 0.15, (hipZ + footZ) * 0.5 + 0.15);
+        footModeL = 'free';
+        footModeR = 'free';
+      } else if (id === 'superman_pulls' || nameLower.includes('superman')) {
+        // Prone Superman Hyperextension + W-Pulls on Mat
+        const pull = p; // Frame 0 = prone overhead Y reach, Frame 30 = chest/legs lifted + elbows pulled into W
+        hipsPos.set(0, 0.10, -0.12);
+        shoulderCenter.set(0, 0.14 + 0.14 * pull, 0.42);
+        torsoAnterior.set(0, -1, 0.24 * pull).normalize();
+        headLookDir.set(0, -0.45 + 0.25 * pull, 0.90).normalize();
+        spineArchOffset = -0.024 * pull;
+
+        const reachZ = 0.88 - 0.48 * pull;
+        const reachX = 0.22 + 0.14 * pull;
+        const handY = 0.14 + 0.18 * pull;
+        handL.set(-reachX, handY, reachZ);
+        handR.set(reachX, handY, reachZ);
+        elbowPoleL.set(-0.52, handY, 0.12);
+        elbowPoleR.set(0.52, handY, 0.12);
+
+        const footY = 0.09 + 0.14 * pull;
+        footL.set(-0.14, footY, -0.94);
+        footR.set(0.14, footY, -0.94);
+        kneePoleL.set(-0.14, 0.02, -0.52);
+        kneePoleR.set(0.14, 0.02, -0.52);
+        footModeL = 'free';
+        footModeR = 'free';
+      } else if (id === 'reverse_snow_angels' || nameLower.includes('snow angel')) {
+        // Prone Reverse Snow Angels (Wide Horizontal Arc from Overhead to Hips)
+        const sweep = p; // Frame 0 = overhead, Frame 30 = swept back beside hips
+        hipsPos.set(0, 0.10, -0.12);
+        shoulderCenter.set(0, 0.22, 0.42);
+        torsoAnterior.set(0, -1, 0.18).normalize();
+        headLookDir.set(0, -0.55, 0.83).normalize();
+        spineArchOffset = -0.018;
+
+        const sweepAngle = (18 + 140 * sweep) * (Math.PI / 180); // 18 deg overhead -> 158 deg back by hips
+        const reach = 0.54;
+        const sZ = 0.36;
+        const sY = 0.22;
+        handL.set(-0.19 - Math.sin(sweepAngle) * reach, sY + 0.04 * sweep, sZ + Math.cos(sweepAngle) * reach);
+        handR.set(0.19 + Math.sin(sweepAngle) * reach, sY + 0.04 * sweep, sZ + Math.cos(sweepAngle) * reach);
+        elbowPoleL.set(-0.45, sY + 0.15, sZ - 0.25);
+        elbowPoleR.set(0.45, sY + 0.15, sZ - 0.25);
+
+        footL.set(-0.13, 0.14, -0.94);
+        footR.set(0.13, 0.14, -0.94);
+        kneePoleL.set(-0.13, 0.02, -0.52);
+        kneePoleR.set(0.13, 0.02, -0.52);
+        footModeL = 'free';
+        footModeR = 'free';
+      } else if (
+        id === 'towel_bicep_curls' ||
+        id === 'isometric_towel_curls' ||
+        nameLower.includes('towel')
+      ) {
+        // Home Resistance Towel Bicep Curls (Curling against raised left leg resistance)
+        const isIso = id === 'isometric_towel_curls' || nameLower.includes('isometric');
+        const curlP = isIso ? 0.65 + 0.15 * p : p;
+
+        hipsPos.set(0, 0.94, 0);
+        shoulderCenter.set(0, 0.94 + TORSO_LEN, 0);
+        torsoAnterior.set(0, 0, 1);
+        headLookDir.set(0, -0.10, 1).normalize();
+
+        const eL = new THREE.Vector3(-0.21, 1.15, 0.04);
+        const eR = new THREE.Vector3(0.21, 1.15, 0.04);
+        directElbowL = eL;
+        directElbowR = eR;
+        elbowPoleL.set(-0.24, 1.15, -0.30);
+        elbowPoleR.set(0.24, 1.15, -0.30);
+
+        const flexAngle = 0.45 + curlP * 1.45;
+        const handY = eL.y - Math.cos(flexAngle) * FOREARM_LEN;
+        const handZ = eL.z + Math.sin(flexAngle) * FOREARM_LEN;
+        handL.set(-0.15, handY, handZ);
+        handR.set(0.15, handY, handZ);
+
+        // Left leg raised to provide towel resistance; Right leg planted
+        footL.set(-0.12, 0.26 + 0.14 * curlP, 0.24);
+        kneePoleL.set(-0.12, 0.72 + 0.12 * curlP, 0.56);
+        footModeL = 'free';
+        footR.set(0.14, 0.075, 0);
+        kneePoleR.set(0.15, 0.52, 0.45);
+      } else if (id === 'incline_curl' || nameLower.includes('incline curl')) {
+        // 45° Incline Dumbbell Bicep Curl
+        benchGroup.visible = true;
+        benchBackPivot.visible = true;
+        benchBackPivot.rotation.x = 0.75; // 43 deg incline backrest
+
+        const incAngle = 0.75;
+        hipsPos.set(0, 0.45, 0.14);
+        shoulderCenter.set(
+          0,
+          0.45 + Math.cos(incAngle) * TORSO_LEN,
+          0.14 - Math.sin(incAngle) * TORSO_LEN
+        );
+        torsoAnterior.set(0, Math.sin(incAngle), Math.cos(incAngle)).normalize();
+        headLookDir.set(0, 0.15, 1).normalize();
+
+        // Upper arms hang vertically behind torso line to stretch bicep long head
+        const eL = new THREE.Vector3(-0.23, shoulderCenter.y - 0.34, shoulderCenter.z - 0.02);
+        const eR = new THREE.Vector3(0.23, shoulderCenter.y - 0.34, shoulderCenter.z - 0.02);
+        directElbowL = eL;
+        directElbowR = eR;
+        elbowPoleL.set(-0.26, eL.y, eL.z - 0.30);
+        elbowPoleR.set(0.26, eR.y, eR.z - 0.30);
+
+        const flexAngle = 0.18 + p * 2.05;
+        const handY = eL.y - Math.cos(flexAngle) * FOREARM_LEN;
+        const handZ = eL.z + Math.sin(flexAngle) * FOREARM_LEN;
+        handL.set(-0.24, handY, handZ);
+        handR.set(0.24, handY, handZ);
+
+        dumbbellL.visible = true;
+        dumbbellR.visible = true;
+        dumbbellL.position.copy(handL);
+        dumbbellR.position.copy(handR);
+
+        footL.set(-0.22, 0.075, 0.62);
+        footR.set(0.22, 0.075, 0.62);
+        kneePoleL.set(-0.23, 0.54, 0.48);
+        kneePoleR.set(0.23, 0.54, 0.48);
+      } else if (id === 'leg_press' || nameLower.includes('leg press')) {
+        // Seated 45° Angled Sled Leg Press
+        benchGroup.visible = true;
+        benchBackPivot.visible = true;
+        benchBackPivot.rotation.x = 0.72;
+
+        const press = 1 - p; // Frame 0 = extended legs, Frame 30 = deep 90-deg knee bend toward chest
+        const incAngle = 0.72;
+        hipsPos.set(0, 0.44, 0.12);
+        shoulderCenter.set(
+          0,
+          0.44 + Math.cos(incAngle) * TORSO_LEN,
+          0.12 - Math.sin(incAngle) * TORSO_LEN
+        );
+        torsoAnterior.set(0, Math.sin(incAngle), Math.cos(incAngle)).normalize();
+        headLookDir.set(0, 0.35, 0.94).normalize();
+
+        // Hands grip side seat handles
+        handL.set(-0.24, 0.44, 0.16);
+        handR.set(0.24, 0.44, 0.16);
+        elbowPoleL.set(-0.36, 0.58, -0.12);
+        elbowPoleR.set(0.36, 0.58, -0.12);
+
+        // Feet travel along a 42-degree upward sled track
+        const sledDist = 0.42 + 0.36 * press;
+        const sledAngle = 0.62;
+        const fY = 0.48 + Math.sin(sledAngle) * sledDist;
+        const fZ = 0.16 + Math.cos(sledAngle) * sledDist;
+        footL.set(-0.15, fY, fZ);
+        footR.set(0.15, fY, fZ);
+        kneePoleL.set(-0.18, 0.96, 0.10);
+        kneePoleR.set(0.18, 0.96, 0.10);
+        footModeL = 'free';
+        footModeR = 'free';
+      } else if (id === 'romanian_deadlift' || nameLower.includes('deadlift')) {
+        // Barbell Romanian Deadlift (Pure Hip Hinge + Flat Spine + Barbell Gliding Along Shins)
+        const hinge = p; // Frame 0 = standing lockout, Frame 30 = deep hamstring stretch at mid-shin
+        const hipY = 0.93 - 0.07 * hinge;
+        const hipZ = -0.24 * hinge;
+        hipsPos.set(0, hipY, hipZ);
+
+        const torsoAngle = 1.22 * hinge; // Up to ~70 deg hip hinge
+        shoulderCenter.set(
+          0,
+          hipY + Math.cos(torsoAngle) * TORSO_LEN,
+          hipZ + Math.sin(torsoAngle) * TORSO_LEN
+        );
+        torsoAnterior.set(0, -Math.sin(torsoAngle), Math.cos(torsoAngle)).normalize();
+        headLookDir.set(0, -0.45 * hinge, 1).normalize();
+        spineArchOffset = 0.016;
+
+        // Barbell hangs straight down from shoulders, shaving the thighs/shins
+        const barY = 0.82 - 0.44 * hinge;
+        const barZ = 0.12;
+        barbellGroup.visible = true;
+        barbellGroup.position.set(0, barY, barZ);
+        handL.set(-0.26, barY, barZ);
+        handR.set(0.26, barY, barZ);
+        elbowPoleL.set(-0.34, barY + 0.28, -0.18);
+        elbowPoleR.set(0.34, barY + 0.28, -0.18);
+
+        footL.set(-0.15, 0.075, 0);
+        footR.set(0.15, 0.075, 0);
+        kneePoleL.set(-0.16, 0.50, 0.34);
+        kneePoleR.set(0.16, 0.50, 0.34);
+      } else if (id === 'bulgarian_split_squats' || nameLower.includes('bulgarian')) {
+        // Rear-Foot Elevated Bulgarian Split Squat
+        benchGroup.visible = true;
+        benchBackPivot.visible = false;
+        benchGroup.position.set(0, 0, -0.70);
+
+        const depth = p; // Frame 0 = standing split, Frame 30 = rear knee drops near floor
+        const hipY = 0.88 - 0.26 * depth;
+        hipsPos.set(0, hipY, -0.02);
+        const lean = 0.16 * depth;
+        shoulderCenter.set(
+          0,
+          hipY + Math.cos(lean) * TORSO_LEN,
+          -0.02 + Math.sin(lean) * TORSO_LEN
+        );
+        torsoAnterior.set(0, -Math.sin(lean), Math.cos(lean)).normalize();
+        headLookDir.set(0, 0, 1);
+
+        // Front leg (Left) planted forward; Rear foot (Right) elevated on bench pad
+        footL.set(-0.14, 0.075, 0.36);
+        footR.set(0.14, 0.45, -0.48);
+        kneePoleL.set(-0.16, 0.48, 0.88);
+        kneePoleR.set(0.16, 0.10, 0.18);
+        footModeL = 'flat';
+        footModeR = 'toes';
+
+        dumbbellL.visible = true;
+        dumbbellR.visible = true;
+        handL.set(-0.23, hipY - 0.08, 0.02);
+        handR.set(0.23, hipY - 0.08, 0.02);
+        dumbbellL.position.copy(handL);
+        dumbbellR.position.copy(handR);
+        dumbbellL.rotation.set(0, Math.PI / 2, 0);
+        dumbbellR.rotation.set(0, Math.PI / 2, 0);
+        elbowPoleL.set(-0.32, hipY + 0.18, -0.22);
+        elbowPoleR.set(0.32, hipY + 0.18, -0.22);
+      } else if (id === 'leg_curl' || nameLower.includes('leg curl')) {
+        // Lying Prone Hamstring Leg Curl on Bench
+        benchGroup.visible = true;
+        benchBackPivot.visible = true;
+        benchBackPivot.rotation.x = 0;
+        benchGroup.position.set(0, 0, 0.18);
+
+        const curl = p; // Frame 0 = legs extended, Frame 30 = heels curled 105 deg toward glutes
+        hipsPos.set(0, 0.48, -0.04);
+        shoulderCenter.set(0, 0.51, 0.52);
+        torsoAnterior.set(0, -1, 0.08).normalize();
+        headLookDir.set(0, -0.55, 0.83).normalize();
+
+        handL.set(-0.21, 0.38, 0.62);
+        handR.set(0.21, 0.38, 0.62);
+        elbowPoleL.set(-0.30, 0.35, 0.28);
+        elbowPoleR.set(0.30, 0.35, 0.28);
+
+        // Knees rest just behind bench pad at z = -0.46
+        const kL = new THREE.Vector3(-0.12, 0.46, -0.46);
+        const kR = new THREE.Vector3(0.12, 0.46, -0.46);
+        directKneeL = kL;
+        directKneeR = kR;
+        kneePoleL.set(-0.12, 0.10, -0.46);
+        kneePoleR.set(0.12, 0.10, -0.46);
+
+        const curlAngle = 0.12 + curl * 1.75; // 7 deg to 107 deg hamstring curl
+        const fY = kL.y + Math.sin(curlAngle) * CALF_LEN;
+        const fZ = kL.z - Math.cos(curlAngle) * CALF_LEN;
+        footL.set(-0.12, fY, fZ);
+        footR.set(0.12, fY, fZ);
+        footModeL = 'free';
+        footModeR = 'free';
+      } else if (id === 'calf_raises' || nameLower.includes('calf raise')) {
+        // Standing Dumbbell Calf Raises (Ankle Plantarflexion onto Balls of Feet)
+        const rise = p; // Frame 0 = heels flat, Frame 30 = high tiptoe gastrocnemius peak
+        const liftY = 0.085 * rise;
+        hipsPos.set(0, 0.94 + liftY, 0.02 * rise);
+        shoulderCenter.set(0, 0.94 + TORSO_LEN + liftY, 0.02 * rise);
+        torsoAnterior.set(0, 0, 1);
+        headLookDir.set(0, 0, 1);
+
+        dumbbellL.visible = true;
+        dumbbellR.visible = true;
+        handL.set(-0.23, 0.78 + liftY, 0.02);
+        handR.set(0.23, 0.78 + liftY, 0.02);
+        dumbbellL.position.copy(handL);
+        dumbbellR.position.copy(handR);
+        dumbbellL.rotation.set(0, Math.PI / 2, 0);
+        dumbbellR.rotation.set(0, Math.PI / 2, 0);
+        elbowPoleL.set(-0.32, 1.15 + liftY, -0.20);
+        elbowPoleR.set(0.32, 1.15 + liftY, -0.20);
+
+        footL.set(-0.14, 0.075 + liftY, 0.01 * rise);
+        footR.set(0.14, 0.075 + liftY, 0.01 * rise);
+        kneePoleL.set(-0.15, 0.52 + liftY, 0.45);
+        kneePoleR.set(0.15, 0.52 + liftY, 0.45);
+        anklePitchOffsetL = 0.48 * rise;
+        anklePitchOffsetR = 0.48 * rise;
+      } else if (id === 'rear_delt_fly' || nameLower.includes('rear delt')) {
+        // Bent-Over Dumbbell Rear Delt Reverse Fly
+        const fly = p; // Frame 0 = dumbbells hanging under chest, Frame 30 = wide horizontal abduction
+        const hipY = 0.85;
+        const hipZ = -0.18;
+        hipsPos.set(0, hipY, hipZ);
+
+        const torsoAngle = 1.08; // ~62 deg forward hip hinge
+        shoulderCenter.set(
+          0,
+          hipY + Math.cos(torsoAngle) * TORSO_LEN,
+          hipZ + Math.sin(torsoAngle) * TORSO_LEN
+        );
+        torsoAnterior.set(0, -Math.sin(torsoAngle), Math.cos(torsoAngle)).normalize();
+        headLookDir.set(0, -0.55, 0.83).normalize();
+
+        dumbbellL.visible = true;
+        dumbbellR.visible = true;
+        const flyAngle = (14 + 72 * fly) * (Math.PI / 180);
+        const reach = 0.52;
+        const sY = shoulderCenter.y - 0.04;
+        const sZ = shoulderCenter.z;
+        handL.set(-0.19 - Math.sin(flyAngle) * reach, sY - Math.cos(flyAngle) * reach, sZ);
+        handR.set(0.19 + Math.sin(flyAngle) * reach, sY - Math.cos(flyAngle) * reach, sZ);
+        dumbbellL.position.copy(handL);
+        dumbbellR.position.copy(handR);
+        dumbbellL.rotation.set(0, Math.PI / 2, 0);
+        dumbbellR.rotation.set(0, Math.PI / 2, 0);
+
+        elbowPoleL.set(-0.45, sY + 0.22, sZ - 0.15);
+        elbowPoleR.set(0.45, sY + 0.22, sZ - 0.15);
+
+        footL.set(-0.16, 0.075, 0);
+        footR.set(0.16, 0.075, 0);
+        kneePoleL.set(-0.17, 0.50, 0.36);
+        kneePoleR.set(0.17, 0.50, 0.36);
+      } else if (id === 'shrugs' || nameLower.includes('shrug')) {
+        // Standing Dumbbell Trap Shrugs (Clavicle & Shoulder Girdle Elevation)
+        const shrug = p; // Frame 0 = relaxed shoulders, Frame 30 = max upper trapezius elevation
+        shoulderElevationOffset = 0.075 * shrug;
+        hipsPos.set(0, 0.94, 0);
+        shoulderCenter.set(0, 0.94 + TORSO_LEN + 0.025 * shrug, 0);
+        torsoAnterior.set(0, 0, 1);
+        headLookDir.set(0, 0, 1);
+
+        dumbbellL.visible = true;
+        dumbbellR.visible = true;
+        handL.set(-0.23, 0.80 + 0.08 * shrug, 0.03);
+        handR.set(0.23, 0.80 + 0.08 * shrug, 0.03);
+        dumbbellL.position.copy(handL);
+        dumbbellR.position.copy(handR);
+        dumbbellL.rotation.set(0, Math.PI / 2, 0);
+        dumbbellR.rotation.set(0, Math.PI / 2, 0);
+        elbowPoleL.set(-0.34, 1.18 + 0.08 * shrug, -0.22);
+        elbowPoleR.set(0.34, 1.18 + 0.08 * shrug, -0.22);
+      } else if (id === 'crunches' || nameLower.includes('crunch')) {
+        // Supine Abdominal Crunches (Head toward -Z, Knees bent toward +Z)
+        const crunch = p; // Frame 0 = shoulders on mat, Frame 30 = upper torso curled up
+        hipsPos.set(0, 0.11, 0.10);
+        const curlAngle = 0.44 * crunch;
+        shoulderCenter.set(
+          0,
+          0.12 + Math.sin(curlAngle) * TORSO_LEN,
+          0.10 - Math.cos(curlAngle) * TORSO_LEN
+        );
+        torsoAnterior.set(0, Math.cos(curlAngle), Math.sin(curlAngle)).normalize();
+        headLookDir.set(0, Math.cos(curlAngle + 0.35), Math.sin(curlAngle + 0.35)).normalize();
+        spineArchOffset = -0.045 * crunch;
+
+        // Fingertips at temples, elbows flared
+        handL.set(-0.14, shoulderCenter.y + 0.12, shoulderCenter.z - 0.10);
+        handR.set(0.14, shoulderCenter.y + 0.12, shoulderCenter.z - 0.10);
+        elbowPoleL.set(-0.46, shoulderCenter.y + 0.10, shoulderCenter.z + 0.08);
+        elbowPoleR.set(0.46, shoulderCenter.y + 0.10, shoulderCenter.z + 0.08);
+
+        footL.set(-0.15, 0.075, 0.64);
+        footR.set(0.15, 0.075, 0.64);
+        kneePoleL.set(-0.16, 0.62, 0.36);
+        kneePoleR.set(0.16, 0.62, 0.36);
+      } else if (id === 'leg_raises' || nameLower.includes('leg raise')) {
+        // Supine Lying Straight-Leg Raises (Head at -Z, Straight Legs Raising to 90° Vertical)
+        const raise = p; // Frame 0 = legs hovering 6° above floor, Frame 30 = 88° vertical pike
+        hipsPos.set(0, 0.11, 0.06);
+        shoulderCenter.set(0, 0.12, 0.06 - TORSO_LEN);
+        torsoAnterior.set(0, 1, 0);
+        headLookDir.set(0, 0.92, 0.38).normalize();
+        spineArchOffset = -0.015 * raise;
+
+        // Hands pressed flat on floor beside hips for stability
+        handL.set(-0.26, 0.03, 0.08);
+        handR.set(0.26, 0.03, 0.08);
+        elbowPoleL.set(-0.34, 0.04, -0.22);
+        elbowPoleR.set(0.34, 0.04, -0.22);
+
+        const legAngle = (7 + 80 * raise) * (Math.PI / 180);
+        const legReach = 0.81;
+        const fY = 0.11 + Math.sin(legAngle) * legReach;
+        const fZ = 0.06 + Math.cos(legAngle) * legReach;
+        footL.set(-0.11, fY, fZ);
+        footR.set(0.11, fY, fZ);
+        // Knee pole points perpendicular to the leg toward the ceiling/head so knees stay straight
+        kneePoleL.set(-0.11, fY + Math.cos(legAngle) * 0.4, fZ - Math.sin(legAngle) * 0.4);
+        kneePoleR.set(0.11, fY + Math.cos(legAngle) * 0.4, fZ - Math.sin(legAngle) * 0.4);
+        footModeL = 'free';
+        footModeR = 'free';
+      } else if (id === 'russian_twists' || nameLower.includes('russian twist')) {
+        // Seated V-Sit Oblique Russian Twists (Left-to-Right Torso & Arm Rotation)
+        const twist = Math.sin(theta); // -1 (Left) -> 0 (Center) -> +1 (Right)
+        hipsPos.set(0, 0.12, -0.02);
+        shoulderCenter.set(0, 0.50, -0.40);
+
+        const rotAngle = twist * 0.65; // ±37 degrees oblique rotation
+        torsoAnterior.set(Math.sin(rotAngle), 0.58, Math.cos(rotAngle) * 0.81).normalize();
+        headLookDir.copy(torsoAnterior);
+        spineArchOffset = -0.015;
+
+        const claspX = Math.sin(rotAngle) * 0.32;
+        const claspZ = -0.08 - Math.abs(twist) * 0.06;
+        const claspY = 0.36;
+        handL.set(claspX - 0.04, claspY, claspZ);
+        handR.set(claspX + 0.04, claspY, claspZ);
+        elbowPoleL.set(claspX - 0.36, 0.32, -0.35);
+        elbowPoleR.set(claspX + 0.36, 0.32, -0.35);
+
+        // Knees bent with feet hovering in V-sit balance
+        footL.set(-0.11 - twist * 0.04, 0.22, 0.50);
+        footR.set(0.11 - twist * 0.04, 0.22, 0.50);
+        kneePoleL.set(-0.13, 0.58, 0.22);
+        kneePoleR.set(0.13, 0.58, 0.22);
+        footModeL = 'free';
+        footModeR = 'free';
+      } else if (id === 'glute_bridges' || clip === 'glute_bridge') {
+        // Supine Glute Bridge (Shoulders anchored at -Z, Feet planted at +Z, Hips driving up)
+        const bridge = p; // Frame 0 = hips on mat, Frame 30 = full hip extension bridge
+        shoulderCenter.set(0, 0.13, -0.44);
+        const hipY = 0.12 + 0.28 * bridge;
+        const hipZ = 0.10;
+        hipsPos.set(0, hipY, hipZ);
+
+        const tUp = new THREE.Vector3().subVectors(shoulderCenter, hipsPos).normalize();
+        // Since tUp points toward -Z, anterior (+Y/+Z) gives torsoRight = (+1, 0, 0)
+        torsoAnterior.set(0, -tUp.z, tUp.y).normalize();
+        headLookDir.set(0, 0.95, 0.30).normalize();
+        spineArchOffset = 0.015 * bridge;
+
+        handL.set(-0.26, 0.035, -0.02);
+        handR.set(0.26, 0.035, -0.02);
+        elbowPoleL.set(-0.34, 0.04, -0.26);
+        elbowPoleR.set(0.34, 0.04, -0.26);
+
+        footL.set(-0.15, 0.075, 0.52);
+        footR.set(0.15, 0.075, 0.52);
+        kneePoleL.set(-0.16, 0.68, 0.36);
+        kneePoleR.set(0.16, 0.68, 0.36);
+      } else if (id === 'plank' || (clip === 'plank' && id !== 'mountain_climbers')) {
+        // True Forearm Plank Hold (Elbows planted under shoulders, forearms flat on mat)
+        const breath = 0.008 * p;
+        const footY = 0.095;
+        const footZ = -0.84;
+        const hipY = 0.25 + breath;
+        const hipZ = -0.28;
+        const chestY = 0.33 + breath;
+        const chestZ = 0.27;
+
+        hipsPos.set(0, hipY, hipZ);
+        shoulderCenter.set(0, chestY, chestZ);
+        torsoAnterior.set(0, -1, 0.14).normalize();
+        headLookDir.set(0, -0.65, 0.76).normalize();
+        spineArchOffset = 0.004;
+
+        directElbowL = new THREE.Vector3(-0.20, 0.042, 0.28);
+        directElbowR = new THREE.Vector3(0.20, 0.042, 0.28);
+        handL.set(-0.16, 0.028, 0.54);
+        handR.set(0.16, 0.028, 0.54);
+        elbowPoleL.set(-0.26, 0.02, 0.05);
+        elbowPoleR.set(0.26, 0.02, 0.05);
+
+        footL.set(-0.12, footY, footZ);
+        footR.set(0.12, footY, footZ);
+        kneePoleL.set(-0.12, (hipY + footY) * 0.5 + 0.12, (hipZ + footZ) * 0.5);
+        kneePoleR.set(0.12, (hipY + footY) * 0.5 + 0.12, (hipZ + footZ) * 0.5);
+        footModeL = 'toes';
+        footModeR = 'toes';
+      } else if (id === 'mountain_climbers' || clip === 'mountain_climber') {
+        // High-Plank Alternating Mountain Climbers
+        const driveL = Math.max(0, Math.sin(theta));
+        const driveR = Math.max(0, -Math.sin(theta));
+        const bounce = 0.015 * Math.abs(Math.sin(theta));
+
+        const footY = 0.095;
+        const footZ = -0.84;
+        const hipY = 0.36 + bounce;
+        const hipZ = -0.28;
+        const chestY = 0.52 + bounce * 0.5;
+        const chestZ = 0.25;
+
+        hipsPos.set(0, hipY, hipZ);
+        shoulderCenter.set(0, chestY, chestZ);
+        torsoAnterior.set(0, -1, 0.22).normalize();
+        headLookDir.set(0, -0.52, 0.85).normalize();
+
+        handL.set(-0.22, 0.028, 0.48);
+        handR.set(0.22, 0.028, 0.48);
+        elbowPoleL.set(-0.34, chestY + 0.10, 0.22);
+        elbowPoleR.set(0.34, chestY + 0.10, 0.22);
+
+        footL.set(-0.12, footY + 0.12 * driveL, footZ + 0.44 * driveL);
+        footR.set(0.12, footY + 0.12 * driveR, footZ + 0.44 * driveR);
+        // When knee drives forward toward chest, knee pole drops toward floor/front
+        kneePoleL.set(-0.12, 0.22 - 0.10 * driveL, -0.45 + 0.65 * driveL);
+        kneePoleR.set(0.12, 0.22 - 0.10 * driveR, -0.45 + 0.65 * driveR);
+        footModeL = 'toes';
+        footModeR = 'toes';
+      } else if (id === 'burpees' || clip === 'burpee') {
+        // Multi-Phase Athletic Burpee (Squat -> Plank Thrust -> Squat Snap -> Vertical Jump & Overhead Clap)
+        // Smooth blend between Plank Phase (around Frame 30, p=1) and Jump Phase (around Frame 0/60, p=0)
+        const plankW = Math.pow(p, 1.2); // 0 = vertical jump peak, 1 = plank bottom
+        const jumpHeight = Math.max(0, (1 - p * 2.2)) * 0.18;
+
+        const hipY = (0.96 + jumpHeight) * (1 - plankW) + 0.26 * plankW;
+        const hipZ = 0.0 * (1 - plankW) + -0.30 * plankW;
+        const chestY = (1.52 + jumpHeight) * (1 - plankW) + 0.36 * plankW;
+        const chestZ = 0.0 * (1 - plankW) + 0.24 * plankW;
+
+        hipsPos.set(0, hipY, hipZ);
+        shoulderCenter.set(0, chestY, chestZ);
+
+        const tUp = new THREE.Vector3().subVectors(shoulderCenter, hipsPos).normalize();
+        torsoAnterior.set(0, -tUp.z, tUp.y).normalize();
+        headLookDir.set(0, 0.15 * (1 - plankW) - 0.45 * plankW, 1).normalize();
+
+        // Hands transition smoothly from overhead jump reach (y=2.04) to floor plank plant (y=0.028, z=0.48)
+        handL.set(
+          -0.18 - 0.05 * plankW,
+          (1.98 + jumpHeight) * (1 - plankW) + 0.028 * plankW,
+          0.06 * (1 - plankW) + 0.48 * plankW
+        );
+        handR.set(
+          0.18 + 0.05 * plankW,
+          (1.98 + jumpHeight) * (1 - plankW) + 0.028 * plankW,
+          0.06 * (1 - plankW) + 0.48 * plankW
+        );
+        elbowPoleL.set(-0.42, chestY + 0.12, -0.15 * (1 - plankW) + 0.18 * plankW);
+        elbowPoleR.set(0.42, chestY + 0.12, -0.15 * (1 - plankW) + 0.18 * plankW);
+
+        footL.set(
+          -0.14,
+          (0.075 + jumpHeight) * (1 - plankW) + 0.095 * plankW,
+          0.0 * (1 - plankW) + -0.84 * plankW
+        );
+        footR.set(
+          0.14,
+          (0.075 + jumpHeight) * (1 - plankW) + 0.095 * plankW,
+          0.0 * (1 - plankW) + -0.84 * plankW
+        );
+        kneePoleL.set(-0.15, (hipY + footL.y) * 0.5 + 0.15 * plankW, (hipZ + footL.z) * 0.5 + 0.45 * (1 - plankW));
+        kneePoleR.set(0.15, (hipY + footR.y) * 0.5 + 0.15 * plankW, (hipZ + footR.z) * 0.5 + 0.45 * (1 - plankW));
+        footModeL = plankW > 0.5 ? 'toes' : 'flat';
+        footModeR = plankW > 0.5 ? 'toes' : 'flat';
+      } else if (id === 'running_cardio' || id === 'brisk_walk' || clip === 'jog') {
+        // Contralateral Running & Brisk Walking Gait Cycle
+        const isWalk = id === 'brisk_walk' || nameLower.includes('walk');
+        const strideAmp = isWalk ? 0.25 : 0.36;
+        const liftAmp = isWalk ? 0.06 : 0.20;
+        const bounceAmp = isWalk ? 0.022 : 0.055;
+        const lean = isWalk ? 0.04 : 0.14;
+
+        const strideL = Math.sin(theta);
+        const strideR = -Math.sin(theta);
+        const liftL = Math.max(0, Math.cos(theta));
+        const liftR = Math.max(0, -Math.cos(theta));
+        const bounce = Math.abs(Math.sin(theta)) * bounceAmp;
+
+        const hipY = (isWalk ? 0.93 : 0.90) + bounce;
+        hipsPos.set(0, hipY, 0);
+        shoulderCenter.set(
+          0,
+          hipY + Math.cos(lean) * TORSO_LEN,
+          Math.sin(lean) * TORSO_LEN
+        );
+        const twist = 0.14 * strideL;
+        torsoAnterior.set(Math.sin(twist), -Math.sin(lean), Math.cos(lean) * Math.cos(twist)).normalize();
+        headLookDir.set(0, 0, 1);
+
+        // Contralateral Arm Swing (Right arm swings forward with Left leg, Left arm swings with Right leg)
+        // Forward swing brings hand up toward chest; backward swing drops hand past hip with elbow driving back
+        const swingL = strideR; // +1 = forward, -1 = backward
+        const swingR = strideL;
+
+        if (isWalk) {
+          handL.set(-0.23, 0.80 + bounce + 0.06 * swingL, 0.04 + 0.22 * swingL);
+          handR.set(0.23, 0.80 + bounce + 0.06 * swingR, 0.04 + 0.22 * swingR);
+          elbowPoleL.set(-0.32, 1.10 + bounce, -0.24 + 0.08 * swingL);
+          elbowPoleR.set(0.32, 1.10 + bounce, -0.24 + 0.08 * swingR);
+        } else {
+          handL.set(
+            -0.22 + 0.04 * Math.max(0, swingL),
+            0.94 + bounce + 0.14 * swingL,
+            0.08 + 0.22 * swingL
+          );
+          handR.set(
+            0.22 - 0.04 * Math.max(0, swingR),
+            0.94 + bounce + 0.14 * swingR,
+            0.08 + 0.22 * swingR
+          );
+          elbowPoleL.set(-0.34, 1.02 + bounce - 0.06 * swingL, -0.32 + 0.10 * swingL);
+          elbowPoleR.set(0.34, 1.02 + bounce - 0.06 * swingR, -0.32 + 0.10 * swingR);
+        }
+
+        const footLiftL = isWalk
+          ? liftL * 0.06
+          : Math.max(0, strideL) * 0.14 + Math.max(0, -strideL) * 0.18 + liftL * 0.08;
+        const footLiftR = isWalk
+          ? liftR * 0.06
+          : Math.max(0, strideR) * 0.14 + Math.max(0, -strideR) * 0.18 + liftR * 0.08;
+
+        footL.set(-0.13, 0.075 + footLiftL, strideL * strideAmp);
+        footR.set(0.13, 0.075 + footLiftR, strideR * strideAmp);
+        kneePoleL.set(-0.14, 0.52 + Math.max(0, strideL) * 0.18, 0.52 + strideL * 0.28);
+        kneePoleR.set(0.14, 0.52 + Math.max(0, strideR) * 0.18, 0.52 + strideR * 0.28);
+        anklePitchOffsetL = -strideL * 0.35;
+        anklePitchOffsetR = -strideR * 0.35;
+      } else if (id === 'stretching_flow' || nameLower.includes('stretching')) {
+        // Full-Body Overhead Reach to Deep Hamstring Forward Fold Stretch
+        const fold = p; // Frame 0 = tall overhead stretch, Frame 30 = deep hamstring forward fold
+        const hipY = 0.93 - 0.05 * fold;
+        const hipZ = -0.16 * fold;
+        hipsPos.set(0, hipY, hipZ);
+
+        const torsoAngle = -0.12 * (1 - fold) + 1.45 * fold;
+        shoulderCenter.set(
+          0,
+          hipY + Math.cos(torsoAngle) * TORSO_LEN,
+          hipZ + Math.sin(torsoAngle) * TORSO_LEN
+        );
+        torsoAnterior.set(0, -Math.sin(torsoAngle), Math.cos(torsoAngle)).normalize();
+        headLookDir.set(0, Math.cos(torsoAngle) * 0.2 - Math.sin(torsoAngle) * 0.8, Math.cos(torsoAngle)).normalize();
+        spineArchOffset = 0.02 * (1 - fold) - 0.025 * fold;
+
+        handL.set(
+          -0.20,
+          1.96 * (1 - fold) + 0.22 * fold,
+          -0.04 * (1 - fold) + 0.18 * fold
+        );
+        handR.set(
+          0.20,
+          1.96 * (1 - fold) + 0.22 * fold,
+          -0.04 * (1 - fold) + 0.18 * fold
+        );
+        elbowPoleL.set(-0.38, shoulderCenter.y, shoulderCenter.z - 0.25);
+        elbowPoleR.set(0.38, shoulderCenter.y, shoulderCenter.z - 0.25);
+
+        footL.set(-0.15, 0.075, 0);
+        footR.set(0.15, 0.075, 0);
+        kneePoleL.set(-0.16, 0.50, 0.40);
+        kneePoleR.set(0.16, 0.50, 0.40);
+      } else if (id === 'mobility_work' || nameLower.includes('mobility')) {
+        // Deep Squat Thoracic Windmill Mobility Rotation
+        const rot = Math.sin(theta); // Alternating left/right thoracic windmill in deep squat
+        const depth = 0.35 + 0.65 * p;
+        const hipY = 0.92 - 0.34 * depth;
+        const hipZ = -0.18 * depth;
+        hipsPos.set(0, hipY, hipZ);
+
+        const lean = 0.38 * depth;
+        shoulderCenter.set(
+          0,
+          hipY + Math.cos(lean) * TORSO_LEN,
+          hipZ + Math.sin(lean) * TORSO_LEN
+        );
+        torsoAnterior.set(rot * 0.45, -Math.sin(lean), Math.cos(lean)).normalize();
+        headLookDir.set(rot * 0.55, 0.15 * Math.abs(rot), 1).normalize();
+
+        const liftL = Math.max(0, -rot);
+        const liftR = Math.max(0, rot);
+        handL.set(-0.16 - 0.24 * liftL, 0.28 + 1.25 * liftL, 0.22 - 0.12 * liftL);
+        handR.set(0.16 + 0.24 * liftR, 0.28 + 1.25 * liftR, 0.22 - 0.12 * liftR);
+        elbowPoleL.set(-0.36, shoulderCenter.y - 0.10, -0.18);
+        elbowPoleR.set(0.36, shoulderCenter.y - 0.10, -0.18);
+
+        footL.set(-0.20, 0.075, 0.02);
+        footR.set(0.20, 0.075, 0.02);
+        kneePoleL.set(-0.26, 0.48, 0.58);
+        kneePoleR.set(0.26, 0.48, 0.58);
       } else {
+        // Core Blueprint & Remaining Standard Clips (`pushup`, `diamond_pushup`, `squat`, `pullup`, `lunge`, `stretch_flow`, `idle`)
         switch (clip) {
           case 'pushup':
           case 'diamond_pushup': {
@@ -1532,42 +2686,39 @@ export function TrainerStudio3D({
               variant === 'narrow_press' ||
               nameLower.includes('diamond') ||
               nameLower.includes('close-grip');
-            const isDecline = nameLower.includes('decline');
-            const isPike = variant === 'overhead_push' || nameLower.includes('pike');
+            const isDecline = id === 'decline_pushup' || nameLower.includes('decline');
 
-            const handSpread = isDiamond ? 0.10 : 0.25;
-            const footY = isDecline ? 0.40 : 0.095;
+            const handSpread = isDiamond
+              ? nameLower.includes('close-grip')
+                ? 0.16
+                : 0.09
+              : 0.25;
+            const footY = isDecline ? 0.44 : 0.095;
             const footZ = -0.84;
 
             if (isDecline) {
               benchGroup.visible = true;
-              benchGroup.position.set(0, 0, -0.95);
+              benchBackPivot.visible = false;
+              benchGroup.position.set(0, 0, -1.06);
             }
 
-            if (isPike) {
-              hipsPos.set(0, 0.84 - 0.08 * p, -0.16);
-              shoulderCenter.set(0, 0.46 - 0.18 * p, 0.34);
-              torsoAnterior.set(0, -0.65, -0.75).normalize();
-              headLookDir.set(0, -0.85, 0.52).normalize();
-            } else {
-              const plankAngle = (5.2 + 16.3 * lift) * (Math.PI / 180);
-              const legDist = 0.818;
-              const hipY = footY + legDist * Math.sin(plankAngle);
-              const hipZ = footZ + legDist * Math.cos(plankAngle);
-              const chestY = hipY + TORSO_LEN * Math.sin(plankAngle);
-              const chestZ = hipZ + TORSO_LEN * Math.cos(plankAngle);
+            const plankAngle = (5.2 + 16.3 * lift) * (Math.PI / 180);
+            const legDist = 0.818;
+            const hipY = footY + legDist * Math.sin(plankAngle);
+            const hipZ = footZ + legDist * Math.cos(plankAngle);
+            const chestY = hipY + TORSO_LEN * Math.sin(plankAngle);
+            const chestZ = hipZ + TORSO_LEN * Math.cos(plankAngle);
 
-              hipsPos.set(0, hipY, hipZ);
-              shoulderCenter.set(0, chestY, chestZ);
-              torsoAnterior.set(0, -1, 0.18).normalize();
-              headLookDir.set(0, -0.52, 0.85).normalize();
-              spineArchOffset = 0.004;
-            }
+            hipsPos.set(0, hipY, hipZ);
+            shoulderCenter.set(0, chestY, chestZ);
+            torsoAnterior.set(0, -1, 0.18).normalize();
+            headLookDir.set(0, -0.52, 0.85).normalize();
+            spineArchOffset = 0.004;
 
             handL.set(-handSpread, 0.028, 0.50);
             handR.set(handSpread, 0.028, 0.50);
 
-            const elbowSpread = isDiamond ? 0.24 : 0.44;
+            const elbowSpread = isDiamond ? 0.23 : 0.44;
             elbowPoleL.set(-elbowSpread, shoulderCenter.y + 0.18, 0.16);
             elbowPoleR.set(elbowSpread, shoulderCenter.y + 0.18, 0.16);
 
@@ -1575,88 +2726,59 @@ export function TrainerStudio3D({
             footR.set(0.11, footY, footZ);
             kneePoleL.set(-0.11, (hipsPos.y + footY) * 0.5 + 0.15, (hipsPos.z + footZ) * 0.5);
             kneePoleR.set(0.11, (hipsPos.y + footY) * 0.5 + 0.15, (hipsPos.z + footZ) * 0.5);
+            footModeL = 'toes';
+            footModeR = 'toes';
             break;
           }
 
           case 'squat': {
-            const isDeadlift = variant === 'hinge' || nameLower.includes('deadlift');
             const depth = p;
+            const hipY = 0.94 - 0.37 * depth;
+            const hipZ = -0.22 * depth;
+            hipsPos.set(0, hipY, hipZ);
 
-            if (isDeadlift) {
-              const hipY = 0.92 - 0.15 * depth;
-              const hipZ = -0.22 * depth;
-              hipsPos.set(0, hipY, hipZ);
-              const torsoAngle = 0.88 * depth;
-              shoulderCenter.set(
-                0,
-                hipY + Math.cos(torsoAngle) * TORSO_LEN,
-                hipZ + Math.sin(torsoAngle) * TORSO_LEN
-              );
-              torsoAnterior.set(0, -Math.sin(torsoAngle), Math.cos(torsoAngle)).normalize();
-              headLookDir.set(0, -0.25 * depth, 1).normalize();
+            const leanAngle = 0.42 * depth;
+            shoulderCenter.set(
+              0,
+              hipY + Math.cos(leanAngle) * TORSO_LEN,
+              hipZ + Math.sin(leanAngle) * TORSO_LEN
+            );
+            torsoAnterior.set(0, -Math.sin(leanAngle), Math.cos(leanAngle)).normalize();
+            headLookDir.set(0, 0.04, 1).normalize();
 
-              const barY = shoulderCenter.y - 0.52;
-              const barZ = 0.14;
-              barbellGroup.visible = true;
-              barbellGroup.position.set(0, barY, barZ);
-              handL.set(-0.26, barY, barZ);
-              handR.set(0.26, barY, barZ);
-              elbowPoleL.set(-0.36, barY + 0.26, -0.12);
-              elbowPoleR.set(0.36, barY + 0.26, -0.12);
+            footL.set(-0.17, 0.075, 0.02);
+            footR.set(0.17, 0.075, 0.02);
+            kneePoleL.set(-0.23, 0.48, 0.58);
+            kneePoleR.set(0.23, 0.48, 0.58);
 
-              footL.set(-0.15, 0.075, 0);
-              footR.set(0.15, 0.075, 0);
-              kneePoleL.set(-0.16, 0.50, 0.36);
-              kneePoleR.set(0.16, 0.50, 0.36);
-            } else {
-              const hipY = 0.94 - 0.37 * depth;
-              const hipZ = -0.22 * depth;
-              hipsPos.set(0, hipY, hipZ);
+            // Blueprint Counterbalance Arms:
+            // Extend straight forward and parallel in the sagittal plane (x = ±0.195) as hips descend
+            const armSwingAngle = depth * (Math.PI * 0.49);
+            const reach = 0.555;
+            const sL = new THREE.Vector3(-0.195, shoulderCenter.y - 0.05, shoulderCenter.z);
+            const sR = new THREE.Vector3(0.195, shoulderCenter.y - 0.05, shoulderCenter.z);
 
-              const leanAngle = 0.42 * depth;
-              shoulderCenter.set(
-                0,
-                hipY + Math.cos(leanAngle) * TORSO_LEN,
-                hipZ + Math.sin(leanAngle) * TORSO_LEN
-              );
-              torsoAnterior.set(0, -Math.sin(leanAngle), Math.cos(leanAngle)).normalize();
-              headLookDir.set(0, 0.04, 1).normalize();
+            handL.set(
+              sL.x,
+              sL.y - Math.cos(armSwingAngle) * reach,
+              sL.z + Math.sin(armSwingAngle) * reach + 0.03 * (1 - depth)
+            );
+            handR.set(
+              sR.x,
+              sR.y - Math.cos(armSwingAngle) * reach,
+              sR.z + Math.sin(armSwingAngle) * reach + 0.03 * (1 - depth)
+            );
 
-              footL.set(-0.17, 0.075, 0.02);
-              footR.set(0.17, 0.075, 0.02);
-              kneePoleL.set(-0.23, 0.48, 0.58);
-              kneePoleR.set(0.23, 0.48, 0.58);
-
-              // Blueprint Counterbalance Arms:
-              // Extend straight forward and parallel in the sagittal plane (x = ±0.195) as hips descend
-              const armSwingAngle = depth * (Math.PI * 0.49); // 0 rad (down at sides) to ~88 deg (parallel forward horizontal)
-              const reach = 0.555;
-              const sL = new THREE.Vector3(-0.195, shoulderCenter.y - 0.05, shoulderCenter.z);
-              const sR = new THREE.Vector3(0.195, shoulderCenter.y - 0.05, shoulderCenter.z);
-
-              handL.set(
-                sL.x,
-                sL.y - Math.cos(armSwingAngle) * reach,
-                sL.z + Math.sin(armSwingAngle) * reach + 0.03 * (1 - depth)
-              );
-              handR.set(
-                sR.x,
-                sR.y - Math.cos(armSwingAngle) * reach,
-                sR.z + Math.sin(armSwingAngle) * reach + 0.03 * (1 - depth)
-              );
-
-              // Keep elbow pole strictly in the sagittal plane below/behind the arm so elbows never flare outward
-              elbowPoleL.set(
-                sL.x - 0.02 * (1 - depth),
-                sL.y - Math.cos(armSwingAngle) * 0.28 - 0.22 * depth,
-                sL.z + Math.sin(armSwingAngle) * 0.24 - 0.22 * (1 - depth)
-              );
-              elbowPoleR.set(
-                sR.x + 0.02 * (1 - depth),
-                sR.y - Math.cos(armSwingAngle) * 0.28 - 0.22 * depth,
-                sR.z + Math.sin(armSwingAngle) * 0.24 - 0.22 * (1 - depth)
-              );
-            }
+            elbowPoleL.set(
+              sL.x - 0.02 * (1 - depth),
+              sL.y - Math.cos(armSwingAngle) * 0.28 - 0.22 * depth,
+              sL.z + Math.sin(armSwingAngle) * 0.24 - 0.22 * (1 - depth)
+            );
+            elbowPoleR.set(
+              sR.x + 0.02 * (1 - depth),
+              sR.y - Math.cos(armSwingAngle) * 0.28 - 0.22 * depth,
+              sR.z + Math.sin(armSwingAngle) * 0.24 - 0.22 * (1 - depth)
+            );
             break;
           }
 
@@ -1664,8 +2786,6 @@ export function TrainerStudio3D({
             pullupRigGroup.visible = true;
             const pull = p;
 
-            // Body hangs beneath bar (y=2.10, z=0) and pulls up with slight thoracic arch behind bar
-            // so the chin clears the bar cleanly without the head intersecting the crossbar
             const hipY = 0.94 + 0.36 * pull;
             const hipZ = -0.05 - 0.06 * pull;
             hipsPos.set(0, hipY, hipZ);
@@ -1689,114 +2809,60 @@ export function TrainerStudio3D({
             footR.set(0.10, hipY - 0.78, hipZ - 0.06 - 0.04 * pull);
             kneePoleL.set(-0.12, hipY - 0.38, hipZ + 0.24);
             kneePoleR.set(0.12, hipY - 0.38, hipZ + 0.24);
+            footModeL = 'free';
+            footModeR = 'free';
             break;
           }
 
           case 'lunge': {
+            // Walking Lunges (Stepping into deep 90/90 lunge with dumbbells)
             const depth = p;
-            const hipY = 0.90 - 0.25 * depth;
+            const hipY = 0.90 - 0.26 * depth;
             hipsPos.set(0, hipY, 0);
             shoulderCenter.set(0, hipY + TORSO_LEN, 0.03 * depth);
             torsoAnterior.set(0, -0.05 * depth, 1).normalize();
             headLookDir.set(0, 0, 1);
 
-            footL.set(-0.14, 0.075, 0.38);
-            footR.set(0.14, 0.085, -0.44);
-            // Both knee poles point distinctly forward (+Z) so rear knee bends anatomically forward/down
+            footL.set(-0.14, 0.075, 0.18 + 0.22 * depth);
+            footR.set(0.14, 0.085, -0.22 - 0.22 * depth);
             kneePoleL.set(-0.16, 0.48, 0.85);
             kneePoleR.set(0.16, 0.12, 0.25);
+            footModeL = 'flat';
+            footModeR = 'toes';
 
-            handL.set(-0.23, hipY + 0.06, 0.05);
-            handR.set(0.23, hipY + 0.06, 0.05);
-            elbowPoleL.set(-0.34, hipY + 0.28, -0.20);
-            elbowPoleR.set(0.34, hipY + 0.28, -0.20);
-            break;
-          }
-
-          case 'plank':
-          case 'mountain_climber':
-          case 'crunch':
-          case 'glute_bridge': {
-            if (clip === 'crunch' || clip === 'glute_bridge') {
-              const lift = p;
-              const isBridge = clip === 'glute_bridge';
-              hipsPos.set(0, isBridge ? 0.14 + 0.22 * lift : 0.12, -0.10);
-              shoulderCenter.set(
-                0,
-                isBridge ? 0.14 : 0.14 + 0.20 * lift,
-                isBridge ? 0.44 : 0.38 - 0.08 * lift
-              );
-              torsoAnterior.set(0, 1, isBridge ? 0.2 * lift : -0.35 * lift).normalize();
-              headLookDir.set(0, 0.85, -0.5).normalize();
-
-              handL.set(
-                -0.22,
-                isBridge ? 0.04 : shoulderCenter.y + 0.10,
-                isBridge ? 0.0 : shoulderCenter.z + 0.06
-              );
-              handR.set(
-                0.22,
-                isBridge ? 0.04 : shoulderCenter.y + 0.10,
-                isBridge ? 0.0 : shoulderCenter.z + 0.06
-              );
-              elbowPoleL.set(-0.42, shoulderCenter.y + 0.05, shoulderCenter.z - 0.10);
-              elbowPoleR.set(0.42, shoulderCenter.y + 0.05, shoulderCenter.z - 0.10);
-
-              footL.set(-0.14, 0.075, -0.68);
-              footR.set(0.14, 0.075, -0.68);
-              kneePoleL.set(-0.16, 0.52, -0.38);
-              kneePoleR.set(0.16, 0.52, -0.38);
-            } else {
-              const isClimber = clip === 'mountain_climber';
-              const plankAngle = 16 * (Math.PI / 180);
-              const footY = 0.095;
-              const footZ = -0.84;
-              const legDist = 0.818;
-              const hipY = footY + legDist * Math.sin(plankAngle);
-              const hipZ = footZ + legDist * Math.cos(plankAngle);
-              const chestY = hipY + TORSO_LEN * Math.sin(plankAngle);
-              const chestZ = hipZ + TORSO_LEN * Math.cos(plankAngle);
-
-              hipsPos.set(0, hipY, hipZ);
-              shoulderCenter.set(0, chestY, chestZ);
-              torsoAnterior.set(0, -1, 0.18).normalize();
-              headLookDir.set(0, -0.52, 0.85).normalize();
-
-              handL.set(-0.22, 0.028, 0.50);
-              handR.set(0.22, 0.028, 0.50);
-              elbowPoleL.set(-0.34, chestY + 0.10, 0.25);
-              elbowPoleR.set(0.34, chestY + 0.10, 0.25);
-
-              footL.set(
-                -0.12,
-                footY + (isClimber ? 0.12 * p : 0),
-                footZ + (isClimber ? 0.36 * p : 0)
-              );
-              footR.set(
-                0.12,
-                footY + (isClimber ? 0.12 * (1 - p) : 0),
-                footZ + (isClimber ? 0.36 * (1 - p) : 0)
-              );
-              kneePoleL.set(-0.12, hipY + 0.12, (hipZ + footL.z) * 0.5);
-              kneePoleR.set(0.12, hipY + 0.12, (hipZ + footR.z) * 0.5);
-            }
+            dumbbellL.visible = true;
+            dumbbellR.visible = true;
+            handL.set(-0.23, hipY - 0.06, 0.02);
+            handR.set(0.23, hipY - 0.06, 0.02);
+            dumbbellL.position.copy(handL);
+            dumbbellR.position.copy(handR);
+            dumbbellL.rotation.set(0, Math.PI / 2, 0);
+            dumbbellR.rotation.set(0, Math.PI / 2, 0);
+            elbowPoleL.set(-0.34, hipY + 0.24, -0.20);
+            elbowPoleR.set(0.34, hipY + 0.24, -0.20);
             break;
           }
 
           case 'stretch_flow': {
             if (variant === 'curl') {
-              // Bicep Curls: Upper arms stay pinned vertically at the sides of the ribcage!
+              // Standing Barbell Curl / EZ Bar Curl / Hammer Curl
               hipsPos.set(0, 0.94, 0);
               shoulderCenter.set(0, 0.94 + TORSO_LEN, 0);
               torsoAnterior.set(0, 0, 1);
               headLookDir.set(0, 0, 1);
 
-              const isBarbellCurl = nameLower.includes('barbell') || nameLower.includes('ez bar');
-              const flexAngle = 0.20 + p * 2.05; // 11 deg to 129 deg flexion
+              const isBarbellCurl =
+                id === 'barbell_curl' ||
+                id === 'ez_bar_curl' ||
+                nameLower.includes('barbell') ||
+                nameLower.includes('ez bar');
+              const flexAngle = 0.20 + p * 2.05;
               const eL = new THREE.Vector3(-0.22, 1.15, 0.02);
               const eR = new THREE.Vector3(0.22, 1.15, 0.02);
               directElbowL = eL;
               directElbowR = eR;
+              elbowPoleL.set(-0.25, 1.15, -0.30);
+              elbowPoleR.set(0.25, 1.15, -0.30);
 
               const handY = eL.y - Math.cos(flexAngle) * FOREARM_LEN;
               const handZ = eL.z + Math.sin(flexAngle) * FOREARM_LEN;
@@ -1811,44 +2877,11 @@ export function TrainerStudio3D({
                 dumbbellR.visible = true;
                 dumbbellL.position.copy(handL);
                 dumbbellR.position.copy(handR);
-                if (nameLower.includes('hammer')) {
+                if (id === 'hammer_curl' || nameLower.includes('hammer')) {
                   dumbbellL.rotation.set(0, Math.PI / 2, 0);
                   dumbbellR.rotation.set(0, Math.PI / 2, 0);
                 }
               }
-            } else if (variant === 'tricep_ext') {
-              hipsPos.set(0, 0.94, 0);
-              shoulderCenter.set(0, 0.94 + TORSO_LEN, 0);
-              torsoAnterior.set(0, 0, 1);
-              headLookDir.set(0, 0, 1);
-              dumbbellL.visible = true;
-              dumbbellR.visible = true;
-
-              if (nameLower.includes('overhead') || nameLower.includes('skull')) {
-                // Overhead Tricep Extension: elbows high, forearms extend overhead
-                const eL = new THREE.Vector3(-0.18, 1.72, 0.06);
-                const eR = new THREE.Vector3(0.18, 1.72, 0.06);
-                directElbowL = eL;
-                directElbowR = eR;
-                const extAngle = -0.75 + p * 2.15;
-                const handY = eL.y + Math.sin(extAngle) * FOREARM_LEN;
-                const handZ = eL.z - Math.cos(extAngle) * FOREARM_LEN;
-                handL.set(-0.16, handY, handZ);
-                handR.set(0.16, handY, handZ);
-              } else {
-                // Tricep Pushdown / Rope Pushdown: elbows pinned at sides, forearms extend down
-                const eL = new THREE.Vector3(-0.22, 1.15, 0.03);
-                const eR = new THREE.Vector3(0.22, 1.15, 0.03);
-                directElbowL = eL;
-                directElbowR = eR;
-                const extAngle = 1.65 - p * 1.45; // 95 deg flexion down to 11 deg lockout
-                const handY = eL.y - Math.cos(extAngle) * FOREARM_LEN;
-                const handZ = eL.z + Math.sin(extAngle) * FOREARM_LEN;
-                handL.set(-0.22, handY, handZ);
-                handR.set(0.22, handY, handZ);
-              }
-              dumbbellL.position.copy(handL);
-              dumbbellR.position.copy(handR);
             } else if (variant === 'overhead_push') {
               hipsPos.set(0, 0.94, 0);
               shoulderCenter.set(0, 0.94 + TORSO_LEN, 0);
@@ -1858,11 +2891,10 @@ export function TrainerStudio3D({
               const sL = new THREE.Vector3(-0.195, 1.445, 0);
               const sR = new THREE.Vector3(0.195, 1.445, 0);
 
-              if (nameLower.includes('lateral')) {
-                // Lateral Raises: Long, graceful 0.53m reach abducting in scapular plane with elbows leading on top!
+              if (id === 'lateral_raises' || nameLower.includes('lateral')) {
                 dumbbellL.visible = true;
                 dumbbellR.visible = true;
-                const abdAngle = (12 + 76 * p) * (Math.PI / 180); // 12 deg at thigh to 88 deg at shoulder height
+                const abdAngle = (12 + 76 * p) * (Math.PI / 180);
                 const reach = 0.53;
                 handL.set(
                   sL.x - Math.sin(abdAngle) * reach,
@@ -1874,7 +2906,6 @@ export function TrainerStudio3D({
                   sR.y - Math.cos(abdAngle) * reach,
                   0.10 * Math.sin(abdAngle)
                 );
-                // Elbow pole ABOVE and slightly behind the arm so elbows lead naturally and never fold inward!
                 elbowPoleL.set(
                   sL.x - Math.sin(abdAngle) * 0.27,
                   sL.y - Math.cos(abdAngle) * 0.27 + 0.22,
@@ -1887,94 +2918,71 @@ export function TrainerStudio3D({
                 );
                 dumbbellL.position.copy(handL);
                 dumbbellR.position.copy(handR);
-                // Orient dumbbell handle along Z (front-to-back in hand) during lateral abduction
                 dumbbellL.rotation.set(0, Math.PI / 2, 0);
                 dumbbellR.rotation.set(0, Math.PI / 2, 0);
-              } else if (nameLower.includes('front')) {
-                // Front Raises: Long 0.53m reach raising forward in sagittal plane
+              } else if (id === 'front_raises' || nameLower.includes('front')) {
                 dumbbellL.visible = true;
                 dumbbellR.visible = true;
                 const flxAngle = (10 + 80 * p) * (Math.PI / 180);
                 const reach = 0.53;
                 handL.set(sL.x, sL.y - Math.cos(flxAngle) * reach, Math.sin(flxAngle) * reach + 0.04);
                 handR.set(sR.x, sR.y - Math.cos(flxAngle) * reach, Math.sin(flxAngle) * reach + 0.04);
-                elbowPoleL.set(-0.34, sL.y - Math.cos(flxAngle) * 0.26, Math.sin(flxAngle) * 0.26 - 0.16);
-                elbowPoleR.set(0.34, sR.y - Math.cos(flxAngle) * 0.26, Math.sin(flxAngle) * 0.26 - 0.16);
+                elbowPoleL.set(-0.22, sL.y - Math.cos(flxAngle) * 0.26 - 0.18, Math.sin(flxAngle) * 0.24 - 0.18);
+                elbowPoleR.set(0.22, sR.y - Math.cos(flxAngle) * 0.26 - 0.18, Math.sin(flxAngle) * 0.24 - 0.18);
                 dumbbellL.position.copy(handL);
                 dumbbellR.position.copy(handR);
               } else {
-                // Overhead Barbell Press
-                const barY = 1.48 + 0.48 * p;
-                const barZ = 0.14 - 0.10 * p;
+                // Overhead Barbell Military Press
+                const barY = 1.46 + 0.50 * p;
+                const barZ = 0.14 - 0.11 * p;
                 barbellGroup.visible = true;
                 barbellGroup.position.set(0, barY, barZ);
                 handL.set(-0.30, barY, barZ);
                 handR.set(0.30, barY, barZ);
-                elbowPoleL.set(-0.46, 1.18, 0.20);
-                elbowPoleR.set(0.46, 1.18, 0.20);
+                elbowPoleL.set(-0.44, 1.18, 0.22);
+                elbowPoleR.set(0.44, 1.18, 0.22);
               }
             } else if (variant === 'row_pull') {
-              const hipY = 0.86;
-              const hipZ = -0.14;
+              // Bent-Over Barbell Row
+              const hipY = 0.85;
+              const hipZ = -0.16;
               hipsPos.set(0, hipY, hipZ);
-              const torsoAngle = 0.62;
+              const torsoAngle = 0.72;
               shoulderCenter.set(
                 0,
                 hipY + Math.cos(torsoAngle) * TORSO_LEN,
                 hipZ + Math.sin(torsoAngle) * TORSO_LEN
               );
               torsoAnterior.set(0, -Math.sin(torsoAngle), Math.cos(torsoAngle)).normalize();
-              headLookDir.set(0, -0.22, 0.97).normalize();
+              headLookDir.set(0, -0.32, 0.94).normalize();
 
-              const barY = 0.60 + 0.26 * p;
-              const barZ = 0.24 - 0.12 * p;
+              const barY = 0.54 + 0.30 * p;
+              const barZ = 0.24 - 0.16 * p;
               barbellGroup.visible = true;
               barbellGroup.position.set(0, barY, barZ);
               handL.set(-0.28, barY, barZ);
               handR.set(0.28, barY, barZ);
-              elbowPoleL.set(-0.42, shoulderCenter.y + 0.15, hipZ - 0.28);
-              elbowPoleR.set(0.42, shoulderCenter.y + 0.15, hipZ - 0.28);
-            } else {
-              // Full-Body Stretching / Chest Fly
-              hipsPos.set(0, 0.94, 0);
-              shoulderCenter.set(0, 0.94 + TORSO_LEN, 0);
-              torsoAnterior.set(0, 0, 1);
-              headLookDir.set(0, 0, 1);
-              const sL = new THREE.Vector3(-0.195, 1.445, 0);
-              const sR = new THREE.Vector3(0.195, 1.445, 0);
-              const abdAngle = (25 + 65 * p) * (Math.PI / 180);
-              const reach = 0.53;
-              handL.set(sL.x - Math.sin(abdAngle) * reach, sL.y - Math.cos(abdAngle) * reach, 0.14);
-              handR.set(sR.x + Math.sin(abdAngle) * reach, sR.y - Math.cos(abdAngle) * reach, 0.14);
-              elbowPoleL.set(-0.40, 1.15, -0.18);
-              elbowPoleR.set(0.40, 1.15, -0.18);
+              elbowPoleL.set(-0.42, shoulderCenter.y + 0.18, hipZ - 0.28);
+              elbowPoleR.set(0.42, shoulderCenter.y + 0.18, hipZ - 0.28);
             }
-
-            footL.set(-0.15, 0.075, 0);
-            footR.set(0.15, 0.075, 0);
-            kneePoleL.set(-0.16, 0.52, 0.45);
-            kneePoleR.set(0.16, 0.52, 0.45);
             break;
           }
 
-          case 'burpee':
-          case 'jog':
           case 'idle':
           default: {
-            const bounce = clip === 'jog' || clip === 'burpee' ? 0.06 * p : 0.015 * p;
-            hipsPos.set(0, 0.94 + bounce, 0);
-            shoulderCenter.set(0, 0.94 + TORSO_LEN + bounce, 0);
+            const breath = 0.014 * p;
+            hipsPos.set(0, 0.94 + breath * 0.5, 0);
+            shoulderCenter.set(0, 0.94 + TORSO_LEN + breath, 0);
             torsoAnterior.set(0, 0, 1);
             headLookDir.set(0, 0, 1);
 
-            const armSwing = clip === 'jog' ? 0.28 * (p - 0.5) : 0.04 * p;
-            handL.set(-0.23, 0.78 + bounce + 0.12 * p, 0.08 + armSwing);
-            handR.set(0.23, 0.78 + bounce + 0.12 * p, 0.08 - armSwing);
+            handL.set(-0.23, 0.78 + breath, 0.06);
+            handR.set(0.23, 0.78 + breath, 0.06);
             elbowPoleL.set(-0.34, 1.15, -0.22);
             elbowPoleR.set(0.34, 1.15, -0.22);
 
-            footL.set(-0.15, 0.075 + (clip === 'jog' ? 0.10 * p : 0), 0);
-            footR.set(0.15, 0.075 + (clip === 'jog' ? 0.10 * (1 - p) : 0), 0);
+            footL.set(-0.15, 0.075, 0);
+            footR.set(0.15, 0.075, 0);
             kneePoleL.set(-0.16, 0.52, 0.45);
             kneePoleR.set(0.16, 0.52, 0.45);
             break;
@@ -2000,7 +3008,6 @@ export function TrainerStudio3D({
         if (s <= 0.70) {
           const u = s / 0.70;
           outCenter.lerpVectors(pelvisBottom, shoulderCenter, u);
-          // Subtle anatomical lumbar/thoracic curve above the hips
           const archU = Math.max(0, (u - 0.12) / 0.88);
           const arch = Math.sin(archU * Math.PI) * spineArchOffset;
           outCenter.addScaledVector(torsoAnterior, arch);
@@ -2020,11 +3027,11 @@ export function TrainerStudio3D({
       const shoulderL = shoulderCenter
         .clone()
         .addScaledVector(torsoRight, -0.192)
-        .addScaledVector(torsoUp, -0.055);
+        .addScaledVector(torsoUp, -0.055 + shoulderElevationOffset);
       const shoulderR = shoulderCenter
         .clone()
         .addScaledVector(torsoRight, 0.192)
-        .addScaledVector(torsoUp, -0.055);
+        .addScaledVector(torsoUp, -0.055 + shoulderElevationOffset);
 
       const hipL = hipsPos
         .clone()
@@ -2045,10 +3052,15 @@ export function TrainerStudio3D({
       const forearmDirR = new THREE.Vector3().subVectors(handR, elbowR).normalize();
 
       const isGroundPalm =
-        clip === 'pushup' ||
-        clip === 'diamond_pushup' ||
-        clip === 'plank' ||
-        clip === 'mountain_climber';
+        handL.y < 0.08 &&
+        handR.y < 0.08 &&
+        (clip === 'pushup' ||
+          clip === 'diamond_pushup' ||
+          clip === 'plank' ||
+          clip === 'mountain_climber' ||
+          clip === 'burpee' ||
+          id === 'bodyweight_tricep_ext' ||
+          id === 'plank_downward_dog');
 
       const handTipL = isGroundPalm
         ? handL.clone().add(new THREE.Vector3(0, 0.005, 0.075))
@@ -2056,6 +3068,10 @@ export function TrainerStudio3D({
       const handTipR = isGroundPalm
         ? handR.clone().add(new THREE.Vector3(0, 0.005, 0.075))
         : handR.clone().addScaledVector(forearmDirR, HAND_LEN);
+
+      // Gimbal-free arm anterior vector derived from opposite of elbow pole (`invertPole = true`)
+      const armAntL = computeLimbAnteriorFromPole(shoulderL, handTipL, elbowPoleL, true);
+      const armAntR = computeLimbAnteriorFromPole(shoulderR, handTipR, elbowPoleR, true);
 
       armL.deformBySpineCurve((s, outCenter, outX, outY, outZ) => {
         evaluateTwoBoneSkinnedRing(
@@ -2065,8 +3081,8 @@ export function TrainerStudio3D({
           shoulderL,
           elbowL,
           handTipL,
-          torsoAnterior,
-          torsoAnterior,
+          armAntL,
+          armAntL,
           -0.008,
           outCenter,
           outX,
@@ -2083,8 +3099,8 @@ export function TrainerStudio3D({
           shoulderR,
           elbowR,
           handTipR,
-          torsoAnterior,
-          torsoAnterior,
+          armAntR,
+          armAntR,
           -0.008,
           outCenter,
           outX,
@@ -2094,11 +3110,14 @@ export function TrainerStudio3D({
       });
 
       // 4. Solve Leg IK & Deform Continuous Skinned Left/Right Legs (Hip s=0 -> Knee s=0.51 -> Ankle s=1.0)
-      const kneeL = solveTwoBoneIK(hipL, footL, THIGH_LEN, CALF_LEN, kneePoleL);
-      const kneeR = solveTwoBoneIK(hipR, footR, THIGH_LEN, CALF_LEN, kneePoleR);
+      const kneeL =
+        directKneeL || solveTwoBoneIK(hipL, footL, THIGH_LEN, CALF_LEN, kneePoleL);
+      const kneeR =
+        directKneeR || solveTwoBoneIK(hipR, footR, THIGH_LEN, CALF_LEN, kneePoleR);
 
-      const legAntL = new THREE.Vector3().subVectors(kneePoleL, hipL).normalize();
-      const legAntR = new THREE.Vector3().subVectors(kneePoleR, hipR).normalize();
+      // Gimbal-free leg anterior vector derived from knee pole (`invertPole = false`)
+      const legAntL = computeLimbAnteriorFromPole(hipL, footL, kneePoleL, false);
+      const legAntR = computeLimbAnteriorFromPole(hipR, footR, kneePoleR, false);
 
       legL.deformBySpineCurve((s, outCenter, outX, outY, outZ) => {
         evaluateTwoBoneSkinnedRing(
@@ -2136,16 +3155,36 @@ export function TrainerStudio3D({
         );
       });
 
-      // 5. Position & Orient Shoes at Ankles (`footL`, `footR`)
+      // 5. Position & Biomechanically Orient Shoes at Ankles (`footL`, `footR`)
       shoeL.position.copy(footL);
       shoeR.position.copy(footR);
-      if (isGroundPalm) {
-        shoeL.rotation.set(Math.PI / 3.2, 0, 0);
-        shoeR.rotation.set(Math.PI / 3.2, 0, 0);
-      } else {
-        shoeL.rotation.set(0, 0, 0);
-        shoeR.rotation.set(0, 0, 0);
-      }
+
+      const orientShoe = (
+        shoe: THREE.Group,
+        mode: 'flat' | 'toes' | 'free',
+        knee: THREE.Vector3,
+        foot: THREE.Vector3,
+        legAnt: THREE.Vector3,
+        pitchOffset: number
+      ) => {
+        if (mode === 'toes') {
+          shoe.rotation.set(Math.PI / 3.2, 0, 0);
+        } else if (mode === 'flat') {
+          shoe.rotation.set(pitchOffset, 0, 0);
+        } else {
+          // Align shoe perpendicular to shin (`calfDir`) pointing along `legAnt`
+          const calfDown = new THREE.Vector3().subVectors(foot, knee).normalize();
+          const sX = new THREE.Vector3();
+          const sY = new THREE.Vector3();
+          const sZ = new THREE.Vector3();
+          computeOrthonormalFrame(calfDown.clone().negate(), legAnt, sX, sY, sZ);
+          const m = new THREE.Matrix4().makeBasis(sX, sY, sZ);
+          shoe.quaternion.setFromRotationMatrix(m);
+        }
+      };
+
+      orientShoe(shoeL, footModeL, kneeL, footL, legAntL, anklePitchOffsetL);
+      orientShoe(shoeR, footModeR, kneeR, footR, legAntR, anklePitchOffsetR);
     };
 
     sceneRef.current = {
@@ -2155,8 +3194,8 @@ export function TrainerStudio3D({
       applyCameraPreset,
     };
 
-    if (onReady) {
-      onReady();
+    if (stateRef.current.onReady) {
+      stateRef.current.onReady();
     }
 
     // ============================================================================
@@ -2188,7 +3227,13 @@ export function TrainerStudio3D({
         frameBadgeRef.current.textContent = `FRAME ${String(currentFrameInt).padStart(2, '0')} / 60 · 30 FPS`;
       }
 
-      applyProceduralPose(st.clipName, st.biomechanicalVariant, st.exerciseName, frameFloat);
+      applyProceduralPose(
+        st.clipName,
+        st.exerciseId,
+        st.biomechanicalVariant,
+        st.exerciseName,
+        frameFloat
+      );
       controls.update();
 
       const w = container.clientWidth || 800;
@@ -2219,7 +3264,7 @@ export function TrainerStudio3D({
         ];
 
         views.forEach((v) => {
-          const { pos, target } = computeCameraView(v.preset, st.clipName);
+          const { pos, target } = computeCameraView(v.preset, st.clipName, st.exerciseId);
           auxCamera.position.copy(pos);
           auxCamera.lookAt(target);
           renderer.setViewport(v.x, v.y, halfW, halfH);
@@ -2279,8 +3324,8 @@ export function TrainerStudio3D({
 
       {/* Minimal Top-Left Frame Telemetry Pill */}
       <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-2">
-        <div className="px-2.5 py-1 rounded-lg bg-[#0B1324]/85 backdrop-blur-md border border-sky-500/25 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+        <div className="px-2.5 py-1 rounded-lg bg-[#0B1324]/90 border border-sky-500/25 flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
           <span
             ref={frameBadgeRef}
             className="text-[10px] font-mono font-bold text-sky-300 tracking-wider"
@@ -2289,7 +3334,7 @@ export function TrainerStudio3D({
           </span>
         </div>
         {bpSpec && (
-          <div className="hidden sm:flex px-2.5 py-1 rounded-lg bg-[#0B1324]/85 backdrop-blur-md border border-white/10 items-center gap-1.5">
+          <div className="hidden sm:flex px-2.5 py-1 rounded-lg bg-[#0B1324]/90 border border-white/10 items-center gap-1.5">
             <span className="text-[10px] font-semibold text-slate-300">
               180 cm · 70 kg · IK Rig
             </span>
@@ -2299,7 +3344,7 @@ export function TrainerStudio3D({
 
       {/* Minimal Top-Right Muscle Status Pill */}
       <div className="pointer-events-none absolute top-3 right-3 hidden sm:flex items-center gap-2">
-        <div className="px-2.5 py-1 rounded-lg bg-[#0B1324]/85 backdrop-blur-md border border-red-500/30 flex items-center gap-1.5">
+        <div className="px-2.5 py-1 rounded-lg bg-[#0B1324]/90 border border-red-500/30 flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-[#DC2626]" />
           <span className="text-[10px] font-bold text-slate-200">
             Anatomical Human IK
@@ -2335,5 +3380,3 @@ export function TrainerStudio3D({
     </div>
   );
 }
-
-export default TrainerStudio3D;

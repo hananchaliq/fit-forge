@@ -70,14 +70,23 @@ function WorkoutStudioContent() {
     deleteWorkoutRecord,
   } = useFitForgeStore();
 
+  // 3D Blueprint Pack & AI_BUILD_PROMPT.md Inspector state
+  const [activeBlueprintId, setActiveBlueprintId] = useState<BlueprintExerciseSpec['id']>(() => {
+    const queryEx = searchParams.get('exercise');
+    const matchingBp = queryEx
+      ? BLUEPRINT_EXERCISES.find((b) => b.fitforgeExerciseId === queryEx)
+      : undefined;
+    return matchingBp ? matchingBp.id : '01_push_up';
+  });
+  const [blueprintViewTab, setBlueprintViewTab] = useState<'prompt' | 'specs' | 'diagram'>(
+    'specs'
+  );
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
+
   useEffect(() => {
     const queryEx = searchParams.get('exercise');
     if (queryEx && EXERCISES[queryEx]) {
       setSelectedExerciseId(queryEx);
-      const matchingBp = BLUEPRINT_EXERCISES.find((b) => b.fitforgeExerciseId === queryEx);
-      if (matchingBp) {
-        setActiveBlueprintId(matchingBp.id);
-      }
     }
   }, [searchParams, setSelectedExerciseId]);
 
@@ -99,14 +108,6 @@ function WorkoutStudioContent() {
   const [sessionSetsCompleted, setSessionSetsCompleted] = useState(0);
   const [sessionTotalVolumeKg, setSessionTotalVolumeKg] = useState(0);
   const [sessionSavedBanner, setSessionSavedBanner] = useState(false);
-
-  // 3D Blueprint Pack & AI_BUILD_PROMPT.md Inspector state
-  const [activeBlueprintId, setActiveBlueprintId] =
-    useState<BlueprintExerciseSpec['id']>('01_push_up');
-  const [blueprintViewTab, setBlueprintViewTab] = useState<'prompt' | 'specs' | 'diagram'>(
-    'specs'
-  );
-  const [copiedPrompt, setCopiedPrompt] = useState(false);
 
   const activeBlueprint =
     BLUEPRINT_EXERCISES.find((b) => b.fitforgeExerciseId === currentExercise.id) ||
@@ -210,13 +211,47 @@ function WorkoutStudioContent() {
     setTimeout(() => setSessionSavedBanner(false), 3500);
   };
 
+  const matchedBlueprint = BLUEPRINT_EXERCISES.find(
+    (b) => b.fitforgeExerciseId === currentExercise.id
+  );
+
   const keyframeButtons = [
     { frame: null, shortLabel: 'Loop 30 FPS', sub: 'Animasi Mulus' },
-    { frame: 0, shortLabel: '1. Start (F0)', sub: activeBlueprint.animation.keyframes[0]?.pose || 'start' },
-    { frame: 15, shortLabel: 'Turun (F15)', sub: activeBlueprint.animation.keyframes[1]?.pose || 'descent' },
-    { frame: 30, shortLabel: '2. Puncak (F30)', sub: activeBlueprint.animation.keyframes[2]?.pose || 'bottom' },
-    { frame: 45, shortLabel: 'Dorong (F45)', sub: activeBlueprint.animation.keyframes[3]?.pose || 'ascent' },
-    { frame: 60, shortLabel: '3. Kembali (F60)', sub: activeBlueprint.animation.keyframes[4]?.pose || 'return' },
+    {
+      frame: 0,
+      shortLabel: '1. Start (F0)',
+      sub: matchedBlueprint
+        ? matchedBlueprint.animation.keyframes[0]?.pose
+        : `${currentExercise.id}_start`,
+    },
+    {
+      frame: 15,
+      shortLabel: 'Fase 1 (F15)',
+      sub: matchedBlueprint
+        ? matchedBlueprint.animation.keyframes[1]?.pose
+        : 'eccentric_control',
+    },
+    {
+      frame: 30,
+      shortLabel: '2. Puncak (F30)',
+      sub: matchedBlueprint
+        ? matchedBlueprint.animation.keyframes[2]?.pose
+        : `${currentExercise.id}_peak`,
+    },
+    {
+      frame: 45,
+      shortLabel: 'Fase 2 (F45)',
+      sub: matchedBlueprint
+        ? matchedBlueprint.animation.keyframes[3]?.pose
+        : 'concentric_drive',
+    },
+    {
+      frame: 60,
+      shortLabel: '3. Kembali (F60)',
+      sub: matchedBlueprint
+        ? matchedBlueprint.animation.keyframes[4]?.pose
+        : `${currentExercise.id}_return`,
+    },
   ];
 
   return (
@@ -435,6 +470,7 @@ function WorkoutStudioContent() {
         <div className="relative w-full h-[440px] sm:h-[520px]">
           <TrainerStudio3D
             clip={currentExercise.clip}
+            exerciseId={currentExercise.id}
             biomechanicalVariant={currentExercise.biomechanicalVariant}
             exerciseName={currentExercise.name}
             primaryMuscles={currentExercise.primaryMuscles}
