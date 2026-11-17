@@ -133,12 +133,15 @@ export function PWAInstallButton({ fullWidthMobile = false }: { fullWidthMobile?
         className={
           fullWidthMobile
             ? 'w-full py-2.5 px-3.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold flex items-center justify-center gap-2 shadow-md cursor-pointer'
-            : 'inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#1E1E1E] hover:bg-[#262626] border border-[#F59E0B]/40 text-xs font-bold text-[#F59E0B] transition-colors whitespace-nowrap shrink-0 cursor-pointer'
+            : 'inline-flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl bg-[#1E1E1E] hover:bg-[#262626] border border-[#F59E0B]/40 text-xs font-bold text-[#F59E0B] transition-colors whitespace-nowrap shrink-0 cursor-pointer'
         }
         title="Install Aplikasi FitForge di HP / Perangkat Anda (PWA)"
       >
         <Download className="w-3.5 h-3.5 shrink-0" />
-        <span>{deferredPrompt ? 'Install App' : isIOS ? 'Install iOS' : 'Install App'}</span>
+        <span className={fullWidthMobile ? 'inline' : 'hidden sm:inline'}>
+          {deferredPrompt ? 'Install App' : isIOS ? 'Install iOS' : 'Install App'}
+        </span>
+        {!fullWidthMobile && <span className="sm:hidden text-[11px]">App</span>}
       </button>
 
       {showGuideModal && (

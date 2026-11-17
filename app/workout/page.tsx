@@ -3,6 +3,7 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Play,
   Pause,
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
 import { BodyHighlighter2D } from '@/components/plan/BodyHighlighter2D';
+import { BiomechanicalLoader } from '@/components/ui/BiomechanicalLoader';
 import { useFitForgeStore } from '@/store/useFitForgeStore';
 import { EXERCISES } from '@/data/exercises';
 import { WEEKLY_PLAN, getExercisesForDay } from '@/data/weeklyPlan';
@@ -32,9 +34,11 @@ const TrainerStudio3D = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="w-full h-[520px] rounded-2xl bg-[#0C0C0E] border border-[#262626] flex items-center justify-center text-xs text-neutral-400">
-        Memuat Engine Biomekanik Studio 3D...
-      </div>
+      <BiomechanicalLoader
+        compact
+        label="MEMUAT ENGINE BIOMEKANIK 1024-BIT HD"
+        sublabel="Menyiapkan 28-Submesh Anatomical Striated Rig & PBR Shaders..."
+      />
     ),
   }
 );
@@ -251,21 +255,24 @@ function WorkoutStudioContent() {
           debugMuscleMask={debugMuscleMask}
         />
 
-        {/* Top-Left Minimal Spec Header */}
-        <div className="absolute top-3 left-3 bg-[#161616]/90 border border-[#262626] rounded-xl px-3.5 py-2 text-white pointer-events-none">
-          <p className="text-xs font-bold text-white">{currentExercise.name}</p>
-          <p className="text-[11px] text-[#F59E0B] tabular-nums">
-            Set {currentSet} dari {currentExercise.sets} · Target {currentExercise.reps} rep
+        {/* Top-Left Minimal Spec Header (Collision-Free on Mobile) */}
+        <div className="absolute top-3 left-3 max-w-[48%] sm:max-w-none bg-[#161616]/90 backdrop-blur-md border border-[#262626] rounded-xl px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-white pointer-events-none">
+          <p className="text-[11px] sm:text-xs font-bold text-white truncate">
+            {currentExercise.name}
+          </p>
+          <p className="text-[10px] sm:text-[11px] text-[#F59E0B] tabular-nums truncate">
+            Set {currentSet}/{currentExercise.sets} · Target {currentExercise.reps} rep
           </p>
         </div>
 
         {/* Unified Collapsible Bottom Control Dock (Zero Side-Panel Clutter over 3D Canvas) */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 w-[94%] max-w-[900px] z-20">
+        <div className="absolute bottom-2.5 sm:bottom-3 left-1/2 -translate-x-1/2 w-[95%] max-w-[900px] z-20">
           <div className="flex justify-center mb-1.5">
-            <button
+            <motion.button
               type="button"
+              whileTap={{ scale: 0.95 }}
               onClick={() => setDockCollapsed((prev) => !prev)}
-              className="px-3 py-1 rounded-full bg-[#161616] border border-[#333333] text-[11px] font-semibold text-neutral-200 hover:text-white flex items-center gap-1 cursor-pointer"
+              className="px-3 py-1 rounded-full bg-[#161616]/95 backdrop-blur-md border border-[#333333] text-[11px] font-semibold text-neutral-200 hover:text-white flex items-center gap-1 cursor-pointer shadow-md"
             >
               {dockCollapsed ? (
                 <>
@@ -278,125 +285,147 @@ function WorkoutStudioContent() {
                   <span>Sembunyikan Kontrol (Mode Zen)</span>
                 </>
               )}
-            </button>
+            </motion.button>
           </div>
 
-          {!dockCollapsed && (
-            <div className="rounded-2xl bg-[#161616] border border-[#262626] p-3.5 text-white shadow-2xl flex flex-wrap items-center justify-between gap-3">
-              {/* Playback & Set Actions */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsPaused((p) => !p)}
-                  className="p-2.5 rounded-xl bg-[#262626] hover:bg-[#333333] text-white transition cursor-pointer"
-                  aria-label={isPaused ? 'Putar animasi 3D' : 'Jeda animasi 3D'}
-                >
-                  {isPaused ? (
-                    <Play className="w-4 h-4 text-[#F59E0B] fill-[#F59E0B]" />
-                  ) : (
-                    <Pause className="w-4 h-4 text-white" />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleCompleteSet}
-                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold hover:opacity-95 transition flex items-center gap-1.5 cursor-pointer"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Selesai Set {currentSet}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleSkipNextExercise}
-                  className="p-2.5 rounded-xl bg-[#262626] hover:bg-[#333333] text-neutral-200 transition cursor-pointer"
-                  aria-label="Lanjut ke gerakan berikutnya"
-                  title="Gerakan Berikutnya"
-                >
-                  <SkipForward className="w-4 h-4" />
-                </button>
-
-                {restSecondsLeft > 0 && (
-                  <div className="px-3 py-1.5 rounded-xl bg-[#EF4444]/20 border border-[#EF4444] text-xs font-bold text-[#EF4444] tabular-nums flex items-center gap-1.5">
-                    <Timer className="w-3.5 h-3.5" />
-                    <span>Istirahat: {restSecondsLeft}s</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Camera Angle Presets (Depan / Samping / Belakang) */}
-              <div className="flex items-center gap-1 bg-[#0E0E0E] p-1 rounded-xl border border-[#262626]">
-                {(
-                  [
-                    { key: 'front', label: 'Depan' },
-                    { key: 'side', label: 'Samping' },
-                    { key: 'back', label: 'Belakang' },
-                  ] as const
-                ).map((cam) => (
-                  <button
-                    key={cam.key}
+          <AnimatePresence initial={false}>
+            {!dockCollapsed && (
+              <motion.div
+                initial={{ opacity: 0, y: 16, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.97 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                className="rounded-2xl bg-[#141416]/95 backdrop-blur-xl border border-[#2A2A2E] p-2.5 sm:p-3.5 text-white shadow-2xl flex flex-wrap items-center justify-between gap-2.5 sm:gap-3"
+              >
+                {/* Playback & Set Actions */}
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <motion.button
                     type="button"
-                    onClick={() => setCameraPreset(cam.key)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                      cameraPreset === cam.key
-                        ? 'bg-[#262626] text-[#F59E0B]'
-                        : 'text-neutral-400 hover:text-white'
-                    }`}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setIsPaused((p) => !p)}
+                    className="p-2 sm:p-2.5 rounded-xl bg-[#262626] hover:bg-[#333333] text-white transition cursor-pointer"
+                    aria-label={isPaused ? 'Putar animasi 3D' : 'Jeda animasi 3D'}
                   >
-                    {cam.label}
-                  </button>
-                ))}
-              </div>
+                    {isPaused ? (
+                      <Play className="w-4 h-4 text-[#F59E0B] fill-[#F59E0B]" />
+                    ) : (
+                      <Pause className="w-4 h-4 text-white" />
+                    )}
+                  </motion.button>
 
-              {/* Speed Slider (0.5x – 1.5x) & Voice Coach + Debug Mask */}
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <label htmlFor="speed-slider" className="text-[11px] text-neutral-400 tabular-nums">
-                    Tempo: {timeScale.toFixed(1)}×
-                  </label>
-                  <input
-                    id="speed-slider"
-                    type="range"
-                    min="0.5"
-                    max="1.5"
-                    step="0.1"
-                    value={timeScale}
-                    onChange={(e) => setTimeScale(parseFloat(e.target.value))}
-                    className="w-20 accent-[#F97316]"
-                  />
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleCompleteSet}
+                    className="px-3 sm:px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold hover:opacity-95 transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Selesai Set {currentSet}</span>
+                  </motion.button>
+
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.9 }}
+                    onClick={handleSkipNextExercise}
+                    className="p-2 sm:p-2.5 rounded-xl bg-[#262626] hover:bg-[#333333] text-neutral-200 transition cursor-pointer"
+                    aria-label="Lanjut ke gerakan berikutnya"
+                    title="Gerakan Berikutnya"
+                  >
+                    <SkipForward className="w-4 h-4" />
+                  </motion.button>
+
+                  {restSecondsLeft > 0 && (
+                    <div className="px-2.5 py-1.5 rounded-xl bg-[#EF4444]/20 border border-[#EF4444] text-xs font-bold text-[#EF4444] tabular-nums flex items-center gap-1">
+                      <Timer className="w-3.5 h-3.5" />
+                      <span>{restSecondsLeft}s</span>
+                    </div>
+                  )}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() =>
-                    soundEngine.speakIndonesian(
-                      `${currentExercise.name}. ${currentExercise.formTips[0]}`
-                    )
-                  }
-                  className="p-2 rounded-xl bg-[#262626] hover:bg-[#333333] text-neutral-200 cursor-pointer"
-                  aria-label="Dengarkan panduan suara Bahasa Indonesia"
-                  title="Panduan Suara (ID)"
-                >
-                  <Volume2 className="w-4 h-4 text-[#F59E0B]" />
-                </button>
+                {/* Camera Angle Presets (Depan / Samping / Belakang) with Sliding Pill */}
+                <div className="flex items-center gap-0.5 bg-[#0A0A0C] p-1 rounded-xl border border-[#262626]">
+                  {(
+                    [
+                      { key: 'front', label: 'Depan' },
+                      { key: 'side', label: 'Samping' },
+                      { key: 'back', label: 'Belakang' },
+                    ] as const
+                  ).map((cam) => (
+                    <button
+                      key={cam.key}
+                      type="button"
+                      onClick={() => setCameraPreset(cam.key)}
+                      className={`relative px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                        cameraPreset === cam.key
+                          ? 'text-[#F59E0B]'
+                          : 'text-neutral-400 hover:text-white'
+                      }`}
+                    >
+                      {cameraPreset === cam.key && (
+                        <motion.span
+                          layoutId="workout-cam-preset-pill"
+                          className="absolute inset-0 rounded-lg bg-[#222226] border border-[#38383E]"
+                          transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                        />
+                      )}
+                      <span className="relative z-10">{cam.label}</span>
+                    </button>
+                  ))}
+                </div>
 
-                <button
-                  type="button"
-                  onClick={() => setDebugMuscleMask((d) => !d)}
-                  className={`p-2 rounded-xl border text-xs font-semibold cursor-pointer ${
-                    debugMuscleMask
-                      ? 'bg-[#F97316] text-black border-[#F97316]'
-                      : 'bg-[#0E0E0E] text-neutral-400 border-[#262626]'
-                  }`}
-                  aria-label="Tampilkan warna wilayah mask otot"
-                  title="Toggle Mask Region Otot"
-                >
-                  <Eye className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          )}
+                {/* Speed Slider (0.5x – 1.5x) & Voice Coach + Debug Mask */}
+                <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="speed-slider" className="text-[11px] text-neutral-400 tabular-nums">
+                      Tempo: {timeScale.toFixed(1)}×
+                    </label>
+                    <input
+                      id="speed-slider"
+                      type="range"
+                      min="0.5"
+                      max="1.5"
+                      step="0.1"
+                      value={timeScale}
+                      onChange={(e) => setTimeScale(parseFloat(e.target.value))}
+                      className="w-20 accent-[#F97316]"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() =>
+                        soundEngine.speakIndonesian(
+                          `${currentExercise.name}. ${currentExercise.formTips[0]}`
+                        )
+                      }
+                      className="p-2 rounded-xl bg-[#262626] hover:bg-[#333333] text-neutral-200 cursor-pointer"
+                      aria-label="Dengarkan panduan suara Bahasa Indonesia"
+                      title="Panduan Suara (ID)"
+                    >
+                      <Volume2 className="w-4 h-4 text-[#F59E0B]" />
+                    </motion.button>
+
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => setDebugMuscleMask((d) => !d)}
+                      className={`p-2 rounded-xl border text-xs font-semibold cursor-pointer ${
+                        debugMuscleMask
+                          ? 'bg-[#F97316] text-black border-[#F97316]'
+                          : 'bg-[#0E0E0E] text-neutral-400 border-[#262626]'
+                      }`}
+                      aria-label="Tampilkan warna wilayah mask otot"
+                      title="Toggle Mask Region Otot"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </motion.button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -566,9 +595,10 @@ export default function WorkoutPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#0E0E0E] text-white flex items-center justify-center text-sm">
-          Memuat Studio 3D...
-        </div>
+        <BiomechanicalLoader
+          label="MEMUAT STUDIO 3D 1024-BIT HD"
+          sublabel="Menyiapkan Engine Biomekanik & Peta Aktivasi Otot..."
+        />
       }
     >
       <WorkoutStudioContent />

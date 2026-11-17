@@ -1283,15 +1283,15 @@ export function TrainerStudio3D({
         aria-label="Viewport Studio Latihan 3D 1024-Bit HD FitForge"
       />
 
-      {/* Subtle Model Source & 1024-Bit HD Texture Badge (Top-Right) */}
-      <div className="absolute top-3 right-3 flex items-center gap-2 pointer-events-none">
-        <span className="px-2.5 py-1 rounded-lg bg-[#161616]/90 border border-[#F59E0B]/40 text-[11px] font-bold text-[#F59E0B]">
+      {/* Subtle Model Source & 1024-Bit HD Texture Badge (Top-Right, collision-free on mobile) */}
+      <div className="absolute top-3 right-3 flex items-center gap-1.5 pointer-events-none max-w-[46%] sm:max-w-none">
+        <span className="px-2 sm:px-2.5 py-1 rounded-lg bg-[#161616]/90 backdrop-blur-md border border-[#F59E0B]/40 text-[10px] sm:text-[11px] font-bold text-[#F59E0B] truncate">
           {modelSource === 'glb'
             ? 'Model: Mixamo GLB 1024-Bit'
-            : '1024-Bit HD Anatomical Striated Rig (28-Submesh PBR)'}
+            : '1024-Bit HD Anatomical Striated Rig'}
         </span>
         {fpsWarning && (
-          <span className="px-2 py-1 rounded-lg bg-[#FEF3C7] text-[#B45309] text-[10px] font-semibold">
+          <span className="hidden sm:inline-block px-2 py-1 rounded-lg bg-[#FEF3C7] text-[#B45309] text-[10px] font-semibold">
             Mode Hemat GPU Aktif
           </span>
         )}

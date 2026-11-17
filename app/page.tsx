@@ -4,6 +4,7 @@ import React, { useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { motion } from 'motion/react';
 import { signInWithPopup } from 'firebase/auth';
 import {
   ArrowRight,
@@ -16,18 +17,24 @@ import {
   BookOpen,
   LogIn,
   CheckCircle2,
+  LayoutDashboard,
+  CalendarRange,
 } from 'lucide-react';
 import { auth, googleProvider } from '@/lib/firebase';
 import { useFitForgeStore } from '@/store/useFitForgeStore';
+import { BiomechanicalLoader } from '@/components/ui/BiomechanicalLoader';
+import { PWAInstallButton } from '@/components/pwa/PWAInstallButton';
 
 const HeroRunner3D = dynamic(
   () => import('@/components/landing/HeroRunner3D').then((m) => m.HeroRunner3D),
   {
     ssr: false,
     loading: () => (
-      <div className="w-full h-[420px] rounded-2xl bg-[#161616] border border-[#262626] flex items-center justify-center text-xs text-neutral-400">
-        Memuat Siluet 3D Pelari...
-      </div>
+      <BiomechanicalLoader
+        compact
+        label="MEMUAT SILUET PELARI 3D"
+        sublabel="Menyiapkan Pencahayaan Emissive PBR & Paralaks..."
+      />
     ),
   }
 );
@@ -112,20 +119,22 @@ export default function LandingPage() {
           </Link>
         </nav>
 
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          <PWAInstallButton />
+
           <button
             type="button"
             onClick={() => setGuideOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#161616] hover:bg-[#262626] border border-[#2E2E2E] text-xs font-semibold text-[#F59E0B] transition whitespace-nowrap shrink-0 cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-[#161616] hover:bg-[#262626] border border-[#2E2E2E] text-xs font-semibold text-[#F59E0B] transition whitespace-nowrap shrink-0 cursor-pointer"
           >
             <BookOpen className="w-3.5 h-3.5" />
-            <span>Panduan</span>
+            <span className="hidden sm:inline">Panduan</span>
           </button>
 
           {isAuthenticated ? (
             <Link
               href="/dashboard"
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#EF4444] via-[#F97316] to-[#F59E0B] text-black text-xs sm:text-sm font-bold hover:opacity-95 transition whitespace-nowrap shrink-0"
+              className="px-3.5 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-[#EF4444] via-[#F97316] to-[#F59E0B] text-black text-xs sm:text-sm font-bold hover:opacity-95 transition whitespace-nowrap shrink-0"
             >
               Dashboard ({profile.displayName.split(' ')[0]})
             </Link>
@@ -133,20 +142,26 @@ export default function LandingPage() {
             <button
               type="button"
               onClick={handleQuickGoogleLogin}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#EF4444] via-[#F97316] to-[#F59E0B] text-black text-xs sm:text-sm font-bold hover:opacity-95 transition whitespace-nowrap shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-[#EF4444] via-[#F97316] to-[#F59E0B] text-black text-xs sm:text-sm font-bold hover:opacity-95 transition whitespace-nowrap shrink-0 cursor-pointer"
             >
               <LogIn className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>Masuk Google</span>
+              <span>Masuk</span>
+              <span className="hidden sm:inline">Google</span>
             </button>
           )}
         </div>
       </header>
 
       {/* HERO SECTION (Matches ref-2 AgentAI dark + volumetric red glow + 3D Runner) */}
-      <section className="relative z-10 max-w-7xl mx-auto px-6 pt-12 pb-16 lg:pt-16 lg:pb-20">
+      <section className="relative z-10 max-w-7xl mx-auto px-5 sm:px-6 pt-10 pb-14 lg:pt-16 lg:pb-20">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
           {/* Left Column: Editorial Headline + CTAs + 3 Frosted Glass Stat Cards */}
-          <div className="lg:col-span-7 space-y-6">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            className="lg:col-span-7 space-y-6"
+          >
             <div className="text-xs font-semibold tracking-wider text-[#F97316]">
               SISTEM KEBUGARAN BIOMEKANIK 3D & DATABASE CLOUD REAL-TIME
             </div>
@@ -227,7 +242,10 @@ export default function LandingPage() {
                 </p>
               </div>
 
-              <div className="rounded-2xl bg-[#161616]/90 border border-[#262626] p-4">
+              <motion.div
+                whileHover={{ y: -3 }}
+                className="rounded-2xl bg-[#161616]/90 border border-[#262626] p-4"
+              >
                 <p className="text-xs text-neutral-400 font-medium">Rencana Latihan</p>
                 <p className="text-2xl font-extrabold text-[#F59E0B] mt-1 tabular-nums">
                   7 Hari Penuh
@@ -235,12 +253,17 @@ export default function LandingPage() {
                 <p className="text-[11px] text-neutral-400 mt-1">
                   Mode Gym & Mode Rumah
                 </p>
-              </div>
+              </motion.div>
             </div>
-          </div>
+          </motion.div>
 
           {/* Right Column: Interactive 3D Glowing Runner / Torso Silhouette */}
-          <div className="lg:col-span-5">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.45, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            className="lg:col-span-5"
+          >
             <div className="relative rounded-3xl bg-gradient-to-b from-[#161616] to-[#0E0E0E] border border-[#262626] p-3 shadow-2xl">
               <HeroRunner3D />
               <div className="flex items-center justify-between px-3 py-2 border-t border-[#262626] text-xs text-neutral-400">
@@ -248,7 +271,7 @@ export default function LandingPage() {
                 <span className="text-[#F59E0B] font-medium">Gerakkan kursor untuk paralaks</span>
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
       </section>
 
@@ -435,7 +458,7 @@ export default function LandingPage() {
       </section>
 
       {/* FOOTER */}
-      <footer className="relative z-10 border-t border-[#1E1E1E] bg-[#0A0A0A] py-8 px-6">
+      <footer className="relative z-10 border-t border-[#1E1E1E] bg-[#0A0A0A] py-8 pb-24 md:pb-8 px-6">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-400">
           <div className="flex items-center gap-2">
             <Activity className="w-4 h-4 text-[#F97316]" />
@@ -459,6 +482,58 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* FLOATING MOBILE BOTTOM DOCK ON LANDING PAGE (< 768px) */}
+      <div className="md:hidden fixed bottom-2.5 inset-x-3 z-40 pointer-events-none">
+        <nav
+          className="pointer-events-auto h-16 rounded-2xl bg-[#0D0D0F]/95 backdrop-blur-xl border border-[#28282D] px-2 flex items-center justify-around shadow-[0_14px_36px_rgba(0,0,0,0.75)] select-none"
+          aria-label="Navigasi Cepat Mobile"
+        >
+          <Link
+            href="/dashboard"
+            className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-neutral-300 hover:text-white"
+          >
+            <LayoutDashboard className="w-4 h-4 text-[#F59E0B]" />
+            <span>Dashboard</span>
+          </Link>
+          <Link
+            href="/workout"
+            className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-neutral-300 hover:text-white"
+          >
+            <Box className="w-4 h-4 text-[#EF4444]" />
+            <span>3D Studio</span>
+          </Link>
+          <Link
+            href="/run"
+            className="relative -mt-6 flex flex-col items-center"
+            aria-label="Mulai Lari GPS"
+          >
+            <motion.div
+              whileTap={{ scale: 0.9 }}
+              className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#F97316] to-[#F59E0B] text-black border-2 border-[#0D0D0F] shadow-[0_6px_20px_rgba(249,115,22,0.5)] flex items-center justify-center"
+            >
+              <MapPin className="w-5 h-5 stroke-[2.5]" />
+            </motion.div>
+            <span className="text-[10px] font-extrabold text-[#F59E0B] mt-0.5">
+              Lari GPS
+            </span>
+          </Link>
+          <Link
+            href="/nutrisi"
+            className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-neutral-300 hover:text-white"
+          >
+            <Utensils className="w-4 h-4 text-[#F97316]" />
+            <span>Nutrisi</span>
+          </Link>
+          <Link
+            href="/plan"
+            className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-neutral-300 hover:text-white"
+          >
+            <CalendarRange className="w-4 h-4 text-emerald-400" />
+            <span>Plan 7H</span>
+          </Link>
+        </nav>
+      </div>
     </div>
   );
 }

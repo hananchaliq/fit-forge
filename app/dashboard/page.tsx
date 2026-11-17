@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { motion } from 'motion/react';
 import {
   MapPin,
   Dumbbell,
@@ -120,7 +121,11 @@ export default function DashboardPage() {
       {/* ROW 1 — 4 KPI CARDS (Matches ref-1 Quantro: Card 1 is DARK HERO #161616) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         {/* KPI 1: HERO DARK CARD (#161616) — Jarak Lari Mingguan */}
-        <div className="rounded-2xl bg-[#161616] text-white p-5 border border-[#262626] shadow-card flex flex-col justify-between">
+        <motion.div
+          whileHover={{ y: -3 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+          className="rounded-2xl bg-[#161616] text-white p-5 border border-[#262626] shadow-card flex flex-col justify-between"
+        >
           <div className="flex items-center justify-between">
             <div className="w-9 h-9 rounded-xl bg-[#262626] flex items-center justify-center">
               <MapPin className="w-4 h-4 text-[#F59E0B]" />
@@ -156,10 +161,14 @@ export default function DashboardPage() {
               Lacak GPS →
             </Link>
           </div>
-        </div>
+        </motion.div>
 
         {/* KPI 2: Latihan Selesai (Sesi + Volume) */}
-        <div className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card flex flex-col justify-between">
+        <motion.div
+          whileHover={{ y: -3 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+          className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card flex flex-col justify-between"
+        >
           <div className="flex items-center justify-between">
             <div className="w-9 h-9 rounded-xl bg-[#FEF3C7] dark:bg-[#262626] flex items-center justify-center">
               <Dumbbell className="w-4 h-4 text-[#B45309] dark:text-[#F59E0B]" />
@@ -198,10 +207,14 @@ export default function DashboardPage() {
               Studio 3D →
             </Link>
           </div>
-        </div>
+        </motion.div>
 
         {/* KPI 3: Kalori & Protein Hari Ini */}
-        <div className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card flex flex-col justify-between">
+        <motion.div
+          whileHover={{ y: -3 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+          className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card flex flex-col justify-between"
+        >
           <div className="flex items-center justify-between">
             <div className="w-9 h-9 rounded-xl bg-[#FFE4E6] dark:bg-[#262626] flex items-center justify-center">
               <Flame className="w-4 h-4 text-[#BE123C] dark:text-[#EF4444]" />
@@ -231,10 +244,14 @@ export default function DashboardPage() {
               Scan AI →
             </Link>
           </div>
-        </div>
+        </motion.div>
 
         {/* KPI 4: Hidrasi & Skor Pemulihan */}
-        <div className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card flex flex-col justify-between">
+        <motion.div
+          whileHover={{ y: -3 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+          className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card flex flex-col justify-between"
+        >
           <div className="flex items-center justify-between">
             <div className="w-9 h-9 rounded-xl bg-[#E0F2FE] dark:bg-[#262626] flex items-center justify-center">
               <Droplets className="w-4 h-4 text-[#0369A1] dark:text-sky-400" />
@@ -271,7 +288,7 @@ export default function DashboardPage() {
               Jadwal →
             </Link>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* ROW 2 — (65%) WEEKLY PERFORMANCE OVERVIEW + (35%) DONUT MAKRO */}
@@ -305,13 +322,20 @@ export default function DashboardPage() {
                     key={tab.key}
                     type="button"
                     onClick={() => setChartMetric(tab.key)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition whitespace-nowrap cursor-pointer ${
+                    className={`relative px-2.5 py-1 rounded-lg text-xs font-semibold transition whitespace-nowrap cursor-pointer ${
                       chartMetric === tab.key
-                        ? 'bg-[#161616] text-white dark:bg-[#262626] shadow-xs'
+                        ? 'text-white'
                         : 'text-[#6B7280] hover:text-[#111111] dark:text-neutral-400 dark:hover:text-white'
                     }`}
                   >
-                    {tab.label}
+                    {chartMetric === tab.key && (
+                      <motion.span
+                        layoutId="dashboard-chart-metric-pill"
+                        className="absolute inset-0 rounded-lg bg-[#161616] dark:bg-[#262626] shadow-xs"
+                        transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                      />
+                    )}
+                    <span className="relative z-10">{tab.label}</span>
                   </button>
                 ))}
               </div>
