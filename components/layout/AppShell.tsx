@@ -30,7 +30,7 @@ import { signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
 import { useFitForgeStore } from '@/store/useFitForgeStore';
 import { EXERCISES } from '@/data/exercises';
-import { PWAInstallButton } from '@/components/pwa/PWAInstallButton';
+import { PWAInstallButton, OfflineIndicator } from '@/components/pwa/PWAInstallButton';
 
 interface AppShellProps {
   title: string;
@@ -522,24 +522,29 @@ export function AppShell({
                 })}
               </div>
             </div>
-            <div className="p-4 rounded-2xl bg-[#161616] border border-[#262626]">
-              <p className="text-xs text-neutral-300 font-semibold mb-2">
-                Daily Golden Rules · {streakDays} Hari
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  handleQuickCheckIn();
-                  setMobileDrawerOpen(false);
-                }}
-                className="w-full py-2 rounded-xl bg-[#F59E0B] text-black text-xs font-bold"
-              >
-                Check-in Hari Ini →
-              </button>
+            <div className="space-y-2.5">
+              <PWAInstallButton fullWidthMobile />
+              <div className="p-4 rounded-2xl bg-[#161616] border border-[#262626]">
+                <p className="text-xs text-neutral-300 font-semibold mb-2">
+                  Daily Golden Rules · {streakDays} Hari
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleQuickCheckIn();
+                    setMobileDrawerOpen(false);
+                  }}
+                  className="w-full py-2 rounded-xl bg-[#F59E0B] text-black text-xs font-bold"
+                >
+                  Check-in Hari Ini →
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      <OfflineIndicator />
 
       {/* ⌘K GLOBAL COMMAND PALETTE MODAL */}
       {cmdOpen && (

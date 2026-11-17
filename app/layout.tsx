@@ -20,32 +20,39 @@ export const viewport: Viewport = {
   themeColor: '#0E0E0E',
   width: 'device-width',
   initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
 };
 
 export const metadata: Metadata = {
   title: 'FitForge — AI Fitness, 3D Workout & GPS Run Tracker',
   description:
-    'Platform kebugaran terpadu dengan Studio Latihan 3D, Pelacak Lari GPS (Kalman & Haversine), Analisis Nutrisi AI kuliner Indonesia, Poster Rencana Latihan Mingguan, serta Jadwal Sholat & Hidrasi.',
+    'Platform kebugaran terpadu dengan Studio Latihan 3D 1024-Bit HD, Pelacak Lari GPS (Kalman & Haversine), Analisis Nutrisi AI kuliner Indonesia, Poster Rencana Latihan Mingguan, serta Jadwal Sholat & Hidrasi.',
+  manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
     title: 'FitForge',
   },
   icons: {
-    icon: '/icon.svg',
-    apple: '/icon.svg',
+    icon: [
+      { url: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
   },
   openGraph: {
     title: 'FitForge — AI Fitness, 3D Workout & GPS Run Tracker',
     description:
-      'Platform kebugaran terpadu dengan Studio Latihan 3D, Pelacak Lari GPS (Kalman & Haversine), Analisis Nutrisi AI kuliner Indonesia, Poster Rencana Latihan Mingguan, serta Jadwal Sholat & Hidrasi.',
+      'Platform kebugaran terpadu dengan Studio Latihan 3D 1024-Bit HD, Pelacak Lari GPS (Kalman & Haversine), Analisis Nutrisi AI kuliner Indonesia, Poster Rencana Latihan Mingguan, serta Jadwal Sholat & Hidrasi.',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'FitForge — AI Fitness, 3D Workout & GPS Run Tracker',
     description:
-      'Platform kebugaran terpadu dengan Studio Latihan 3D, Pelacak Lari GPS (Kalman & Haversine), Analisis Nutrisi AI kuliner Indonesia, Poster Rencana Latihan Mingguan, serta Jadwal Sholat & Hidrasi.',
+      'Platform kebugaran terpadu dengan Studio Latihan 3D 1024-Bit HD, Pelacak Lari GPS (Kalman & Haversine), Analisis Nutrisi AI kuliner Indonesia, Poster Rencana Latihan Mingguan, serta Jadwal Sholat & Hidrasi.',
   },
 };
 

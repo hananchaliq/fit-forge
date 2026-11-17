@@ -1,10 +1,29 @@
-// FitForge Service Worker — Offline Shell & Silent Web Push (Mode B)
-const CACHE_NAME = 'fitforge-cache-v1';
-const OFFLINE_URLS = ['/', '/dashboard', '/plan', '/workout', '/run', '/nutrisi', '/jadwal', '/icon.svg'];
+// FitForge Service Worker v2 — Mobile PWA Offline Shell, Asset Caching & Silent Web Push
+const CACHE_NAME = 'fitforge-pwa-cache-v2';
+const PRECACHE_URLS = [
+  '/',
+  '/dashboard',
+  '/run',
+  '/workout',
+  '/plan',
+  '/nutrisi',
+  '/jadwal',
+  '/analitik',
+  '/pengaturan',
+  '/login',
+  '/icon.svg',
+  '/pwa-192x192.png',
+  '/pwa-512x512.png',
+  '/pwa-maskable-512x512.png',
+  '/apple-touch-icon.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(OFFLINE_URLS)).catch(() => {})
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .catch(() => {})
   );
   self.skipWaiting();
 });
@@ -20,16 +39,28 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
+  const url = new URL(event.request.url);
+  // Skip cross-origin APIs (Firestore, Google Auth, Aladhan, Gemini API routes)
+  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) {
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
         if (response && response.status === 200 && response.type === 'basic') {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone)).catch(() => {});
+          caches
+            .open(CACHE_NAME)
+            .then((cache) => cache.put(event.request, clone))
+            .catch(() => {});
         }
         return response;
       })
-      .catch(() => caches.match(event.request))
+      .catch(() =>
+        caches.match(event.request).then((cached) => cached || caches.match('/dashboard'))
+      )
   );
 });
 
@@ -57,8 +88,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title, {
       body: payload.body,
-      icon: '/icon.svg',
-      badge: '/icon.svg',
+      icon: '/pwa-192x192.png',
+      badge: '/pwa-192x192.png',
       tag: payload.tag,
       silent: false,
       renotify: false,
@@ -82,7 +113,11 @@ self.addEventListener('notificationclick', (event) => {
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
         if ('focus' in client) {
-          client.postMessage({ type: 'SW_NOTIFICATION_ACTION', action, data: event.notification.data });
+          client.postMessage({
+            type: 'SW_NOTIFICATION_ACTION',
+            action,
+            data: event.notification.data,
+          });
           return client.focus();
         }
       }
