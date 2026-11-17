@@ -40,6 +40,7 @@ export interface FitForgeState {
   firebaseUid: string | null;
   authReady: boolean;
   isAuthenticated: boolean;
+  isLocalVercelAuth: boolean;
   hasCompletedOnboarding: boolean;
   guideOpen: boolean;
   guideDismissed: boolean;
@@ -75,6 +76,8 @@ export interface FitForgeState {
 
   // Auth & Cloud Hydration Actions
   setAuthSession: (uid: string | null, email?: string | null, displayName?: string | null) => void;
+  loginWithVercelFallback: (displayName: string, email: string) => void;
+  logoutAccount: () => void;
   setGuideOpen: (open: boolean) => void;
   dismissGuide: () => void;
   hydrateUserFromFirestore: (data: Record<string, unknown>) => void;
@@ -179,6 +182,7 @@ export const useFitForgeStore = create<FitForgeState>()(
       firebaseUid: null,
       authReady: false,
       isAuthenticated: false,
+      isLocalVercelAuth: false,
       hasCompletedOnboarding: false,
       guideOpen: false,
       guideDismissed: false,
@@ -206,10 +210,18 @@ export const useFitForgeStore = create<FitForgeState>()(
       setAuthSession: (uid, email, displayName) =>
         set((state) => {
           if (!uid) {
+            if (state.isLocalVercelAuth) {
+              return {
+                firebaseUid: null,
+                authReady: true,
+                isAuthenticated: true,
+              };
+            }
             return {
               firebaseUid: null,
               authReady: true,
               isAuthenticated: false,
+              isLocalVercelAuth: false,
               hasCompletedOnboarding: false,
               profile: INITIAL_ZERO_PROFILE,
               waterMl: 0,
@@ -228,6 +240,7 @@ export const useFitForgeStore = create<FitForgeState>()(
             firebaseUid: uid,
             authReady: true,
             isAuthenticated: true,
+            isLocalVercelAuth: false,
             profile: {
               ...state.profile,
               id: uid,
@@ -240,6 +253,45 @@ export const useFitForgeStore = create<FitForgeState>()(
             },
           };
         }),
+
+      loginWithVercelFallback: (displayName, email) =>
+        set((state) => {
+          const cleanName = displayName.trim() || 'Atlet FitForge';
+          const cleanEmail = email.trim() || 'atlet@fitforge.id';
+          return {
+            firebaseUid: null,
+            authReady: true,
+            isAuthenticated: true,
+            isLocalVercelAuth: true,
+            guideOpen: !state.guideDismissed,
+            profile: {
+              ...state.profile,
+              id: `vercel-${cleanEmail.replace(/[^a-zA-Z0-9]/g, '').slice(0, 16) || 'user'}`,
+              displayName: cleanName,
+              email: cleanEmail,
+            },
+          };
+        }),
+
+      logoutAccount: () =>
+        set(() => ({
+          firebaseUid: null,
+          authReady: true,
+          isAuthenticated: false,
+          isLocalVercelAuth: false,
+          hasCompletedOnboarding: false,
+          profile: INITIAL_ZERO_PROFILE,
+          waterMl: 0,
+          stepsToday: 0,
+          sleepHoursToday: 0,
+          streakDays: 0,
+          goldenRules: { ...DEFAULT_GOLDEN_RULES_STATE },
+          prayersCompleted: { ...DEFAULT_PRAYER_COMPLETION },
+          runSessions: [],
+          workouts: [],
+          nutritionLogs: [],
+          weeklyPerformance: createZeroWeeklyPerformance(),
+        })),
 
       setGuideOpen: (open) => set({ guideOpen: open }),
 

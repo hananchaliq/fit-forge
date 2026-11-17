@@ -80,8 +80,13 @@ export function AppShell({
     try {
       await signInWithPopup(auth, googleProvider);
       setGuideOpen(true);
-    } catch {
-      router.push('/login');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('auth/unauthorized-domain')) {
+        router.push('/login?error=unauthorized-domain');
+      } else {
+        router.push('/login');
+      }
     }
   };
 

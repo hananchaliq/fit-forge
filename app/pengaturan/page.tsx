@@ -23,6 +23,7 @@ export default function PengaturanPage() {
   const {
     profile,
     isAuthenticated,
+    isLocalVercelAuth,
     firebaseUid,
     setGuideOpen,
     updateProfile,
@@ -57,14 +58,24 @@ export default function PengaturanPage() {
     try {
       await signInWithPopup(auth, googleProvider);
       setGuideOpen(true);
-    } catch {
-      // handled by user popup
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('auth/unauthorized-domain')) {
+        window.location.href = '/login?error=unauthorized-domain';
+      } else {
+        window.location.href = '/login';
+      }
     }
   };
 
   const handleGoogleLogout = async () => {
-    await signOut(auth);
-    setSavedBanner('Anda telah keluar dari akun Google.');
+    try {
+      await signOut(auth);
+    } catch {
+      // ignore if local fallback session
+    }
+    useFitForgeStore.getState().logoutAccount();
+    setSavedBanner('Anda telah keluar dari akun.');
     setTimeout(() => setSavedBanner(''), 3000);
   };
 
@@ -193,7 +204,11 @@ export default function PengaturanPage() {
                 <p className="font-bold text-white">{profile.displayName}</p>
                 <p className="text-neutral-400">{profile.email}</p>
                 <p className="text-[11px] text-emerald-400 font-semibold">
-                  ✓ Terhubung ke Cloud Firestore (UID: {firebaseUid?.slice(0, 10)}...)
+                  {firebaseUid
+                    ? `✓ Terhubung ke Cloud Firestore (UID: ${firebaseUid.slice(0, 10)}...)`
+                    : isLocalVercelAuth
+                      ? `✓ Aktif di Mode Domain Vercel (${profile.id})`
+                      : '✓ Akun Aktif'}
                 </p>
                 <button
                   type="button"
@@ -201,7 +216,7 @@ export default function PengaturanPage() {
                   className="w-full mt-2 py-2.5 rounded-xl bg-[#262626] hover:bg-[#333333] text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <LogOut className="w-4 h-4 text-[#EF4444]" />
-                  <span>Keluar dari Akun Google</span>
+                  <span>Keluar dari Akun</span>
                 </button>
               </div>
             ) : (
