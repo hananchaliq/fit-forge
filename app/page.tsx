@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useSyncExternalStore } from 'react';
+import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, useScroll, useTransform } from 'motion/react';
@@ -8,6 +8,7 @@ import { signInWithPopup } from 'firebase/auth';
 import {
   ArrowRight,
   Box,
+  Bone,
   MapPin,
   Utensils,
   BellRing,
@@ -15,7 +16,6 @@ import {
   Activity,
   BookOpen,
   LogIn,
-  CheckCircle2,
   LayoutDashboard,
   CalendarRange,
 } from 'lucide-react';
@@ -30,6 +30,7 @@ import {
   MOTION_SPRING,
 } from '@/components/ui/MotionPrimitives';
 import HeroRunner3D from '@/components/landing/HeroRunner3D';
+import type { MannequinDisplayMode } from '@/components/workout3d/TrainerStudio3D';
 
 const FEATURES = [
   {
@@ -72,6 +73,7 @@ export default function LandingPage() {
   const router = useRouter();
   const { isAuthenticated, profile, setGuideOpen, hasCompletedOnboarding } =
     useFitForgeStore();
+  const [heroDisplayMode, setHeroDisplayMode] = useState<MannequinDisplayMode>('muscle');
   const heroMounted = useSyncExternalStore(
     emptySubscribe,
     () => true,
@@ -116,9 +118,9 @@ export default function LandingPage() {
         }}
       />
 
-      {/* Sticky Top Header (Safe-Area + Zero 320px Overlap + 44px Targets) */}
-      <header className="sticky top-0 z-30 pt-safe bg-[#09090B]/92 backdrop-blur-md border-b border-[#1C1C22]">
-        <div className="max-w-7xl mx-auto px-3.5 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-6">
+      {/* Sticky Top Header (Compact on Mobile <=15% cap, 44px Touch Targets) */}
+      <header className="sticky top-0 z-30 pt-safe bg-[#09090B]/95 border-b border-[#1C1C22]">
+        <div className="max-w-7xl mx-auto px-3.5 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-6">
           <Link
             href="/"
             className="flex items-center gap-2.5 min-h-[44px] min-w-0 shrink-0"
@@ -193,8 +195,8 @@ export default function LandingPage() {
       <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-12 lg:pt-14 lg:pb-18">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
           <div className="lg:col-span-7 space-y-5 sm:space-y-6 min-w-0">
-            <p className="text-[11px] sm:text-xs font-bold tracking-[0.16em] uppercase text-[#F97316]">
-              SISTEM KEBUGARAN BIOMEKANIK 3D · PRESISI HARIAN
+            <p className="text-xs sm:text-sm font-semibold text-[#F59E0B]">
+              Anatomi 3D Interaktif &amp; Pelacakan Kebugaran Harian
             </p>
 
             <h1 className="text-fluid-display font-extrabold tracking-tight text-white">
@@ -205,7 +207,7 @@ export default function LandingPage() {
             </h1>
 
             <p className="text-sm sm:text-base lg:text-lg text-neutral-300 max-w-xl leading-relaxed">
-              Mulai bersih dari nol tanpa data rekayasa. Pelajari aktivasi otot di Studio 3D, lacak lari GPS berfilter Kalman &amp; Haversine, hitung makro kuliner Indonesia dengan Gemini AI, serta jaga ritme sholat dan hidrasi dalam satu aplikasi.
+              Mulai bersih dari nol tanpa data rekayasa. Pelajari aktivasi otot &amp; kerangka tulang 3D secara real-time, lacak lari GPS berfilter Kalman, analisis nutrisi masakan Indonesia langsung via Gemini AI, serta atur jadwal sholat dan hidrasi.
             </p>
 
             <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -255,25 +257,25 @@ export default function LandingPage() {
               </Link>
             </div>
 
-            {/* 3 Asymmetric Hierarchy Spec Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 pt-3">
+            {/* 3 Spec Cards — horizontal snap swipe on narrow mobile, 3-col grid on sm+ */}
+            <div className="flex sm:grid sm:grid-cols-3 gap-3 sm:gap-4 pt-3 overflow-x-auto sm:overflow-visible snap-x snap-mandatory pb-1 sm:pb-0 -mx-1 px-1 sm:mx-0 sm:px-0">
               {[
                 {
-                  eyebrow: 'Database Cloud',
-                  value: 'Mulai dari 0',
-                  color: 'text-white',
-                  sub: 'Sinkron Google · Bebas data dummy',
+                  eyebrow: 'Anatomi 3D PBR',
+                  value: 'Otot & Tulang',
+                  color: 'text-[#F59E0B]',
+                  sub: 'Mannequin fleksibel · X-Ray & 22-Bone IK',
                 },
                 {
-                  eyebrow: 'Anatomi 3D',
-                  value: '11 Grup Otot',
-                  color: 'text-[#F97316]',
-                  sub: 'Material PBR + Peta SVG 2D',
+                  eyebrow: 'Analisis Nutrisi',
+                  value: 'Gemini Real-Time',
+                  color: 'text-white',
+                  sub: 'Transparan model & token · Tanpa fallback',
                 },
                 {
                   eyebrow: 'Rencana Split',
                   value: '7 Hari Penuh',
-                  color: 'text-[#F59E0B]',
+                  color: 'text-[#F97316]',
                   sub: 'Mode Gym & Mode Rumah',
                 },
               ].map((spec) => (
@@ -281,12 +283,12 @@ export default function LandingPage() {
                   key={spec.eyebrow}
                   whileHover={{ y: -3, borderColor: 'rgba(249,115,22,0.45)' }}
                   transition={MOTION_SPRING}
-                  className="rounded-2xl bg-[#141418] border border-[#27272F] p-4 min-w-0"
+                  className="min-w-[215px] sm:min-w-0 snap-start rounded-2xl bg-[#141418] border border-[#27272F] p-4"
                 >
-                  <p className="text-[11px] text-neutral-400 font-semibold uppercase tracking-wider">
+                  <p className="text-xs text-neutral-400 font-medium">
                     {spec.eyebrow}
                   </p>
-                  <p className={`text-xl sm:text-2xl font-extrabold ${spec.color} mt-1 font-telemetry`}>
+                  <p className={`text-lg sm:text-xl font-extrabold ${spec.color} mt-1 font-telemetry`}>
                     {spec.value}
                   </p>
                   <p className="text-[11px] text-neutral-400 mt-1">{spec.sub}</p>
@@ -295,26 +297,76 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Right Column: Sculpted PBR 3D Runner Stage */}
+          {/* Right Column: Sculpted Bald Faceless 3D Mannequin Stage + Interactive Bone Mode */}
           <div className="lg:col-span-5 min-w-0">
             <div className="relative rounded-3xl bg-[#111116] athletic-grain border border-[#27272F] p-2.5 sm:p-3 shadow-2xl overflow-hidden">
+              {/* Interactive 3D Display Mode Switcher matching Studio 3D */}
+              <div className="flex items-center justify-between gap-2 px-2 pb-2 border-b border-[#22222A]">
+                <span className="text-xs font-semibold text-neutral-300 truncate">
+                  Mannequin 3D · Sprint Rig
+                </span>
+                <div
+                  className="inline-flex rounded-xl bg-[#09090D] p-0.5 border border-[#24242E] shrink-0"
+                  role="group"
+                  aria-label="Mode tampilan mannequin 3D"
+                >
+                  {(
+                    [
+                      { key: 'muscle', label: 'Otot' },
+                      { key: 'xray', label: 'X-Ray' },
+                      { key: 'skeleton', label: 'Tulang' },
+                    ] as const
+                  ).map((m) => (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => setHeroDisplayMode(m.key)}
+                      className={`relative min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer ${
+                        heroDisplayMode === m.key
+                          ? 'text-black'
+                          : 'text-neutral-400 hover:text-white'
+                      }`}
+                    >
+                      {heroDisplayMode === m.key && (
+                        <motion.span
+                          layoutId="hero-displaymode-pill"
+                          transition={MOTION_SPRING}
+                          className="absolute inset-0 rounded-lg bg-gradient-to-r from-[#F97316] to-[#F59E0B]"
+                        />
+                      )}
+                      {m.key === 'skeleton' && (
+                        <Bone className="relative z-10 w-3 h-3 shrink-0" />
+                      )}
+                      <span className="relative z-10">{m.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <Canvas3DErrorBoundary
-                title="Siluet Biomekanik 3D FitForge"
+                title="Mannequin Biomekanik 3D FitForge"
                 description="Mode pratinjau hemat daya aktif. Buka Studio 3D untuk latihan interaktif penuh."
-                heightClass="h-[340px] sm:h-[440px]"
+                heightClass="h-[330px] sm:h-[420px]"
               >
                 {heroMounted ? (
-                  <HeroRunner3D />
+                  <HeroRunner3D displayMode={heroDisplayMode} />
                 ) : (
                   <BiomechanicalLoader
                     compact
                     label="MEMUAT VISUALISASI 3D"
-                    sublabel="Menyiapkan Material PBR & Pencahayaan Studio..."
+                    sublabel="Menyiapkan Mannequin PBR & Kerangka Tulang..."
                   />
                 )}
               </Canvas3DErrorBoundary>
+
               <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 border-t border-[#22222A] text-[11px] sm:text-xs text-neutral-400">
-                <span>Siluet Pelari 3D · PBR Karbon &amp; Ember</span>
+                <span>
+                  {heroDisplayMode === 'skeleton'
+                    ? 'Mode Tulang · Sendi Fleksibel 3D'
+                    : heroDisplayMode === 'xray'
+                    ? 'Mode X-Ray · Mannequin & Kerangka'
+                    : 'Tekstur 3D PBR · Gerak Sprint Fleksibel'}
+                </span>
                 <span className="text-[#F59E0B] font-medium">Geser kursor untuk paralaks</span>
               </div>
             </div>
@@ -327,8 +379,8 @@ export default function LandingPage() {
         <div className="rounded-3xl bg-[#111116] border border-[#24242C] p-5 sm:p-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#24242C]">
             <div className="min-w-0">
-              <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#F59E0B] block">
-                Alur Memulai Tanpa Hambatan
+              <span className="text-xs font-semibold text-[#F59E0B] block">
+                Alur Memulai
               </span>
               <h2 className="text-lg sm:text-2xl font-extrabold text-white mt-1 text-balance">
                 Empat Langkah Membangun Ritme Harian
@@ -345,41 +397,38 @@ export default function LandingPage() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+          <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4 mt-6 overflow-x-auto sm:overflow-visible snap-x snap-mandatory pb-1 sm:pb-0">
             {[
               {
-                step: '01',
+                step: '01.',
                 title: 'Masuk Akun Google',
                 body: 'Profil Firestore pribadi dibuat otomatis dengan seluruh metrik dimulai bersih dari 0.',
               },
               {
-                step: '02',
+                step: '02.',
                 title: 'Atur Profil & Kota',
                 body: 'Sesuaikan berat, tinggi, target latihan, dan kota untuk jadwal sholat Kemenag RI.',
               },
               {
-                step: '03',
+                step: '03.',
                 title: 'Rekam 3D & Lari GPS',
                 body: 'Simpan sesi angkat beban dari Studio 3D atau lacak rute lari GPS secara real-time.',
               },
               {
-                step: '04',
+                step: '04.',
                 title: 'Pindai Nutrisi & Air',
-                body: 'Hitung makro masakan Indonesia, catat air +250ml, dan selesaikan 5 Golden Rules.',
+                body: 'Analisis makro masakan Indonesia via Gemini AI, catat air +250ml, dan tuntaskan 5 Golden Rules.',
               },
             ].map((item, idx) => (
-              <MotionReveal key={item.step} delay={idx * 0.05}>
+              <MotionReveal key={item.step} delay={idx * 0.05} className="min-w-[235px] sm:min-w-0 snap-start">
                 <motion.div
                   whileHover={{ y: -3, borderColor: 'rgba(249,115,22,0.4)' }}
                   transition={MOTION_SPRING}
                   className="h-full rounded-2xl bg-[#0D0D11] border border-[#24242C] p-4 min-w-0"
                 >
-                  <div className="flex items-center justify-between mb-2.5">
-                    <span className="px-2 py-0.5 rounded-md bg-[#F97316]/15 text-[#F97316] text-xs font-telemetry font-bold">
-                      {item.step}
-                    </span>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  </div>
+                  <span className="text-sm font-telemetry font-extrabold text-[#F97316] block mb-2">
+                    {item.step}
+                  </span>
                   <h3 className="text-sm font-bold text-white">{item.title}</h3>
                   <p className="text-xs text-neutral-400 mt-1.5 leading-relaxed">{item.body}</p>
                 </motion.div>
@@ -476,10 +525,10 @@ export default function LandingPage() {
         </div>
       </footer>
 
-      {/* FLOATING MOBILE BOTTOM DOCK ON LANDING PAGE (< 768px, SAFE-AREA + 44px TARGETS) */}
+      {/* FLOATING MOBILE BOTTOM DOCK ON LANDING PAGE (< 768px, LIGHTWEIGHT & TACTILE) */}
       <div className="md:hidden fixed bottom-dock-safe inset-x-2.5 z-40 pointer-events-none">
         <nav
-          className="pointer-events-auto h-16 rounded-2xl bg-[#0D0D11]/95 backdrop-blur-xl border border-[#27272F] px-1.5 flex items-center justify-around shadow-[0_14px_36px_rgba(0,0,0,0.75)] select-none"
+          className="pointer-events-auto h-15 rounded-2xl bg-[#0D0D11]/96 border border-[#27272F] px-1.5 flex items-center justify-around shadow-[0_12px_28px_rgba(0,0,0,0.68)] select-none"
           aria-label="Navigasi Cepat Mobile"
         >
           <Link

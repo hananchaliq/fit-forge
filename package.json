@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "clean": "next clean",
     "inspect:model": "node scripts/inspect-model.mjs",
-    "test": "tsx --test lib/gps.test.ts lib/nutritionFallback.test.ts"
+    "test": "tsx --test lib/gps.test.ts lib/nutritionFallback.test.ts lib/workout3d/biomechanics.test.ts"
   },
   "dependencies": {
     "@firebase/eslint-plugin-security-rules": "^0.0.2",

@@ -427,7 +427,7 @@ export default function RunTrackerPage() {
 
     ctx.fillStyle = '#F97316';
     ctx.font = 'bold 28px sans-serif';
-    ctx.fillText('FITFORGE // GPS RUN TRACKER', 56, 84);
+    ctx.fillText('FITFORGE · GPS RUN TRACKER', 56, 84);
 
     ctx.fillStyle = '#FFFFFF';
     ctx.font = 'bold 42px sans-serif';

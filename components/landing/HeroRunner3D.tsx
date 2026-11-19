@@ -4,23 +4,179 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { createProceduralPBRTextures, disposeSceneResources } from '@/lib/pbrTextures';
+import type { MannequinDisplayMode } from '@/components/workout3d/TrainerStudio3D';
 
-export function HeroRunner3D() {
+export interface HeroRunner3DProps {
+  displayMode?: MannequinDisplayMode;
+}
+
+interface LoftProfile {
+  s: number;
+  rx: number;
+  rzAnt: number;
+  rzPost: number;
+  cz?: number;
+  pinchCenter?: number;
+}
+
+function lerpNum(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+
+function smoothstep(edge0: number, edge1: number, x: number) {
+  const t = Math.max(0, Math.min(1, (x - edge0) / Math.max(1e-6, edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+function sampleProfile(sections: LoftProfile[], s: number): LoftProfile {
+  if (s <= sections[0].s) return sections[0];
+  const last = sections[sections.length - 1];
+  if (s >= last.s) return last;
+  for (let i = 0; i < sections.length - 1; i++) {
+    const a = sections[i];
+    const b = sections[i + 1];
+    if (s >= a.s && s <= b.s) {
+      const t = smoothstep(0, 1, (s - a.s) / Math.max(1e-5, b.s - a.s));
+      return {
+        s,
+        rx: lerpNum(a.rx, b.rx, t),
+        rzAnt: lerpNum(a.rzAnt, b.rzAnt, t),
+        rzPost: lerpNum(a.rzPost, b.rzPost, t),
+        cz: lerpNum(a.cz || 0, b.cz || 0, t),
+        pinchCenter: lerpNum(a.pinchCenter || 0, b.pinchCenter || 0, t),
+      };
+    }
+  }
+  return last;
+}
+
+/**
+ * Builds a seamless organic anatomical loft mesh (matching TrainerStudio3D quality)
+ * with smooth vertex normals, multi-material group support (skin / charcoal shorts / sleeve / active),
+ * and organic muscle-surface sculpting (pecs, 6-pack abs, serratus, quads, deltoids, bald faceless head).
+ */
+function buildOrganicLoftMesh(
+  sections: LoftProfile[],
+  length: number,
+  heightSegs: number,
+  radialSegs: number,
+  materials: THREE.Material[],
+  sculptFn: (
+    s: number,
+    nx: number,
+    nz: number,
+    pt: { x: number; y: number; z: number }
+  ) => void,
+  groupFn: (s: number, nx: number, nz: number) => number,
+  originAtTop = false
+): THREE.Mesh {
+  const numCols = radialSegs + 1;
+  const numRows = heightSegs + 1;
+  const totalVerts = numRows * numCols;
+  const positions = new Float32Array(totalVerts * 3);
+  const uvs = new Float32Array(totalVerts * 2);
+
+  for (let r = 0; r < numRows; r++) {
+    const s = r / heightSegs;
+    const sec = sampleProfile(sections, s);
+    const y = originAtTop ? -s * length : s * length;
+
+    for (let c = 0; c < numCols; c++) {
+      const u = c === radialSegs ? 0 : c / radialSegs;
+      const theta = u * Math.PI * 2;
+      const nx = Math.cos(theta);
+      const nz = Math.sin(theta);
+
+      const x = nx * sec.rx;
+      const rz = nz >= 0 ? sec.rzAnt : sec.rzPost;
+      let z = nz * rz + (sec.cz || 0);
+
+      if (sec.pinchCenter) {
+        const centerBand = Math.exp(-nx * nx * 14);
+        if (nz >= 0) z -= sec.pinchCenter * centerBand * nz;
+        else z += sec.pinchCenter * 0.85 * centerBand * -nz;
+      }
+
+      const pt = { x, y, z };
+      sculptFn(s, nx, nz, pt);
+
+      const idx = r * numCols + c;
+      positions[idx * 3] = pt.x;
+      positions[idx * 3 + 1] = pt.y;
+      positions[idx * 3 + 2] = pt.z;
+      uvs[idx * 2] = c / radialSegs;
+      uvs[idx * 2 + 1] = s;
+    }
+  }
+
+  const buckets = new Map<number, number[]>();
+  for (let r = 0; r < heightSegs; r++) {
+    const sMid = (r + 0.5) / heightSegs;
+    for (let c = 0; c < radialSegs; c++) {
+      const thetaMid = ((c + 0.5) / radialSegs) * Math.PI * 2;
+      const g = groupFn(sMid, Math.cos(thetaMid), Math.sin(thetaMid));
+      let list = buckets.get(g);
+      if (!list) {
+        list = [];
+        buckets.set(g, list);
+      }
+      const a = r * numCols + c;
+      const b = r * numCols + c + 1;
+      const d = (r + 1) * numCols + c;
+      const e = (r + 1) * numCols + c + 1;
+
+      if (originAtTop) {
+        list.push(a, b, d, b, e, d);
+      } else {
+        list.push(a, d, b, b, d, e);
+      }
+    }
+  }
+
+  const indices: number[] = [];
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+
+  for (const g of Array.from(buckets.keys()).sort((a, b) => a - b)) {
+    const list = buckets.get(g)!;
+    const start = indices.length;
+    for (let i = 0; i < list.length; i++) indices.push(list[i]);
+    geo.addGroup(start, list.length, g);
+  }
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+
+  // Seamless seam-normal averaging
+  const norm = geo.getAttribute('normal') as THREE.BufferAttribute;
+  for (let r = 0; r < numRows; r++) {
+    const i0 = r * numCols;
+    const i1 = r * numCols + radialSegs;
+    const x = (norm.getX(i0) + norm.getX(i1)) * 0.5;
+    const y = (norm.getY(i0) + norm.getY(i1)) * 0.5;
+    const z = (norm.getZ(i0) + norm.getZ(i1)) * 0.5;
+    const len = Math.hypot(x, y, z) || 1;
+    norm.setXYZ(i0, x / len, y / len, z / len);
+    norm.setXYZ(i1, x / len, y / len, z / len);
+  }
+
+  return new THREE.Mesh(geo, materials);
+}
+
+export function HeroRunner3D({ displayMode = 'muscle' }: HeroRunner3DProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
-  const [webglFailed, setWebglFailed] = useState(false);
+  const [webGLOk, setWebGLOk] = useState(true);
+  const modeRef = useRef<MannequinDisplayMode>(displayMode);
+  const applyModeFnRef = useRef<((mode: MannequinDisplayMode) => void) | null>(null);
+
+  useEffect(() => {
+    modeRef.current = displayMode;
+    applyModeFnRef.current?.(displayMode);
+  }, [displayMode]);
 
   useEffect(() => {
     const container = mountRef.current;
     if (!container) return;
-
-    let frameId = 0;
-    let disposed = false;
-    let isVisible = true;
-    let isTabVisible = typeof document !== 'undefined' ? document.visibilityState === 'visible' : true;
-    let isContextLost = false;
-    const prefersReducedMotion =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const isSoftwareGl = (() => {
       try {
@@ -33,9 +189,18 @@ export function HeroRunner3D() {
         gl.getExtension('WEBGL_lose_context')?.loseContext();
         return /SwiftShader|llvmpipe|softpipe|Software|Basic Render/i.test(gpu);
       } catch {
-        return true;
+        return false;
       }
     })();
+
+    let disposed = false;
+    let isVisible = true;
+    let isTabVisible =
+      typeof document !== 'undefined' ? document.visibilityState === 'visible' : true;
+    let isContextLost = false;
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     let renderer: THREE.WebGLRenderer;
     try {
@@ -45,393 +210,823 @@ export function HeroRunner3D() {
         powerPreference: 'high-performance',
       });
     } catch {
-      window.setTimeout(() => setWebglFailed(true), 0);
+      queueMicrotask(() => setWebGLOk(false));
       return;
     }
 
-    const width = container.clientWidth || 520;
-    const height = container.clientHeight || 460;
+    const width = container.clientWidth || 440;
+    const height = container.clientHeight || 420;
     renderer.setSize(width, height);
     renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.12;
-    renderer.shadowMap.enabled = !isSoftwareGl;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMappingExposure = 1.08;
+
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
 
-    const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
-    const pbr = createProceduralPBRTextures(maxAnisotropy);
-
+    const pbr = createProceduralPBRTextures(renderer.capabilities.getMaxAnisotropy());
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x09090b, 0.085);
 
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
     const envTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
     scene.environment = envTexture;
-    scene.environmentIntensity = 0.65;
+    scene.environmentIntensity = 0.55;
     pmremGenerator.dispose();
 
-    const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 50);
-    camera.position.set(0, 1.38, 4.15);
-    camera.lookAt(0, 1.06, 0);
+    const camera = new THREE.PerspectiveCamera(32, width / height, 0.1, 40);
+    camera.position.set(1.75, 1.24, 2.85);
+    camera.lookAt(0, 0.94, 0.05);
 
-    // 3-Point Editorial Studio Lighting (Warm Key + Cool Sky Fill + Ember Rim)
-    const hemiLight = new THREE.HemisphereLight(0x93c5fd, 0x09090b, 0.6);
-    scene.add(hemiLight);
+    // 4-Point Studio Lighting (Identical signature to Studio 3D)
+    scene.add(new THREE.AmbientLight(0xfff4de, 0.34));
+    scene.add(new THREE.HemisphereLight(0xfff8eb, 0x0b0f18, 0.56));
 
-    const keyLight = new THREE.DirectionalLight(0xfff1dc, 2.35);
-    keyLight.position.set(3.2, 5.2, 3.8);
-    keyLight.castShadow = !isSoftwareGl;
-    keyLight.shadow.mapSize.set(1024, 1024);
-    keyLight.shadow.bias = -0.0005;
-    keyLight.shadow.normalBias = 0.02;
+    const keyLight = new THREE.DirectionalLight(0xfff5e8, 1.72);
+    keyLight.position.set(2.5, 4.4, 3.2);
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0x60a5fa, 0.85);
-    fillLight.position.set(-3.0, 2.4, 2.2);
+    const fillLight = new THREE.DirectionalLight(0xb8d4f5, 0.74);
+    fillLight.position.set(-2.8, 2.4, 1.8);
     scene.add(fillLight);
 
-    const rimLight = new THREE.PointLight(0xff3b1d, 6.0, 10);
-    rimLight.position.set(-2.1, 2.2, -2.1);
+    const rimLight = new THREE.DirectionalLight(0xfde6c4, 1.05);
+    rimLight.position.set(-1.6, 2.8, -3.0);
     scene.add(rimLight);
 
-    const warmUnderLight = new THREE.PointLight(0xf97316, 3.2, 7);
-    warmUnderLight.position.set(1.8, 0.65, 1.6);
-    scene.add(warmUnderLight);
-
-    // Procedural PBR Materials with high roughness/metalness contrast
-    const carbonArmorMat = new THREE.MeshPhysicalMaterial({
-      color: 0x16161b,
-      roughness: 0.34,
-      metalness: 0.78,
-      clearcoat: 0.22,
-      clearcoatRoughness: 0.35,
-      bumpMap: pbr.carbonBumpMap,
-      bumpScale: 0.006,
-      roughnessMap: pbr.carbonRoughnessMap,
+    // Symmetrical Matte-Satin Anatomical Clay PBR Materials (Exact Match with Studio 3D)
+    const skinMat = new THREE.MeshPhysicalMaterial({
+      color: 0xdfc5a4,
+      roughness: 0.64,
+      metalness: 0.02,
+      clearcoat: 0.04,
+      clearcoatRoughness: 0.68,
+      sheen: 0.28,
+      sheenRoughness: 0.72,
+      sheenColor: new THREE.Color(0xf7e8d6),
+      normalMap: pbr.skinNormalMap,
+      normalScale: new THREE.Vector2(0.42, 0.42),
+      bumpMap: pbr.skinBumpMap,
+      bumpScale: 0.0035,
+      roughnessMap: pbr.skinRoughnessMap,
     });
 
-    const titaniumTrimMat = new THREE.MeshPhysicalMaterial({
-      color: 0x52525b,
-      roughness: 0.22,
-      metalness: 0.92,
-      clearcoat: 0.15,
-    });
-
-    const emberMuscleMat = new THREE.MeshPhysicalMaterial({
-      color: 0xea580c,
-      emissive: 0xff3b1d,
-      emissiveIntensity: 0.82,
-      roughness: 0.44,
-      metalness: 0.18,
-      sheen: 0.35,
-      sheenColor: new THREE.Color(0xfdba74),
+    const activeAccentMat = new THREE.MeshPhysicalMaterial({
+      color: 0xe53935,
+      emissive: new THREE.Color(0xb71c1c),
+      emissiveIntensity: 0.28,
+      roughness: 0.52,
+      metalness: 0.03,
+      clearcoat: 0.05,
+      clearcoatRoughness: 0.60,
+      sheen: 0.26,
+      sheenRoughness: 0.66,
+      sheenColor: new THREE.Color(0xffb4a2),
+      normalMap: pbr.skinNormalMap,
+      normalScale: new THREE.Vector2(0.50, 0.50),
       bumpMap: pbr.skinBumpMap,
       bumpScale: 0.004,
       roughnessMap: pbr.skinRoughnessMap,
     });
 
-    const warmAmberMat = new THREE.MeshPhysicalMaterial({
-      color: 0xf59e0b,
-      emissive: 0xd97706,
-      emissiveIntensity: 0.48,
-      roughness: 0.48,
-      metalness: 0.28,
-      bumpMap: pbr.skinBumpMap,
-      bumpScale: 0.003,
+    const charcoalFabricMat = new THREE.MeshPhysicalMaterial({
+      color: 0x252a34,
+      roughness: 0.84,
+      metalness: 0.03,
+      sheen: 0.22,
+      sheenRoughness: 0.76,
+      sheenColor: new THREE.Color(0x475569),
+      normalMap: pbr.fabricNormalMap,
+      normalScale: new THREE.Vector2(0.58, 0.58),
+      bumpMap: pbr.fabricBumpMap,
+      bumpScale: 0.005,
+      roughnessMap: pbr.fabricRoughnessMap,
     });
 
-    const runnerGroup = new THREE.Group();
-    scene.add(runnerGroup);
-
-    // 1. Tiered Carbon Studio Pedestal + Recessed Ember Ring + Grounded Contact Shadow
-    const basePlinthGeo = new THREE.CylinderGeometry(1.36, 1.48, 0.07, 48);
-    const basePlinth = new THREE.Mesh(basePlinthGeo, carbonArmorMat);
-    basePlinth.position.y = 0.035;
-    basePlinth.receiveShadow = true;
-    runnerGroup.add(basePlinth);
-
-    const innerPlateGeo = new THREE.CylinderGeometry(1.16, 1.24, 0.035, 48);
-    const innerPlate = new THREE.Mesh(innerPlateGeo, titaniumTrimMat);
-    innerPlate.position.y = 0.085;
-    innerPlate.receiveShadow = true;
-    runnerGroup.add(innerPlate);
-
-    const emberRingGeo = new THREE.TorusGeometry(1.26, 0.016, 16, 64);
-    const emberRing = new THREE.Mesh(emberRingGeo, emberMuscleMat);
-    emberRing.rotation.x = Math.PI / 2;
-    emberRing.position.y = 0.075;
-    runnerGroup.add(emberRing);
-
-    const contactShadowGeo = new THREE.PlaneGeometry(1.65, 1.65);
-    const contactShadowMat = new THREE.MeshBasicMaterial({
-      map: pbr.contactShadowMap,
-      transparent: true,
-      opacity: 0.72,
-      depthWrite: false,
+    const boneMat = new THREE.MeshPhysicalMaterial({
+      color: 0xf4ecda,
+      roughness: 0.44,
+      metalness: 0.06,
+      clearcoat: 0.12,
+      clearcoatRoughness: 0.48,
+      emissive: new THREE.Color(0x3a2e1a),
+      emissiveIntensity: 0.18,
+      normalMap: pbr.boneNormalMap,
+      normalScale: new THREE.Vector2(0.45, 0.45),
+      roughnessMap: pbr.boneRoughnessMap,
     });
-    const contactShadow = new THREE.Mesh(contactShadowGeo, contactShadowMat);
+
+    const jointBeaconMat = new THREE.MeshPhysicalMaterial({
+      color: 0xf97316,
+      emissive: new THREE.Color(0xea580c),
+      emissiveIntensity: 0.68,
+      roughness: 0.24,
+      metalness: 0.34,
+      clearcoat: 0.42,
+    });
+
+    // Material array for organic lofts: [0: golden skin, 1: charcoal fabric, 2: active muscle warm amber]
+    const loftMats = [skinMat, charcoalFabricMat, activeAccentMat];
+
+    // Ground Contact Shadow & Subtle Telemetry Floor Rings
+    const contactShadow = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.75, 1.75),
+      new THREE.MeshBasicMaterial({
+        map: pbr.contactShadowMap,
+        transparent: true,
+        opacity: 0.68,
+        depthWrite: false,
+      })
+    );
     contactShadow.rotation.x = -Math.PI / 2;
-    contactShadow.position.y = 0.106;
-    runnerGroup.add(contactShadow);
+    contactShadow.position.y = 0.004;
+    scene.add(contactShadow);
 
-    // 2. Sculpted Athletic V-Taper Torso via LatheGeometry
-    const torsoPivot = new THREE.Group();
-    torsoPivot.position.set(0, 1.12, 0);
-    torsoPivot.rotation.x = 0.24; // Dynamic sprint lean
-    runnerGroup.add(torsoPivot);
+    const floorRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.66, 0.685, 64),
+      new THREE.MeshBasicMaterial({
+        color: 0xf59e0b,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.34,
+      })
+    );
+    floorRing.rotation.x = -Math.PI / 2;
+    floorRing.position.y = 0.007;
+    scene.add(floorRing);
 
-    const torsoProfile = [
-      new THREE.Vector2(0.01, -0.18),
-      new THREE.Vector2(0.18, -0.14), // Pelvis
-      new THREE.Vector2(0.165, -0.02), // Narrow waist
-      new THREE.Vector2(0.20, 0.12), // Lower ribcage
-      new THREE.Vector2(0.255, 0.28), // Chest / lats flare
-      new THREE.Vector2(0.24, 0.41), // Clavicle shelf
-      new THREE.Vector2(0.095, 0.49), // Neck base
-      new THREE.Vector2(0.068, 0.56), // Upper neck
+    const outerRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.92, 0.935, 64),
+      new THREE.MeshBasicMaterial({
+        color: 0x334155,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.30,
+      })
+    );
+    outerRing.rotation.x = -Math.PI / 2;
+    outerRing.position.y = 0.006;
+    scene.add(outerRing);
+
+    // ============================================================================
+    // UNIFIED SCULPTED ORGANIC LOFT MANNEQUIN (BALD, FACELESS, ATHLETIC)
+    // ============================================================================
+    const runner = new THREE.Group();
+    scene.add(runner);
+
+    const pelvisPivot = new THREE.Group();
+    pelvisPivot.position.set(0, 0.94, 0);
+    runner.add(pelvisPivot);
+
+    // Seamless Charcoal Pelvis + Waist Shorts Hub
+    const pelvisSections: LoftProfile[] = [
+      { s: 0.0, rx: 0.02, rzAnt: 0.02, rzPost: 0.02 },
+      { s: 0.14, rx: 0.158, rzAnt: 0.105, rzPost: 0.128, cz: -0.008 },
+      { s: 0.55, rx: 0.168, rzAnt: 0.114, rzPost: 0.132, cz: -0.006, pinchCenter: 0.012 },
+      { s: 1.0, rx: 0.142, rzAnt: 0.102, rzPost: 0.104 },
     ];
-    const torsoGeo = new THREE.LatheGeometry(torsoProfile, 28);
-    const torsoMesh = new THREE.Mesh(torsoGeo, carbonArmorMat);
-    torsoMesh.scale.set(1.06, 1.0, 0.74);
-    torsoMesh.castShadow = true;
-    torsoPivot.add(torsoMesh);
+    const pelvisMesh = buildOrganicLoftMesh(
+      pelvisSections,
+      0.19,
+      14,
+      28,
+      loftMats,
+      (s, nx, nz, pt) => {
+        if (nz < -0.15 && s > 0.18 && s < 0.72) {
+          const glute = Math.exp(-Math.pow((Math.abs(nx) - 0.52) / 0.34, 2)) * Math.sin(((s - 0.18) / 0.54) * Math.PI);
+          pt.z -= 0.018 * glute;
+        }
+      },
+      () => 1 // Charcoal shorts fabric
+    );
+    pelvisMesh.position.y = -0.09;
+    pelvisPivot.add(pelvisMesh);
 
-    // Sculpted Left & Right Pectoral Muscle Plates
-    const pecGeo = new THREE.SphereGeometry(0.14, 20, 16);
-    [-1, 1].forEach((side) => {
-      const pec = new THREE.Mesh(pecGeo, emberMuscleMat);
-      pec.scale.set(0.95, 0.68, 0.52);
-      pec.position.set(side * 0.115, 0.28, 0.145);
-      pec.rotation.y = side * -0.22;
-      torsoPivot.add(pec);
-    });
+    // Flexible Spine -> Sculpted V-Taper Athletic Torso (Abs + Obliques + Pecs + Lats + Traps)
+    const spinePivot = new THREE.Group();
+    spinePivot.position.set(0, 0.08, 0);
+    pelvisPivot.add(spinePivot);
 
-    // Sculpted Core Abs Segments (3 contoured segments)
-    const abGeo = new THREE.CapsuleGeometry(0.042, 0.12, 6, 12);
-    [0.14, 0.05, -0.04].forEach((yOff, idx) => {
-      const ab = new THREE.Mesh(abGeo, warmAmberMat);
-      ab.rotation.z = Math.PI / 2;
-      ab.scale.set(0.85, 1.0 - idx * 0.1, 0.55);
-      ab.position.set(0, yOff, 0.132 - idx * 0.008);
-      torsoPivot.add(ab);
-    });
+    const torsoSections: LoftProfile[] = [
+      { s: 0.0, rx: 0.140, rzAnt: 0.100, rzPost: 0.102, pinchCenter: 0.008 },
+      { s: 0.22, rx: 0.136, rzAnt: 0.104, rzPost: 0.102, pinchCenter: 0.014 },
+      { s: 0.45, rx: 0.158, rzAnt: 0.114, rzPost: 0.114, pinchCenter: 0.014 },
+      { s: 0.70, rx: 0.196, rzAnt: 0.128, rzPost: 0.128, pinchCenter: 0.018 },
+      { s: 0.88, rx: 0.188, rzAnt: 0.110, rzPost: 0.112, pinchCenter: 0.010 },
+      { s: 1.0, rx: 0.072, rzAnt: 0.068, rzPost: 0.072 },
+    ];
 
-    // Dorsal Spine Energy Ridge (visible during rotation)
-    const spineGeo = new THREE.CapsuleGeometry(0.022, 0.36, 6, 10);
-    const spineRidge = new THREE.Mesh(spineGeo, emberMuscleMat);
-    spineRidge.position.set(0, 0.18, -0.155);
-    torsoPivot.add(spineRidge);
+    const torsoMesh = buildOrganicLoftMesh(
+      torsoSections,
+      0.48,
+      26,
+      36,
+      loftMats,
+      (s, nx, nz, pt) => {
+        // Sculpted Pectoralis Major slabs
+        if (nz > 0.2 && s > 0.52 && s < 0.86) {
+          const pecY = Math.sin(((s - 0.52) / 0.34) * Math.PI);
+          const pecX = Math.exp(-Math.pow((Math.abs(nx) - 0.46) / 0.32, 2));
+          pt.z += 0.024 * pecY * pecX * nz;
+        }
+        // 6-Pack Rectus Abdominis + Linea Alba
+        if (nz > 0.35 && s > 0.08 && s < 0.50) {
+          const abCol = Math.exp(-Math.pow((Math.abs(nx) - 0.26) / 0.18, 2));
+          const abRow = Math.pow(Math.abs(Math.sin(((s - 0.08) / 0.42) * Math.PI * 3)), 0.8);
+          pt.z += 0.011 * abCol * abRow;
+        }
+        // Sculpted Latissimus Dorsi & Upper Back
+        if (nz < -0.2 && s > 0.38 && s < 0.84) {
+          const latY = Math.sin(((s - 0.38) / 0.46) * Math.PI);
+          const latX = Math.exp(-Math.pow((Math.abs(nx) - 0.56) / 0.30, 2));
+          pt.z -= 0.018 * latY * latX;
+          pt.x += Math.sign(nx) * 0.012 * latY * latX;
+        }
+      },
+      (s, nx, nz) => {
+        if (nz > 0.28 && s > 0.54 && s < 0.84 && Math.abs(nx) > 0.12) return 2;
+        if (nz > 0.42 && s > 0.10 && s < 0.48 && Math.abs(nx) < 0.46) return 2;
+        return 0;
+      }
+    );
+    spinePivot.add(torsoMesh);
 
-    // 3. Sculpted Aerodynamic Head & Curved Visor
-    const headGroup = new THREE.Group();
-    headGroup.position.set(0, 0.67, 0.03);
-    torsoPivot.add(headGroup);
+    const upperTorsoPivot = new THREE.Group();
+    upperTorsoPivot.position.set(0, 0.36, 0);
+    spinePivot.add(upperTorsoPivot);
 
-    const craniumGeo = new THREE.SphereGeometry(0.145, 24, 24);
-    const craniumMesh = new THREE.Mesh(craniumGeo, carbonArmorMat);
-    craniumMesh.scale.set(0.88, 1.12, 0.98);
-    craniumMesh.castShadow = true;
-    headGroup.add(craniumMesh);
+    // Seamless Sculpted Neck & Smooth Bald Faceless Mannequin Head (ZERO eyes/mouth/hair)
+    const headPivot = new THREE.Group();
+    headPivot.position.set(0, 0.10, 0.005);
+    upperTorsoPivot.add(headPivot);
 
-    const visorGeo = new THREE.CylinderGeometry(0.142, 0.136, 0.055, 24, 1, true, -Math.PI * 0.36, Math.PI * 0.72);
-    const visorMesh = new THREE.Mesh(visorGeo, emberMuscleMat);
-    visorMesh.position.set(0, 0.015, 0.015);
-    headGroup.add(visorMesh);
+    const headSections: LoftProfile[] = [
+      { s: 0.0, rx: 0.062, rzAnt: 0.060, rzPost: 0.064 },
+      { s: 0.22, rx: 0.052, rzAnt: 0.054, rzPost: 0.056 },
+      { s: 0.34, rx: 0.058, rzAnt: 0.078, rzPost: 0.062, cz: 0.010 }, // Jaw/chin contour
+      { s: 0.52, rx: 0.072, rzAnt: 0.088, rzPost: 0.082, cz: 0.008 }, // Smooth faceless plane
+      { s: 0.72, rx: 0.077, rzAnt: 0.089, rzPost: 0.091, cz: 0.002 }, // Smooth bald forehead & cranium
+      { s: 0.88, rx: 0.064, rzAnt: 0.074, rzPost: 0.076 },
+      { s: 0.97, rx: 0.032, rzAnt: 0.036, rzPost: 0.038 },
+      { s: 1.0, rx: 0.003, rzAnt: 0.003, rzPost: 0.003 },
+    ];
+    const headMesh = buildOrganicLoftMesh(
+      headSections,
+      0.30,
+      22,
+      30,
+      loftMats,
+      (s, nx, nz, pt) => {
+        // Subtle mannequin chin taper & clean brow ridge without facial features
+        if (s > 0.30 && s < 0.44 && nz > 0.5) {
+          const chinTaper = Math.sin(((s - 0.30) / 0.14) * Math.PI);
+          pt.z += 0.008 * chinTaper * Math.exp(-nx * nx * 6);
+        }
+      },
+      () => 0
+    );
+    headPivot.add(headMesh);
 
-    // 4. Sculpted Articulated Arms (Deltoids + Upper + Forearms + Hands)
-    const leftArmGroup = new THREE.Group();
-    leftArmGroup.position.set(-0.31, 0.36, 0);
-    torsoPivot.add(leftArmGroup);
+    // Helper: 100% Symmetrical Seamless Organic Lofted Arm + Sculpted 3D Anatomical Hand
+    function createOrganicArm(side: 'left' | 'right') {
+      const isLeft = side === 'left';
+      const xSign = isLeft ? -1 : 1;
 
-    const rightArmGroup = new THREE.Group();
-    rightArmGroup.position.set(0.31, 0.36, 0);
-    torsoPivot.add(rightArmGroup);
+      const shoulderPivot = new THREE.Group();
+      shoulderPivot.position.set(xSign * 0.192, 0.032, 0);
 
-    const deltoidGeo = new THREE.SphereGeometry(0.095, 16, 16);
-    const upperArmGeo = new THREE.CapsuleGeometry(0.062, 0.24, 8, 14);
-    const forearmGeo = new THREE.CapsuleGeometry(0.048, 0.22, 8, 14);
-    const handGeo = new THREE.SphereGeometry(0.045, 12, 12);
+      // Seamless rounded deltoid shoulder dome bridging torso & humerus
+      const deltoidCap = new THREE.Mesh(new THREE.SphereGeometry(0.068, 18, 14), activeAccentMat);
+      deltoidCap.scale.set(0.96, 1.04, 0.98);
+      deltoidCap.position.set(0, -0.008, 0);
+      shoulderPivot.add(deltoidCap);
 
-    [leftArmGroup, rightArmGroup].forEach((armGrp) => {
-      const delt = new THREE.Mesh(deltoidGeo, emberMuscleMat);
-      delt.scale.set(1.0, 1.12, 0.95);
-      armGrp.add(delt);
-
-      const upper = new THREE.Mesh(upperArmGeo, carbonArmorMat);
-      upper.position.y = -0.17;
-      upper.castShadow = true;
-      armGrp.add(upper);
+      // Continuous Deltoid + Upper Arm Loft (symmetrical L/R matte-satin clay)
+      const upperArmSections: LoftProfile[] = [
+        { s: 0.0, rx: 0.004, rzAnt: 0.004, rzPost: 0.004 },
+        { s: 0.08, rx: 0.058, rzAnt: 0.060, rzPost: 0.058 },
+        { s: 0.20, rx: 0.066, rzAnt: 0.068, rzPost: 0.066 },
+        { s: 0.42, rx: 0.055, rzAnt: 0.061, rzPost: 0.059 },
+        { s: 0.70, rx: 0.048, rzAnt: 0.055, rzPost: 0.053 },
+        { s: 0.92, rx: 0.040, rzAnt: 0.043, rzPost: 0.043 },
+        { s: 1.0, rx: 0.038, rzAnt: 0.040, rzPost: 0.040 },
+      ];
+      const upperArmMesh = buildOrganicLoftMesh(
+        upperArmSections,
+        0.30,
+        18,
+        24,
+        loftMats,
+        (s, _nx, nz, pt) => {
+          if (s > 0.36 && s < 0.84) {
+            const bell = Math.sin(((s - 0.36) / 0.48) * Math.PI);
+            if (nz > 0.2) pt.z += 0.009 * bell * nz;
+            if (nz < -0.2) pt.z += 0.008 * bell * nz;
+          }
+        },
+        (s) => (s < 0.30 ? 2 : 0),
+        true
+      );
+      upperArmMesh.position.y = 0.032;
+      shoulderPivot.add(upperArmMesh);
 
       const elbowPivot = new THREE.Group();
-      elbowPivot.position.set(0, -0.31, 0);
-      elbowPivot.rotation.x = -1.12;
-      armGrp.add(elbowPivot);
+      elbowPivot.position.set(0, -0.265, 0);
+      shoulderPivot.add(elbowPivot);
 
-      const fore = new THREE.Mesh(forearmGeo, warmAmberMat);
-      fore.position.y = -0.13;
-      elbowPivot.add(fore);
+      // Seamless elbow joint bridge (zero gap at 90-130 deg sprint flexion)
+      const elbowCap = new THREE.Mesh(new THREE.SphereGeometry(0.039, 14, 12), skinMat);
+      elbowCap.scale.set(0.98, 1.02, 1.02);
+      elbowPivot.add(elbowCap);
 
-      const hand = new THREE.Mesh(handGeo, carbonArmorMat);
-      hand.scale.set(0.85, 1.2, 0.7);
-      hand.position.y = -0.27;
-      elbowPivot.add(hand);
-    });
+      // Symmetrical Elbow + Forearm terminating cleanly at Wrist Cuff
+      const forearmSections: LoftProfile[] = [
+        { s: 0.0, rx: 0.039, rzAnt: 0.041, rzPost: 0.041 },
+        { s: 0.24, rx: 0.044, rzAnt: 0.046, rzPost: 0.046 },
+        { s: 0.68, rx: 0.032, rzAnt: 0.032, rzPost: 0.032 },
+        { s: 1.0, rx: 0.027, rzAnt: 0.023, rzPost: 0.023 },
+      ];
+      const forearmMesh = buildOrganicLoftMesh(
+        forearmSections,
+        0.255,
+        16,
+        22,
+        loftMats,
+        () => {},
+        () => 0,
+        true
+      );
+      elbowPivot.add(forearmMesh);
 
-    // 5. Sculpted Articulated Legs + Knee Pivots + Aerodynamic Running Shoes
-    const leftLegGroup = new THREE.Group();
-    leftLegGroup.position.set(-0.145, 0.98, 0);
-    runnerGroup.add(leftLegGroup);
+      // Sculpted 3D Anatomical Hand (Palm + Opposed Thumb + Curled Runner Fingers)
+      const handGroup = new THREE.Group();
+      handGroup.position.set(0, -0.255, 0);
+      const wristCap = new THREE.Mesh(new THREE.SphereGeometry(0.023, 12, 10), skinMat);
+      wristCap.scale.set(1.12, 0.88, 0.88);
+      handGroup.add(wristCap);
 
-    const rightLegGroup = new THREE.Group();
-    rightLegGroup.position.set(0.145, 0.98, 0);
-    runnerGroup.add(rightLegGroup);
+      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.058, 0.022), skinMat);
+      palm.position.set(0, -0.034, 0.002);
+      handGroup.add(palm);
 
-    const thighGeo = new THREE.CapsuleGeometry(0.094, 0.32, 8, 16);
-    const kneeCapGeo = new THREE.SphereGeometry(0.064, 14, 14);
-    const calfGeo = new THREE.CapsuleGeometry(0.068, 0.30, 8, 16);
-    const shoeUpperGeo = new THREE.CapsuleGeometry(0.052, 0.14, 6, 12);
-    const shoeSoleGeo = new THREE.BoxGeometry(0.11, 0.035, 0.24);
+      const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.008, 0.032, 6, 8), skinMat);
+      thumb.position.set(-xSign * 0.028, -0.034, 0.016);
+      thumb.rotation.set(0.45, 0, xSign * 0.35);
+      handGroup.add(thumb);
 
-    const kneePivots: THREE.Group[] = [];
+      [-0.018, -0.006, 0.006, 0.018].forEach((fx, i) => {
+        const fl = i === 1 ? 0.046 : i === 3 ? 0.036 : 0.042;
+        const finger = new THREE.Mesh(new THREE.CapsuleGeometry(0.0068, fl, 6, 8), skinMat);
+        finger.position.set(fx, -0.072, 0.014);
+        finger.rotation.x = -0.68;
+        handGroup.add(finger);
+      });
+      elbowPivot.add(handGroup);
 
-    [leftLegGroup, rightLegGroup].forEach((legGrp) => {
-      const thigh = new THREE.Mesh(thighGeo, emberMuscleMat);
-      thigh.scale.set(0.95, 1.0, 1.08);
-      thigh.position.y = -0.21;
-      thigh.castShadow = true;
-      legGrp.add(thigh);
+      const elbowMarker = new THREE.Object3D();
+      elbowPivot.add(elbowMarker);
+      const wristMarker = new THREE.Object3D();
+      wristMarker.position.set(0, -0.255, 0);
+      elbowPivot.add(wristMarker);
+
+      return { shoulderPivot, elbowPivot, elbowMarker, wristMarker };
+    }
+
+    // Helper: Seamless Organic Lofted Leg (Charcoal Shorts Thigh + Sculpted Quads + Calves + Barefoot)
+    function createOrganicLeg(side: 'left' | 'right') {
+      const xSign = side === 'left' ? -1 : 1;
+      const hipPivot = new THREE.Group();
+      hipPivot.position.set(xSign * 0.098, -0.02, 0);
+
+      // Continuous Sculpted Thigh Loft (Shorts Hem -> Quadriceps/Hamstring -> Knee)
+      const thighSections: LoftProfile[] = [
+        { s: 0.0, rx: 0.088, rzAnt: 0.092, rzPost: 0.098 },
+        { s: 0.28, rx: 0.086, rzAnt: 0.094, rzPost: 0.096 },
+        { s: 0.56, rx: 0.078, rzAnt: 0.088, rzPost: 0.084 }, // Quad sweep
+        { s: 0.84, rx: 0.060, rzAnt: 0.064, rzPost: 0.062 }, // Vastus teardrop
+        { s: 1.0, rx: 0.052, rzAnt: 0.056, rzPost: 0.052 }, // Knee cap
+      ];
+      const thighMesh = buildOrganicLoftMesh(
+        thighSections,
+        0.43,
+        18,
+        24,
+        loftMats,
+        (s, nx, nz, pt) => {
+          if (s > 0.34 && s < 0.86) {
+            const quadBell = Math.sin(((s - 0.34) / 0.52) * Math.PI);
+            if (nz > 0.15) pt.z += 0.012 * quadBell * nz;
+            if (nx * xSign > 0.2) pt.x += xSign * 0.008 * quadBell;
+          }
+        },
+        (s, _nx, nz) => {
+          if (s < 0.38) return 1; // Charcoal compression shorts leg
+          if (nz > 0.25 && s > 0.42 && s < 0.86) return 2; // Active quad accent
+          return 0;
+        },
+        true
+      );
+      hipPivot.add(thighMesh);
 
       const kneePivot = new THREE.Group();
-      kneePivot.position.set(0, -0.43, 0);
-      legGrp.add(kneePivot);
-      kneePivots.push(kneePivot);
+      kneePivot.position.set(0, -0.415, 0);
+      hipPivot.add(kneePivot);
 
-      const kneeCap = new THREE.Mesh(kneeCapGeo, titaniumTrimMat);
+      // Seamless patella / knee joint dome (eliminates knee seam gap during sprint flexion)
+      const kneeCap = new THREE.Mesh(new THREE.SphereGeometry(0.053, 16, 14), skinMat);
+      kneeCap.scale.set(0.98, 1.06, 1.04);
       kneePivot.add(kneeCap);
 
-      const calf = new THREE.Mesh(calfGeo, carbonArmorMat);
-      calf.position.set(0, -0.21, -0.01);
-      calf.castShadow = true;
-      kneePivot.add(calf);
+      // Continuous Sculpted Lower Leg Loft (Knee -> Gastrocnemius Calf -> Achilles/Ankle)
+      const calfSections: LoftProfile[] = [
+        { s: 0.0, rx: 0.052, rzAnt: 0.054, rzPost: 0.052 },
+        { s: 0.28, rx: 0.056, rzAnt: 0.052, rzPost: 0.068 }, // Sculpted calf muscle belly
+        { s: 0.55, rx: 0.044, rzAnt: 0.044, rzPost: 0.050 },
+        { s: 0.84, rx: 0.032, rzAnt: 0.035, rzPost: 0.036 }, // Achilles taper
+        { s: 1.0, rx: 0.032, rzAnt: 0.036, rzPost: 0.036 }, // Ankle
+      ];
+      const calfMesh = buildOrganicLoftMesh(
+        calfSections,
+        0.41,
+        18,
+        22,
+        loftMats,
+        (s, _nx, nz, pt) => {
+          if (nz < -0.2 && s > 0.12 && s < 0.56) {
+            const calfPeak = Math.sin(((s - 0.12) / 0.44) * Math.PI);
+            pt.z -= 0.012 * calfPeak * -nz;
+          }
+        },
+        (s, _nx, nz) => (nz < -0.25 && s > 0.14 && s < 0.54 ? 2 : 0),
+        true
+      );
+      kneePivot.add(calfMesh);
 
-      const shoeGroup = new THREE.Group();
-      shoeGroup.position.set(0, -0.42, 0.05);
-      kneePivot.add(shoeGroup);
+      // Sculpted Barefoot Mannequin Foot with Seamless Ankle Cuff
+      const footPivot = new THREE.Group();
+      footPivot.position.set(0, -0.40, 0);
+      kneePivot.add(footPivot);
 
-      const shoeUpper = new THREE.Mesh(shoeUpperGeo, carbonArmorMat);
-      shoeUpper.rotation.x = Math.PI / 2;
-      shoeUpper.position.y = 0.025;
-      shoeGroup.add(shoeUpper);
+      const ankleCuff = new THREE.Mesh(new THREE.SphereGeometry(0.034, 14, 12), skinMat);
+      ankleCuff.scale.set(0.98, 1.12, 1.04);
+      ankleCuff.position.set(0, -0.004, 0);
+      footPivot.add(ankleCuff);
 
-      const shoeSole = new THREE.Mesh(shoeSoleGeo, warmAmberMat);
-      shoeSole.position.set(0, -0.01, 0.01);
-      shoeGroup.add(shoeSole);
-    });
+      const instep = new THREE.Mesh(new THREE.CapsuleGeometry(0.033, 0.105, 12, 16), skinMat);
+      instep.rotation.x = Math.PI / 2;
+      instep.scale.set(1.02, 1.0, 0.70);
+      instep.position.set(0, -0.030, 0.044);
+      footPivot.add(instep);
 
-    // 6. Instanced Kinetic Ember Sparks (36 instances -> single draw call)
-    const particleCount = 36;
-    const particleGeo = new THREE.OctahedronGeometry(0.022, 0);
-    const particleMat = new THREE.MeshBasicMaterial({
-      color: 0xff5a26,
-      transparent: true,
-      opacity: 0.75,
-    });
-    const particleInstanced = new THREE.InstancedMesh(particleGeo, particleMat, particleCount);
-    const dummyMat4 = new THREE.Matrix4();
-    const dummyPos = new THREE.Vector3();
-    const dummyQuat = new THREE.Quaternion();
-    const dummyScale = new THREE.Vector3(1, 1, 1);
+      const heel = new THREE.Mesh(new THREE.SphereGeometry(0.032, 14, 12), skinMat);
+      heel.scale.set(0.94, 0.88, 1.06);
+      heel.position.set(0, -0.028, -0.015);
+      footPivot.add(heel);
 
-    const particleSeeds = Array.from({ length: particleCount }, (_, i) => ({
-      angle: (i / particleCount) * Math.PI * 2,
-      radius: 0.84 + (i % 5) * 0.13,
-      yBase: 0.22 + (i % 9) * 0.21,
-      speed: 0.28 + (i % 4) * 0.11,
-      scale: 0.65 + (i % 3) * 0.32,
-    }));
+      const forefoot = new THREE.Mesh(new THREE.SphereGeometry(0.036, 14, 12), skinMat);
+      forefoot.scale.set(1.12, 0.50, 1.16);
+      forefoot.position.set(0, -0.038, 0.102);
+      footPivot.add(forefoot);
 
-    const updateParticles = (t: number) => {
-      for (let i = 0; i < particleCount; i++) {
-        const p = particleSeeds[i];
-        const a = p.angle + t * p.speed * 0.35;
-        const y = 0.18 + ((p.yBase + t * p.speed * 0.22) % 1.85);
-        dummyPos.set(Math.cos(a) * p.radius, y, Math.sin(a) * p.radius);
-        dummyScale.setScalar(p.scale);
-        dummyMat4.compose(dummyPos, dummyQuat, dummyScale);
-        particleInstanced.setMatrixAt(i, dummyMat4);
-      }
-      particleInstanced.instanceMatrix.needsUpdate = true;
+      return { hipPivot, kneePivot, footPivot };
+    }
+
+    const leftArm = createOrganicArm('left');
+    const rightArm = createOrganicArm('right');
+    upperTorsoPivot.add(leftArm.shoulderPivot, rightArm.shoulderPivot);
+
+    const leftLeg = createOrganicLeg('left');
+    const rightLeg = createOrganicLeg('right');
+    pelvisPivot.add(leftLeg.hipPivot, rightLeg.hipPivot);
+
+    // ============================================================================
+    // INTERNAL ARTICULATED 3D ANATOMICAL SKELETON (Synced Live With Sprint Rig)
+    // ============================================================================
+    const skeletonGroup = new THREE.Group();
+    skeletonGroup.visible = false;
+    scene.add(skeletonGroup);
+
+    const makeBone = (rTop: number, rBot: number) => {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, 1, 10), boneMat);
+      skeletonGroup.add(m);
+      return m;
+    };
+    const makeJoint = (r: number) => {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 12), jointBeaconMat);
+      skeletonGroup.add(m);
+      return m;
     };
 
-    updateParticles(0.85);
-    particleInstanced.frustumCulled = false;
-    scene.add(particleInstanced);
+    const skullGroup = new THREE.Group();
+    const skCranium = new THREE.Mesh(new THREE.SphereGeometry(0.064, 18, 16), boneMat);
+    skCranium.scale.set(0.92, 1.06, 1.05);
+    skCranium.position.set(0, 0.19, 0.004);
+    const skJaw = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.026, 0.052, 12), boneMat);
+    skJaw.position.set(0, 0.132, 0.016);
+    skullGroup.add(skCranium, skJaw);
+    skeletonGroup.add(skullGroup);
+
+    const ribGroup = new THREE.Group();
+    [
+      { rx: 0.11, rz: 0.075, y: 0.08 },
+      { rx: 0.132, rz: 0.09, y: 0.04 },
+      { rx: 0.136, rz: 0.092, y: 0.0 },
+      { rx: 0.124, rz: 0.084, y: -0.04 },
+      { rx: 0.108, rz: 0.072, y: -0.08 },
+    ].forEach((r) => {
+      const rib = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.08, 8, 24), boneMat);
+      rib.rotation.x = Math.PI / 2;
+      rib.scale.set(r.rx, r.rz, 0.12);
+      rib.position.y = r.y;
+      ribGroup.add(rib);
+    });
+    const skSternum = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.155, 0.014), boneMat);
+    skSternum.position.set(0, 0.0, 0.086);
+    ribGroup.add(skSternum);
+    skeletonGroup.add(ribGroup);
+
+    const skPelvisGroup = new THREE.Group();
+    const skIliumL = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.014, 8, 18), boneMat);
+    skIliumL.position.set(-0.066, 0.01, 0);
+    skIliumL.rotation.y = Math.PI * 0.25;
+    const skIliumR = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.014, 8, 18), boneMat);
+    skIliumR.position.set(0.066, 0.01, 0);
+    skIliumR.rotation.y = -Math.PI * 0.25;
+    skPelvisGroup.add(skIliumL, skIliumR);
+    skeletonGroup.add(skPelvisGroup);
+
+    const skVertebrae: THREE.Mesh[] = Array.from({ length: 7 }, () => {
+      const v = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.022, 0.036, 10), boneMat);
+      skeletonGroup.add(v);
+      return v;
+    });
+
+    const skClavL = makeBone(0.011, 0.010);
+    const skClavR = makeBone(0.011, 0.010);
+    const skHumL = makeBone(0.017, 0.013);
+    const skHumR = makeBone(0.017, 0.013);
+    const skForeL = makeBone(0.014, 0.011);
+    const skForeR = makeBone(0.014, 0.011);
+    const skFemL = makeBone(0.021, 0.017);
+    const skFemR = makeBone(0.021, 0.017);
+    const skTibL = makeBone(0.016, 0.012);
+    const skTibR = makeBone(0.016, 0.012);
+
+    const jNeck = makeJoint(0.020);
+    const jShL = makeJoint(0.024);
+    const jShR = makeJoint(0.024);
+    const jElL = makeJoint(0.019);
+    const jElR = makeJoint(0.019);
+    const jWrL = makeJoint(0.014);
+    const jWrR = makeJoint(0.014);
+    const jHipL = makeJoint(0.026);
+    const jHipR = makeJoint(0.026);
+    const jKnL = makeJoint(0.022);
+    const jKnR = makeJoint(0.022);
+    const jAnL = makeJoint(0.017);
+    const jAnR = makeJoint(0.017);
+
+    const applyDisplayMode = (mode: MannequinDisplayMode) => {
+      const isXray = mode === 'xray';
+      const isSkel = mode === 'skeleton';
+      const translucent = isXray || isSkel;
+      const skinAlpha = isSkel ? 0.09 : isXray ? 0.30 : 1.0;
+      const fabricAlpha = isSkel ? 0.07 : isXray ? 0.25 : 1.0;
+
+      skeletonGroup.visible = translucent;
+
+      [
+        { m: skinMat, a: skinAlpha },
+        { m: activeAccentMat, a: skinAlpha },
+        { m: charcoalFabricMat, a: fabricAlpha },
+      ].forEach(({ m, a }) => {
+        m.transparent = translucent;
+        m.opacity = a;
+        m.depthWrite = !translucent;
+        m.needsUpdate = true;
+      });
+    };
+    applyModeFnRef.current = applyDisplayMode;
+    applyDisplayMode(modeRef.current);
+
+    const upY = new THREE.Vector3(0, 1, 0);
+    const vDir = new THREE.Vector3();
+    const vMid = new THREE.Vector3();
+    const pPelvis = new THREE.Vector3();
+    const pNeck = new THREE.Vector3();
+    const pShL = new THREE.Vector3();
+    const pShR = new THREE.Vector3();
+    const pElL = new THREE.Vector3();
+    const pElR = new THREE.Vector3();
+    const pWrL = new THREE.Vector3();
+    const pWrR = new THREE.Vector3();
+    const pHipL = new THREE.Vector3();
+    const pHipR = new THREE.Vector3();
+    const pKnL = new THREE.Vector3();
+    const pKnR = new THREE.Vector3();
+    const pAnL = new THREE.Vector3();
+    const pAnR = new THREE.Vector3();
+    const qHead = new THREE.Quaternion();
+    const qTorso = new THREE.Quaternion();
+    const qPelvis = new THREE.Quaternion();
+
+    const alignBone = (mesh: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3) => {
+      vDir.subVectors(b, a);
+      const len = Math.max(0.001, vDir.length());
+      vMid.addVectors(a, b).multiplyScalar(0.5);
+      mesh.position.copy(vMid);
+      mesh.scale.set(1, len, 1);
+      mesh.quaternion.setFromUnitVectors(upY, vDir.divideScalar(len));
+    };
+
+    const syncSkeleton = (breath: number) => {
+      if (!skeletonGroup.visible) return;
+      runner.updateMatrixWorld(true);
+
+      pelvisPivot.getWorldPosition(pPelvis);
+      pelvisPivot.getWorldQuaternion(qPelvis);
+      headPivot.getWorldPosition(pNeck);
+      headPivot.getWorldQuaternion(qHead);
+      upperTorsoPivot.getWorldQuaternion(qTorso);
+
+      leftArm.shoulderPivot.getWorldPosition(pShL);
+      rightArm.shoulderPivot.getWorldPosition(pShR);
+      leftArm.elbowMarker.getWorldPosition(pElL);
+      rightArm.elbowMarker.getWorldPosition(pElR);
+      leftArm.wristMarker.getWorldPosition(pWrL);
+      rightArm.wristMarker.getWorldPosition(pWrR);
+
+      leftLeg.hipPivot.getWorldPosition(pHipL);
+      rightLeg.hipPivot.getWorldPosition(pHipR);
+      leftLeg.kneePivot.getWorldPosition(pKnL);
+      rightLeg.kneePivot.getWorldPosition(pKnR);
+      leftLeg.footPivot.getWorldPosition(pAnL);
+      rightLeg.footPivot.getWorldPosition(pAnR);
+
+      skullGroup.position.copy(pNeck);
+      skullGroup.quaternion.copy(qHead);
+
+      skPelvisGroup.position.copy(pPelvis);
+      skPelvisGroup.quaternion.copy(qPelvis);
+
+      ribGroup.position.lerpVectors(pPelvis, pNeck, 0.65);
+      ribGroup.quaternion.copy(qTorso);
+      ribGroup.scale.set(1 + breath * 0.025, 1, 1 + breath * 0.025);
+
+      for (let i = 0; i < skVertebrae.length; i++) {
+        const u = (i + 0.5) / skVertebrae.length;
+        skVertebrae[i].position.lerpVectors(pPelvis, pNeck, u);
+        skVertebrae[i].quaternion.copy(qTorso);
+      }
+
+      alignBone(skClavL, pNeck, pShL);
+      alignBone(skClavR, pNeck, pShR);
+      alignBone(skHumL, pShL, pElL);
+      alignBone(skHumR, pShR, pElR);
+      alignBone(skForeL, pElL, pWrL);
+      alignBone(skForeR, pElR, pWrR);
+      alignBone(skFemL, pHipL, pKnL);
+      alignBone(skFemR, pHipR, pKnR);
+      alignBone(skTibL, pKnL, pAnL);
+      alignBone(skTibR, pKnR, pAnR);
+
+      jNeck.position.copy(pNeck);
+      jShL.position.copy(pShL);
+      jShR.position.copy(pShR);
+      jElL.position.copy(pElL);
+      jElR.position.copy(pElR);
+      jWrL.position.copy(pWrL);
+      jWrR.position.copy(pWrR);
+      jHipL.position.copy(pHipL);
+      jHipR.position.copy(pHipR);
+      jKnL.position.copy(pKnL);
+      jKnR.position.copy(pKnR);
+      jAnL.position.copy(pAnL);
+      jAnR.position.copy(pAnR);
+    };
+
+    let targetYaw = -0.58;
+    let targetPitch = 0;
+    const onPointerMove = (e: PointerEvent) => {
+      const rect = container.getBoundingClientRect();
+      const nx = ((e.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+      const ny = ((e.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1;
+      targetYaw = -0.58 + nx * 0.45;
+      targetPitch = ny * 0.10;
+    };
+    const onPointerLeave = () => {
+      targetYaw = -0.58;
+      targetPitch = 0;
+    };
+    container.addEventListener('pointermove', onPointerMove, { passive: true });
+    container.addEventListener('pointerleave', onPointerLeave, { passive: true });
+
+    let rafId = 0;
+    let lastTime: number | null = null;
+    let elapsed = 0;
 
     if (!isSoftwareGl) {
       renderer.compile(scene, camera);
     }
 
-    // Pointer parallax state in closure
-    let targetMouseX = 0;
-    let targetMouseY = 0;
-    let currentMouseX = 0;
-    let currentMouseY = 0;
+    function afterDraw(cb: () => void) {
+      const gl = renderer.getContext() as WebGL2RenderingContext;
+      if (!gl || typeof gl.fenceSync !== 'function') {
+        rafId = window.setTimeout(cb, 80);
+        return;
+      }
+      const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+      gl.flush();
+      const poll = () => {
+        if (disposed || isContextLost) return;
+        const state = sync && gl.getSyncParameter(sync, gl.SYNC_STATUS);
+        if (state === gl.UNSIGNALED) {
+          rafId = window.setTimeout(poll, 5);
+        } else {
+          if (sync) gl.deleteSync(sync);
+          rafId = window.setTimeout(cb, 80);
+        }
+      };
+      rafId = window.setTimeout(poll, 5);
+    }
 
-    const onPointerMove = (e: PointerEvent) => {
-      const rect = container.getBoundingClientRect();
-      if (rect.width <= 0 || rect.height <= 0) return;
-      targetMouseX = ((e.clientX - rect.left) / rect.width - 0.5) * 0.55;
-      targetMouseY = ((e.clientY - rect.top) / rect.height - 0.5) * 0.25;
-      if (prefersReducedMotion && !disposed && !isContextLost) {
-        renderFrame(0.85, 0.016);
+    const scheduleNext = () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(rafId);
+      if (disposed || isContextLost || !isVisible || !isTabVisible) return;
+      if (isSoftwareGl) {
+        afterDraw(() => animate(performance.now()));
+      } else {
+        rafId = requestAnimationFrame(animate);
       }
     };
-    window.addEventListener('pointermove', onPointerMove, { passive: true });
 
-    const onResize = () => {
-      if (!container || disposed) return;
-      const w = container.clientWidth || 520;
-      const h = container.clientHeight || 460;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-      if (prefersReducedMotion && !isContextLost) {
-        renderFrame(0.85, 0);
+    const animate = (now: number) => {
+      if (disposed || isContextLost || !isVisible || !isTabVisible) return;
+
+      const dt = lastTime === null ? 0 : Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+      if (!prefersReducedMotion) {
+        elapsed += dt;
       }
-    };
-    window.addEventListener('resize', onResize);
 
-    // WebGL Context Loss Recovery
-    const onContextLost = (e: Event) => {
-      e.preventDefault();
-      isContextLost = true;
-      cancelAnimationFrame(frameId);
-      clearTimeout(frameId);
-    };
-    const onContextRestored = () => {
-      isContextLost = false;
-      if (!disposed && !prefersReducedMotion) {
-        lastNow = performance.now();
-        scheduleNext();
-      }
-    };
-    renderer.domElement.addEventListener('webglcontextlost', onContextLost, false);
-    renderer.domElement.addEventListener('webglcontextrestored', onContextRestored, false);
+      // Dynamic Explosive Sprinting Biomechanics (Forward Drive inspired by Reference 1)
+      const cycle = prefersReducedMotion ? 0.65 : elapsed * 5.0 + 0.65;
+      const swing = Math.sin(cycle);
+      const liftL = Math.max(0, Math.sin(cycle));
+      const liftR = Math.max(0, Math.sin(cycle + Math.PI));
+      const bounce = Math.abs(Math.sin(cycle)) * 0.08;
+      const breath = Math.sin(cycle * 0.5);
 
-    // Off-screen & Hidden Tab Pause
+      pelvisPivot.position.y = 0.92 + bounce;
+      pelvisPivot.rotation.x = 0.28 + bounce * 0.25;
+      pelvisPivot.rotation.y = swing * 0.14;
+      pelvisPivot.rotation.z = -swing * 0.04;
+
+      spinePivot.rotation.x = 0.14 + breath * 0.03;
+      spinePivot.rotation.y = -swing * 0.18;
+      upperTorsoPivot.rotation.y = -swing * 0.12;
+      headPivot.rotation.x = -0.34;
+      headPivot.rotation.y = swing * 0.10;
+
+      leftLeg.hipPivot.rotation.x = -swing * 0.92 - 0.18;
+      leftLeg.kneePivot.rotation.x = 0.24 + liftL * 1.18 + Math.max(0, -swing) * 0.30;
+      leftLeg.footPivot.rotation.x = -0.18 + liftL * 0.34;
+
+      rightLeg.hipPivot.rotation.x = swing * 0.92 - 0.18;
+      rightLeg.kneePivot.rotation.x = 0.24 + liftR * 1.18 + Math.max(0, swing) * 0.30;
+      rightLeg.footPivot.rotation.x = -0.18 + liftR * 0.34;
+
+      leftArm.shoulderPivot.rotation.x = swing * 0.96;
+      leftArm.shoulderPivot.rotation.z = -0.14;
+      leftArm.elbowPivot.rotation.x = -1.16 - Math.max(0, swing) * 0.38;
+
+      rightArm.shoulderPivot.rotation.x = -swing * 0.96;
+      rightArm.shoulderPivot.rotation.z = 0.14;
+      rightArm.elbowPivot.rotation.x = -1.16 - Math.max(0, -swing) * 0.38;
+
+      const autoYaw = prefersReducedMotion ? 0 : Math.sin(elapsed * 0.35) * 0.26;
+      runner.rotation.y += (targetYaw + autoYaw - runner.rotation.y) * 0.08;
+      runner.rotation.x += (targetPitch - runner.rotation.x) * 0.08;
+
+      const shadowScale = 1 - bounce * 0.65;
+      contactShadow.scale.set(shadowScale, shadowScale, 1);
+
+      syncSkeleton(breath);
+
+      renderer.render(scene, camera);
+      scheduleNext();
+    };
+
     const observer =
       typeof IntersectionObserver !== 'undefined'
         ? new IntersectionObserver(
             (entries) => {
-              const entry = entries[0];
-              const nextVis = Boolean(entry?.isIntersecting);
+              const nextVis = Boolean(entries[0]?.isIntersecting);
               if (nextVis !== isVisible) {
                 isVisible = nextVis;
-                if (isVisible && isTabVisible && !prefersReducedMotion && !disposed && !isContextLost) {
-                  lastNow = performance.now();
+                if (isVisible && isTabVisible && !disposed && !isContextLost) {
+                  lastTime = performance.now();
                   scheduleNext();
                 }
               }
@@ -443,106 +1038,51 @@ export function HeroRunner3D() {
 
     const onVisibilityChange = () => {
       isTabVisible = document.visibilityState === 'visible';
-      if (isTabVisible && isVisible && !prefersReducedMotion && !disposed && !isContextLost) {
-        lastNow = performance.now();
+      if (isTabVisible && isVisible && !disposed && !isContextLost) {
+        lastTime = performance.now();
         scheduleNext();
       }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
 
-    // Frame-rate independent clock using performance.now() (replaces deprecated THREE.Clock)
-    let lastNow = performance.now();
-    let elapsed = 0.85;
-
-    function renderFrame(t: number, dt: number) {
-      const damp = dt <= 0.0001 ? 1.0 : 1 - Math.exp(-5 * dt);
-      currentMouseX += (targetMouseX - currentMouseX) * damp;
-      currentMouseY += (targetMouseY - currentMouseY) * damp;
-
-      runnerGroup.rotation.y = -0.46 + Math.sin(t * 0.42) * 0.24 + currentMouseX;
-      runnerGroup.rotation.x = currentMouseY * 0.22;
-
-      // Biomechanical sprint stride with coordinated knee flexion
-      const phase = t * 4.0;
-      const stride = Math.sin(phase);
-      leftArmGroup.rotation.x = stride * 0.62;
-      rightArmGroup.rotation.x = -stride * 0.62;
-      leftLegGroup.rotation.x = -stride * 0.56;
-      rightLegGroup.rotation.x = stride * 0.56;
-
-      // Realistic trailing knee bend during swing phase
-      if (kneePivots[0]) kneePivots[0].rotation.x = 0.28 + Math.max(0, stride) * 0.68;
-      if (kneePivots[1]) kneePivots[1].rotation.x = 0.28 + Math.max(0, -stride) * 0.68;
-
-      const bounce = Math.abs(Math.sin(phase)) * 0.036;
-      torsoPivot.position.y = 1.12 + bounce;
-      leftLegGroup.position.y = 0.98 + bounce * 0.6;
-      rightLegGroup.position.y = 0.98 + bounce * 0.6;
-      contactShadow.scale.setScalar(1.0 - bounce * 2.2);
-
-      emberMuscleMat.emissiveIntensity = 0.78 + Math.sin(t * 2.8) * 0.22;
-      updateParticles(t);
-
-      renderer.render(scene, camera);
-    }
-
-    function afterDraw(cb: () => void) {
-      const gl = renderer.getContext() as WebGL2RenderingContext;
-      if (!gl || typeof gl.fenceSync !== 'function') {
-        frameId = window.setTimeout(cb, 85);
-        return;
+    const onContextLost = (e: Event) => {
+      e.preventDefault();
+      isContextLost = true;
+      cancelAnimationFrame(rafId);
+      clearTimeout(rafId);
+    };
+    const onContextRestored = () => {
+      isContextLost = false;
+      if (!disposed) {
+        lastTime = performance.now();
+        scheduleNext();
       }
-      const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-      gl.flush();
-      const poll = () => {
-        if (disposed || isContextLost) return;
-        const state = sync && gl.getSyncParameter(sync, gl.SYNC_STATUS);
-        if (state === gl.UNSIGNALED) {
-          frameId = window.setTimeout(poll, 5);
-        } else {
-          if (sync) gl.deleteSync(sync);
-          frameId = window.setTimeout(cb, 85);
-        }
-      };
-      frameId = window.setTimeout(poll, 5);
-    }
+    };
+    renderer.domElement.addEventListener('webglcontextlost', onContextLost, false);
+    renderer.domElement.addEventListener('webglcontextrestored', onContextRestored, false);
 
-    function scheduleNext() {
-      cancelAnimationFrame(frameId);
-      clearTimeout(frameId);
-      if (disposed || isContextLost || !isVisible || !isTabVisible) return;
-      if (isSoftwareGl) {
-        afterDraw(tick);
-      } else {
-        frameId = requestAnimationFrame(tick);
-      }
-    }
+    animate(performance.now());
 
-    function tick() {
-      if (disposed || isContextLost || !isVisible || !isTabVisible) return;
-      const now = performance.now();
-      const dt = Math.max(0, Math.min((now - lastNow) / 1000, 0.08));
-      lastNow = now;
-      elapsed += dt;
-
-      renderFrame(elapsed, dt);
-      scheduleNext();
-    }
-
-    // Initial render
-    renderFrame(elapsed, 0);
-    if (!prefersReducedMotion) {
-      scheduleNext();
-    }
+    const handleResize = () => {
+      if (!container || disposed) return;
+      const w = container.clientWidth || 440;
+      const h = container.clientHeight || 420;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    };
+    window.addEventListener('resize', handleResize);
 
     return () => {
       disposed = true;
-      cancelAnimationFrame(frameId);
-      clearTimeout(frameId);
+      applyModeFnRef.current = null;
+      cancelAnimationFrame(rafId);
+      clearTimeout(rafId);
       observer?.disconnect();
       document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('resize', onResize);
+      window.removeEventListener('resize', handleResize);
+      container.removeEventListener('pointermove', onPointerMove);
+      container.removeEventListener('pointerleave', onPointerLeave);
       renderer.domElement.removeEventListener('webglcontextlost', onContextLost);
       renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
       disposeSceneResources(scene);
@@ -552,12 +1092,10 @@ export function HeroRunner3D() {
     };
   }, []);
 
-  if (webglFailed) {
+  if (!webGLOk) {
     return (
-      <div className="w-full h-[360px] sm:h-[460px] rounded-2xl bg-[#141418] border border-[#27272E] flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#EF4444] to-[#F97316] opacity-85 mb-4" />
-        <p className="text-sm font-semibold text-white">Siluet Biomekanik 3D FitForge</p>
-        <p className="text-xs text-neutral-400 mt-1">Mode pratinjau hemat daya aktif</p>
+      <div className="w-full h-full flex items-center justify-center rounded-3xl bg-[#111114] border border-[#27272E] text-neutral-400 text-xs p-6 text-center">
+        Pratinjau 3D membutuhkan WebGL aktif pada peramban Anda.
       </div>
     );
   }
@@ -565,12 +1103,10 @@ export function HeroRunner3D() {
   return (
     <div
       ref={mountRef}
-      data-testid="hero-3d-canvas"
-      className="w-full h-[360px] sm:h-[460px] relative select-none"
-      aria-label="Visualisasi 3D Siluet Pelari Berpijar FitForge"
+      data-testid="hero-runner-3d"
+      className="w-full h-full min-h-[320px] sm:min-h-[420px] select-none"
     />
   );
 }
 
 export default HeroRunner3D;
-

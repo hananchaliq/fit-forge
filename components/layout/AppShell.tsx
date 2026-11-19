@@ -27,7 +27,6 @@ import {
   LogIn,
   LayoutGrid,
   Droplets,
-  Sparkles,
 } from 'lucide-react';
 import { signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
@@ -180,16 +179,16 @@ export function AppShell({
           EDITORIAL-ATHLETIC STICKY TOP HEADER (SAFE-AREA + ZERO 320px OVERLAP)
           ===================================================================== */}
       <header
-        className={`sticky top-0 z-40 pt-safe bg-[#09090B]/95 backdrop-blur-md text-white border-b transition-colors duration-200 ${
-          scrolled ? 'border-[#27272F] shadow-[0_8px_24px_rgba(0,0,0,0.4)]' : 'border-[#1C1C22]'
+        className={`sticky top-0 z-40 pt-safe bg-[#09090B]/96 text-white border-b transition-colors duration-200 ${
+          scrolled ? 'border-[#27272F] shadow-[0_6px_18px_rgba(0,0,0,0.38)]' : 'border-[#1C1C22]'
         }`}
       >
         <div
-          className={`max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-2 transition-all duration-200 ${
-            scrolled ? 'h-14 sm:h-15' : 'h-16'
+          className={`max-w-[1440px] mx-auto px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-2 transition-[height] duration-200 ${
+            scrolled ? 'h-13 sm:h-15' : 'h-14 sm:h-16'
           }`}
         >
-          {/* Left: Brand Emblem + Compact Telemetry */}
+          {/* Left: Clean Brand Emblem + Compact Telemetry */}
           <div className="flex items-center gap-2 sm:gap-3.5 min-w-0">
             <Link
               href="/"
@@ -199,18 +198,13 @@ export function AppShell({
               <motion.div
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.94 }}
-                className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#EF4444] via-[#F97316] to-[#F59E0B] flex items-center justify-center text-black font-black text-base shrink-0 shadow-[0_0_16px_rgba(249,115,22,0.28)]"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-[#EF4444] via-[#F97316] to-[#F59E0B] flex items-center justify-center text-black font-black text-sm sm:text-base shrink-0 shadow-[0_0_16px_rgba(249,115,22,0.28)]"
               >
                 F
               </motion.div>
-              <div className="leading-none min-w-0">
-                <span className="text-[15px] sm:text-lg font-extrabold tracking-tight text-white block truncate">
-                  FitForge
-                </span>
-                <span className="hidden sm:block text-[10px] text-neutral-400 font-semibold tracking-[0.14em] uppercase mt-0.5 truncate">
-                  Performance OS
-                </span>
-              </div>
+              <span className="text-[15px] sm:text-lg font-extrabold tracking-tight text-white block truncate">
+                FitForge
+              </span>
             </Link>
 
             {/* Interactive Streak & Golden Rules (Desktop md+) */}
@@ -344,7 +338,6 @@ export function AppShell({
                 aria-label="Buka notifikasi pengingat"
               >
                 <Bell className="w-4 h-4" />
-                <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-[#F97316]" />
               </motion.button>
 
               <AnimatePresence>
@@ -618,8 +611,8 @@ export function AppShell({
 
               <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-[#24242C]">
                 <div className="flex items-center gap-2 min-w-0">
-                  <Sparkles className="w-4 h-4 text-[#F59E0B] shrink-0" />
-                  <span className="text-xs font-extrabold uppercase tracking-wider text-white truncate">
+                  <LayoutGrid className="w-4 h-4 text-[#F59E0B] shrink-0" />
+                  <span className="text-xs font-bold text-white truncate">
                     Menu &amp; Aksi Cepat
                   </span>
                 </div>
@@ -674,11 +667,6 @@ export function AppShell({
                           >
                             <Icon className="w-4 h-4" style={{ color: item.accent }} />
                           </div>
-                          {active && (
-                            <span className="px-2 py-0.5 rounded-full bg-[#F97316]/20 text-[#F97316] text-[10px] font-bold">
-                              Aktif
-                            </span>
-                          )}
                         </div>
                         <div className="min-w-0">
                           <p className="text-xs font-bold text-white truncate">{item.label}</p>
@@ -735,10 +723,10 @@ export function AppShell({
         )}
       </AnimatePresence>
 
-      {/* FLOATING KINETIC BOTTOM DOCK (< 768px, SAFE-AREA + 44px TARGETS) */}
+      {/* FLOATING KINETIC BOTTOM DOCK (< 768px, LIGHTWEIGHT GPU-SAFE + 44px TARGETS) */}
       <div className="md:hidden fixed bottom-dock-safe inset-x-2.5 sm:inset-x-3 z-40 pointer-events-none">
         <nav
-          className="pointer-events-auto h-16 rounded-2xl bg-[#0D0D11]/95 backdrop-blur-xl border border-[#27272F] px-1.5 flex items-center justify-between shadow-[0_14px_36px_rgba(0,0,0,0.75)] select-none"
+          className="pointer-events-auto h-15 rounded-2xl bg-[#0D0D11]/96 border border-[#27272F] px-1.5 flex items-center justify-between shadow-[0_12px_28px_rgba(0,0,0,0.7)] select-none"
           aria-label="Navigasi Bawah Mobile"
         >
           <MobileDockTab
@@ -964,9 +952,13 @@ function MobileDockTab({
           <div className="absolute top-0 inset-x-3 h-[2px] rounded-full bg-gradient-to-r from-[#F97316] to-[#F59E0B]" />
         </motion.div>
       )}
-      <div className="relative z-10">
+      <motion.div
+        animate={{ y: active ? -1.5 : 0, scale: active ? 1.08 : 1 }}
+        transition={MOTION_SPRING}
+        className="relative z-10"
+      >
         <Icon className={`w-4 h-4 ${active ? 'text-[#F59E0B]' : 'text-neutral-400'}`} />
-      </div>
+      </motion.div>
       <span
         className={`relative z-10 text-[10px] font-bold tracking-tight truncate max-w-[56px] ${
           active ? 'text-white' : 'text-neutral-400'

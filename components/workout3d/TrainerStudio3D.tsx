@@ -7,10 +7,27 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { AnimationClipName, MuscleGroup } from '@/data/exerciseClipMap';
 import { BLUEPRINT_EXERCISES } from '@/data/blueprintPack';
 import { createProceduralPBRTextures, disposeSceneResources } from '@/lib/pbrTextures';
+import {
+  BODY_METRICS,
+  JOINT_LIMITS_DEG,
+  computeAnatomicalFootBasis,
+  computeAnatomicalHandBasis,
+  computeOrthonormalFrame,
+  computeTwoBoneAnatomicalFrames,
+  solveConstrainedTwoBoneIK,
+  type HandPoseMode,
+} from '@/lib/workout3d/biomechanics';
+import {
+  evaluateExercisePose,
+  resolveExerciseId,
+  type CameraGroup,
+} from '@/lib/workout3d/exercisePoses';
 
 export type CameraPreset = 'front' | 'side' | 'back' | 'top';
+export type MannequinDisplayMode = 'muscle' | 'xray' | 'skeleton';
 
 export interface TrainerStudio3DProps {
+  exerciseId?: string;
   clip: AnimationClipName;
   biomechanicalVariant?: string;
   exerciseName?: string;
@@ -19,135 +36,11 @@ export interface TrainerStudio3DProps {
   timeScale: number;
   isPaused: boolean;
   cameraPreset: CameraPreset;
+  displayMode?: MannequinDisplayMode;
   debugMuscleMask?: boolean;
   lockedFrame?: number | null; // 0, 15, 30, 45, 60 or null for continuous loop
   quadView?: boolean; // 4-angle Blueprint Split View (Front, Side, Back, Top)
   onReady?: () => void;
-}
-
-/**
- * Analytical Two-Bone Inverse Kinematics Solver in World Space
- * Places `midPos` (elbow or knee) at the exact law-of-cosines intersection
- * between `rootPos` (shoulder/hip) and `endPos` (wrist/ankle), oriented toward `polePos`.
- */
-function solveTwoBoneIK(
-  rootPos: THREE.Vector3,
-  endPos: THREE.Vector3,
-  len1: number,
-  len2: number,
-  polePos: THREE.Vector3
-): THREE.Vector3 {
-  const diff = new THREE.Vector3().subVectors(endPos, rootPos);
-  const rawDist = diff.length();
-  const minDist = Math.abs(len1 - len2) + 0.015;
-  const maxDist = len1 + len2 - 0.003;
-  const d = Math.max(minDist, Math.min(maxDist, rawDist));
-
-  const dir = diff.clone();
-  if (rawDist > 1e-5) {
-    dir.divideScalar(rawDist);
-  } else {
-    dir.set(0, -1, 0);
-  }
-
-  const cosAngle = Math.max(
-    -1,
-    Math.min(1, (len1 * len1 + d * d - len2 * len2) / (2 * len1 * d))
-  );
-  const angle = Math.acos(cosAngle);
-
-  const toPole = new THREE.Vector3().subVectors(polePos, rootPos);
-  const proj = dir.clone().multiplyScalar(toPole.dot(dir));
-  const bendDir = toPole.sub(proj);
-  if (bendDir.lengthSq() < 1e-6) {
-    bendDir.set(0, 0, 1);
-  } else {
-    bendDir.normalize();
-  }
-
-  return rootPos
-    .clone()
-    .addScaledVector(dir, Math.cos(angle) * len1)
-    .addScaledVector(bendDir, Math.sin(angle) * len1);
-}
-
-/**
- * Computes a right-handed orthonormal basis where:
- * - `yAxis` points along `tangentDir`
- * - `zAxis` faces `anteriorDir` (front of body/limb)
- * - `xAxis` points to the character's left (`+X` in world space when facing `+Z`)
- */
-function computeOrthonormalFrame(
-  tangentDir: THREE.Vector3,
-  anteriorHint: THREE.Vector3,
-  outX: THREE.Vector3,
-  outY: THREE.Vector3,
-  outZ: THREE.Vector3
-) {
-  outY.copy(tangentDir);
-  if (outY.lengthSq() < 1e-6) {
-    outY.set(0, 1, 0);
-  } else {
-    outY.normalize();
-  }
-
-  outX.crossVectors(outY, anteriorHint);
-  if (outX.lengthSq() < 1e-6) {
-    const fallback =
-      Math.abs(outY.y) < 0.9
-        ? new THREE.Vector3(0, 1, 0)
-        : new THREE.Vector3(1, 0, 0);
-    outX.crossVectors(outY, fallback);
-  }
-  outX.normalize();
-
-  outZ.crossVectors(outX, outY).normalize();
-}
-
-/**
- * Computes singularity-free anatomical anterior directions (`outAntRoot`, `outAntEnd`)
- * for a 2-bone limb (`rootPos -> midPos -> endPos`) from its hinge plane (`polePos`).
- * Because `outAntRoot` is strictly orthogonal to `u1` and `outAntEnd` is strictly orthogonal to `u2`,
- * the limb NEVER twists, flips 180°, or flattens when reaching forward (`+Z`) or overhead!
- */
-function computeTwoBoneAnatomicalFrames(
-  rootPos: THREE.Vector3,
-  midPos: THREE.Vector3,
-  endPos: THREE.Vector3,
-  polePos: THREE.Vector3,
-  isArm: boolean,
-  fallbackAnterior: THREE.Vector3,
-  outAntRoot: THREE.Vector3,
-  outAntEnd: THREE.Vector3
-) {
-  const u1 = new THREE.Vector3().subVectors(midPos, rootPos).normalize();
-  const u2 = new THREE.Vector3().subVectors(endPos, midPos).normalize();
-
-  // Vector from root toward pole projected perpendicular to u1
-  const toPole = new THREE.Vector3().subVectors(polePos, rootPos);
-  const polePerp1 = toPole.clone().addScaledVector(u1, -toPole.dot(u1));
-  if (polePerp1.lengthSq() < 1e-5) {
-    polePerp1.copy(fallbackAnterior).addScaledVector(u1, -fallbackAnterior.dot(u1));
-  }
-  polePerp1.normalize();
-
-  // For an arm: `elbowPole` is behind the olecranon (triceps side, `-Z` local),
-  // so the bicep/anterior face (`+Z` local) points in `-polePerp1` (blended slightly with torso anterior when straight).
-  // For a leg: `kneePole` is in front of the patella (quadriceps side, `+Z` local),
-  // so the quad/anterior face (`+Z` local) points directly along `+polePerp1`!
-  if (isArm) {
-    const bicepDir1 = polePerp1.clone().negate();
-    // Blend 70% anatomical elbow flexion plane + 30% torso anterior so deltoid/bicep stays naturally oriented
-    outAntRoot.copy(bicepDir1).multiplyScalar(0.75).addScaledVector(fallbackAnterior, 0.25);
-    outAntRoot.addScaledVector(u1, -outAntRoot.dot(u1)).normalize();
-
-    const hingeAxis = new THREE.Vector3().crossVectors(u1, outAntRoot).normalize();
-    outAntEnd.crossVectors(hingeAxis, u2).normalize();
-  } else {
-    outAntRoot.copy(polePerp1);
-    const hingeAxis = new THREE.Vector3().crossVectors(u1, outAntRoot).normalize();
-    outAntEnd.crossVectors(hingeAxis, u2).normalize();
-  }
 }
 
 interface LoftSection {
@@ -228,7 +121,7 @@ interface SkinnedLoftMeshData {
 /**
  * Builds a continuous, multi-material skinned loft mesh whose rings `r = 0..heightSegs`
  * are smoothly deformed in real time along an arbitrary skeletal spine/limb curve
- * with zero joint breaks, zero gaps, and zero interpenetration.
+ * with zero joint breaks, zero gaps, and smooth seam normals.
  */
 function createContinuousSkinnedLoft(
   refLength: number,
@@ -266,13 +159,12 @@ function createContinuousSkinnedLoft(
     const y = s * refLength;
 
     for (let c = 0; c < numCols; c++) {
-      // Exact seam welding between c=0 and c=radialSegs
       const u = c === radialSegs ? 0 : c / radialSegs;
       const theta = u * Math.PI * 2;
       const nx = Math.cos(theta);
       const nz = Math.sin(theta);
 
-      let x = nx * sec.rx + (sec.cx || 0);
+      const x = nx * sec.rx + (sec.cx || 0);
       const rz = nz >= 0 ? sec.rzAnt : sec.rzPost;
       let z = nz * rz + (sec.cz || 0);
 
@@ -328,7 +220,6 @@ function createContinuousSkinnedLoft(
         list = [];
         buckets.set(g, list);
       }
-      // Outward-facing counter-clockwise winding: (a, d, b) and (b, d, e)
       list.push(a, d, b, b, d, e);
     }
   }
@@ -354,7 +245,6 @@ function createContinuousSkinnedLoft(
   geo.setIndex(allIndices);
   geo.computeVertexNormals();
 
-  // Seamless normal averaging across seam column (c=0 and c=radialSegs) and pole caps
   const normAttr = geo.getAttribute('normal') as THREE.BufferAttribute;
   normAttr.setUsage(THREE.DynamicDrawUsage);
   for (let r = 0; r < numRows; r++) {
@@ -368,7 +258,6 @@ function createContinuousSkinnedLoft(
     normAttr.setXYZ(i1, nx / len, ny / len, nz / len);
   }
 
-  // Save rest-pose normals so real-time deformation transforms both position and normals cleanly
   for (let i = 0; i < totalVerts; i++) {
     restNormX[i] = normAttr.getX(i);
     restNormY[i] = normAttr.getY(i);
@@ -405,15 +294,15 @@ function createContinuousSkinnedLoft(
       const cy = ringCenter.y;
       const cz = ringCenter.z;
 
-      const xx = ringX.x,
-        xy = ringX.y,
-        xz = ringX.z;
-      const yx = ringY.x,
-        yy = ringY.y,
-        yz = ringY.z;
-      const zx = ringZ.x,
-        zy = ringZ.y,
-        zz = ringZ.z;
+      const xx = ringX.x;
+      const xy = ringX.y;
+      const xz = ringX.z;
+      const yx = ringY.x;
+      const yy = ringY.y;
+      const yz = ringY.z;
+      const zx = ringZ.x;
+      const zy = ringZ.y;
+      const zz = ringZ.z;
 
       const rowOffset = r * numCols;
       for (let c = 0; c < numCols; c++) {
@@ -453,10 +342,20 @@ function createContinuousSkinnedLoft(
   };
 }
 
+const _ringSeg1 = new THREE.Vector3();
+const _ringSeg2 = new THREE.Vector3();
+const _ringTang = new THREE.Vector3();
+const _ringP0 = new THREE.Vector3();
+const _ringP2 = new THREE.Vector3();
+const _ringD0 = new THREE.Vector3();
+const _ringD1 = new THREE.Vector3();
+const _ringAnt = new THREE.Vector3();
+const _ringN1 = new THREE.Vector3();
+const _ringN2 = new THREE.Vector3();
+
 /**
  * Evaluates a smooth 2-bone limb centerline and orthonormal frame with a Quadratic Bezier
- * skinning blend zone (`[jointS - blendRadius, jointS + blendRadius]`) across the elbow or knee.
- * Eliminates rigid hinge breaks, ball joints, and mesh interpenetration at any bend angle.
+ * skinning blend zone (`[jointS - blendHalfWidth, jointS + blendHalfWidth]`) across elbow/knee.
  */
 function evaluateTwoBoneSkinnedRing(
   s: number,
@@ -476,136 +375,56 @@ function evaluateTwoBoneSkinnedRing(
   const sStart = jointS - blendHalfWidth;
   const sEnd = jointS + blendHalfWidth;
 
-  const seg1Dir = new THREE.Vector3().subVectors(midPos, rootPos);
-  const seg2Dir = new THREE.Vector3().subVectors(endPos, midPos);
-  const tangent = new THREE.Vector3();
+  _ringSeg1.subVectors(midPos, rootPos);
+  _ringSeg2.subVectors(endPos, midPos);
 
   if (s <= sStart) {
     const u = Math.max(0, s / jointS);
     outCenter.lerpVectors(rootPos, midPos, u);
-    tangent.copy(seg1Dir);
+    _ringTang.copy(_ringSeg1);
   } else if (s >= sEnd) {
     const u = Math.min(1, (s - jointS) / (1 - jointS));
     outCenter.lerpVectors(midPos, endPos, u);
-    tangent.copy(seg2Dir);
+    _ringTang.copy(_ringSeg2);
   } else {
-    // Quadratic Bezier curve across the joint zone [sStart, sEnd]
     const t = (s - sStart) / (2 * blendHalfWidth);
     const u0 = sStart / jointS;
     const u1 = (sEnd - jointS) / (1 - jointS);
 
-    const p0 = new THREE.Vector3().lerpVectors(rootPos, midPos, u0);
-    const p2 = new THREE.Vector3().lerpVectors(midPos, endPos, u1);
+    _ringP0.lerpVectors(rootPos, midPos, u0);
+    _ringP2.lerpVectors(midPos, endPos, u1);
 
     const omt = 1 - t;
     outCenter
       .set(0, 0, 0)
-      .addScaledVector(p0, omt * omt)
+      .addScaledVector(_ringP0, omt * omt)
       .addScaledVector(midPos, 2 * omt * t)
-      .addScaledVector(p2, t * t);
+      .addScaledVector(_ringP2, t * t);
 
-    // Tangent of Quadratic Bezier: 2*(1-t)*(midPos - p0) + 2*t*(p2 - midPos)
-    const d0 = new THREE.Vector3().subVectors(midPos, p0);
-    const d1 = new THREE.Vector3().subVectors(p2, midPos);
-    tangent.set(0, 0, 0).addScaledVector(d0, omt).addScaledVector(d1, t);
+    _ringD0.subVectors(midPos, _ringP0);
+    _ringD1.subVectors(_ringP2, midPos);
+    _ringTang.set(0, 0, 0).addScaledVector(_ringD0, omt).addScaledVector(_ringD1, t);
   }
 
-  const ant = new THREE.Vector3().lerpVectors(anteriorRoot, anteriorEnd, s).normalize();
-  computeOrthonormalFrame(tangent, ant, outX, outY, outZ);
+  _ringAnt.lerpVectors(anteriorRoot, anteriorEnd, s);
+  if (_ringAnt.lengthSq() < 1e-6) {
+    _ringAnt.copy(anteriorRoot);
+  } else {
+    _ringAnt.normalize();
+  }
+  computeOrthonormalFrame(_ringTang, _ringAnt, outX, outY, outZ);
 
-  // Subtle patella / olecranon volume preservation when joint is flexed
   if (s > sStart && s < sEnd && jointBulgeForward !== 0) {
-    const n1 = seg1Dir.clone().normalize();
-    const n2 = seg2Dir.clone().normalize();
-    const bendFactor = Math.max(0, 0.5 * (1 - n1.dot(n2)));
+    _ringN1.copy(_ringSeg1).normalize();
+    _ringN2.copy(_ringSeg2).normalize();
+    const bendFactor = Math.max(0, 0.5 * (1 - _ringN1.dot(_ringN2)));
     const bell = Math.sin(((s - sStart) / (2 * blendHalfWidth)) * Math.PI);
     outCenter.addScaledVector(outZ, jointBulgeForward * bendFactor * bell);
   }
 }
 
-/**
- * Evaluates a 3-segment arm curve (`shoulderPos -> elbowPos -> wristPos -> handTipPos`)
- * with smooth Quadratic Bezier blends at both the elbow (`s = 0.48`) and the wrist (`s = 0.86`).
- * Ensures the forearm rises cleanly from the wrist while the palm rests flat on the floor during Push-Ups/Planks.
- */
-function evaluateThreeBoneArmRing(
-  s: number,
-  shoulderPos: THREE.Vector3,
-  elbowPos: THREE.Vector3,
-  wristPos: THREE.Vector3,
-  handTipPos: THREE.Vector3,
-  anteriorRoot: THREE.Vector3,
-  anteriorEnd: THREE.Vector3,
-  isGroundPalm: boolean,
-  outCenter: THREE.Vector3,
-  outX: THREE.Vector3,
-  outY: THREE.Vector3,
-  outZ: THREE.Vector3
-) {
-  const elbowS = 0.48;
-  const wristS = 0.86;
-  const wristBlend = 0.045;
-
-  if (s <= wristS - wristBlend) {
-    const remappedS = s / wristS;
-    const remappedElbowS = elbowS / wristS;
-    evaluateTwoBoneSkinnedRing(
-      remappedS,
-      remappedElbowS,
-      0.09,
-      shoulderPos,
-      elbowPos,
-      wristPos,
-      anteriorRoot,
-      anteriorEnd,
-      -0.008,
-      outCenter,
-      outX,
-      outY,
-      outZ
-    );
-    return;
-  }
-
-  const forearmDir = new THREE.Vector3().subVectors(wristPos, elbowPos);
-  const handDir = new THREE.Vector3().subVectors(handTipPos, wristPos);
-  const tangent = new THREE.Vector3();
-
-  if (s < wristS + wristBlend) {
-    const t = (s - (wristS - wristBlend)) / (2 * wristBlend);
-    const u0 = (wristS - wristBlend - elbowS) / (wristS - elbowS);
-    const u1 = wristBlend / (1 - wristS);
-    const p0 = new THREE.Vector3().lerpVectors(elbowPos, wristPos, u0);
-    const p2 = new THREE.Vector3().lerpVectors(wristPos, handTipPos, u1);
-    const omt = 1 - t;
-    outCenter
-      .set(0, 0, 0)
-      .addScaledVector(p0, omt * omt)
-      .addScaledVector(wristPos, 2 * omt * t)
-      .addScaledVector(p2, t * t);
-    const d0 = new THREE.Vector3().subVectors(wristPos, p0);
-    const d1 = new THREE.Vector3().subVectors(p2, wristPos);
-    tangent.set(0, 0, 0).addScaledVector(d0, omt).addScaledVector(d1, t);
-  } else {
-    const u = Math.min(1, (s - wristS) / (1 - wristS));
-    outCenter.lerpVectors(wristPos, handTipPos, u);
-    tangent.copy(handDir);
-  }
-
-  const handBlend = Math.min(1, Math.max(0, (s - (wristS - wristBlend)) / (1 - (wristS - wristBlend))));
-  const palmAnt = isGroundPalm
-    ? new THREE.Vector3(0, -1, 0)
-    : anteriorEnd;
-  const ant = new THREE.Vector3().lerpVectors(anteriorEnd, palmAnt, handBlend).normalize();
-  computeOrthonormalFrame(tangent, ant, outX, outY, outZ);
-
-  // Subtle wrist/knuckle thickness preservation
-  if (isGroundPalm && forearmDir.lengthSq() > 0) {
-    outCenter.y = Math.max(0.018, outCenter.y);
-  }
-}
-
 export function TrainerStudio3D({
+  exerciseId,
   clip: clipName,
   biomechanicalVariant = 'standard',
   exerciseName = '',
@@ -614,6 +433,7 @@ export function TrainerStudio3D({
   timeScale: tempoScale,
   isPaused,
   cameraPreset,
+  displayMode = 'muscle',
   debugMuscleMask: showMaskDebug = false,
   lockedFrame: activeKeyframe = null,
   quadView = false,
@@ -625,6 +445,7 @@ export function TrainerStudio3D({
   const [webGLSupported, setWebGLSupported] = useState(true);
 
   const stateRef = useRef({
+    exerciseId,
     clipName,
     biomechanicalVariant,
     exerciseName,
@@ -633,6 +454,7 @@ export function TrainerStudio3D({
     tempoScale,
     isPlaying,
     cameraPreset,
+    displayMode,
     showMaskDebug,
     activeKeyframe,
     quadView,
@@ -641,6 +463,7 @@ export function TrainerStudio3D({
 
   useEffect(() => {
     stateRef.current = {
+      exerciseId,
       clipName,
       biomechanicalVariant,
       exerciseName,
@@ -649,12 +472,14 @@ export function TrainerStudio3D({
       tempoScale,
       isPlaying,
       cameraPreset,
+      displayMode,
       showMaskDebug,
       activeKeyframe,
       quadView,
       onReady,
     };
   }, [
+    exerciseId,
     clipName,
     biomechanicalVariant,
     exerciseName,
@@ -663,6 +488,7 @@ export function TrainerStudio3D({
     tempoScale,
     isPlaying,
     cameraPreset,
+    displayMode,
     showMaskDebug,
     activeKeyframe,
     quadView,
@@ -680,13 +506,13 @@ export function TrainerStudio3D({
     if (sceneRef.current) {
       sceneRef.current.updateMuscleMaterials();
     }
-  }, [primaryMuscles, secondaryMuscles, showMaskDebug, clipName]);
+  }, [primaryMuscles, secondaryMuscles, showMaskDebug, clipName, exerciseId, displayMode]);
 
   useEffect(() => {
     if (sceneRef.current) {
       sceneRef.current.applyCameraPreset(cameraPreset);
     }
-  }, [cameraPreset, clipName]);
+  }, [cameraPreset, clipName, exerciseId, exerciseName]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -709,7 +535,8 @@ export function TrainerStudio3D({
 
     let disposed = false;
     let isVisible = true;
-    let isTabVisible = typeof document !== 'undefined' ? document.visibilityState === 'visible' : true;
+    let isTabVisible =
+      typeof document !== 'undefined' ? document.visibilityState === 'visible' : true;
     let isContextLost = false;
     const prefersReducedMotion =
       typeof window !== 'undefined' &&
@@ -734,7 +561,7 @@ export function TrainerStudio3D({
     renderer.shadowMap.enabled = !isSoftwareGl;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.08;
+    renderer.toneMappingExposure = 1.04;
 
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
@@ -743,13 +570,12 @@ export function TrainerStudio3D({
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x060b16);
-    scene.fog = new THREE.FogExp2(0x060b16, 0.048);
+    scene.fog = new THREE.FogExp2(0x060b16, 0.044);
 
-    // Studio Environment Reflection (RoomEnvironment + PMREMGenerator) for high-definition 3D anatomical sculpting
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
     const envTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
     scene.environment = envTexture;
-    scene.environmentIntensity = 0.52;
+    scene.environmentIntensity = 0.48;
     pmremGenerator.dispose();
 
     const camera = new THREE.PerspectiveCamera(34, width / height, 0.1, 50);
@@ -757,61 +583,61 @@ export function TrainerStudio3D({
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = !isSoftwareGl;
     controls.dampingFactor = 0.07;
-    controls.maxPolarAngle = Math.PI / 2 - 0.02;
-    controls.minDistance = 1.4;
+    controls.maxPolarAngle = Math.PI / 2 - 0.015;
+    controls.minDistance = 1.35;
     controls.maxDistance = 6.5;
 
-    // 4-Point Anatomical Studio Lighting — warm key + cool fill + rim for natural organic depth
-    const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.30);
+    // 4-Point Neutral Sculptural Studio Lighting (Balanced for Matte-Satin Anatomical PBR)
+    const ambientLight = new THREE.AmbientLight(0xfff8f0, 0.36);
     scene.add(ambientLight);
 
-    const hemiLight = new THREE.HemisphereLight(0xf1f5f9, 0x090d16, 0.56);
-    hemiLight.position.set(0, 4.2, 0);
+    const hemiLight = new THREE.HemisphereLight(0xf8fafc, 0x0b1120, 0.56);
+    hemiLight.position.set(0, 4.4, 0);
     scene.add(hemiLight);
 
-    const keyLight = new THREE.DirectionalLight(0xfff3e0, 1.62);
-    keyLight.position.set(2.2, 4.4, 2.9);
+    const keyLight = new THREE.DirectionalLight(0xfff5e8, 1.65);
+    keyLight.position.set(2.3, 4.4, 3.0);
     keyLight.castShadow = !isSoftwareGl;
     keyLight.shadow.mapSize.width = 2048;
     keyLight.shadow.mapSize.height = 2048;
     keyLight.shadow.camera.near = 0.5;
     keyLight.shadow.camera.far = 12;
-    const d = 2.4;
-    keyLight.shadow.camera.left = -d;
-    keyLight.shadow.camera.right = d;
-    keyLight.shadow.camera.top = d;
-    keyLight.shadow.camera.bottom = -d;
-    keyLight.shadow.bias = -0.0005;
+    const shadowExtent = 2.5;
+    keyLight.shadow.camera.left = -shadowExtent;
+    keyLight.shadow.camera.right = shadowExtent;
+    keyLight.shadow.camera.top = shadowExtent;
+    keyLight.shadow.camera.bottom = -shadowExtent;
+    keyLight.shadow.bias = -0.0004;
     keyLight.shadow.normalBias = 0.02;
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.78);
-    fillLight.position.set(-2.8, 2.5, 1.8);
+    const fillLight = new THREE.DirectionalLight(0xb8d4f5, 0.74);
+    fillLight.position.set(-2.8, 2.6, 1.8);
     scene.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0x38bdf8, 1.15);
-    rimLight.position.set(0, 3.4, -3.2);
+    const rimLight = new THREE.DirectionalLight(0xfde6c4, 0.94);
+    rimLight.position.set(0, 3.5, -3.2);
     scene.add(rimLight);
 
-    // Studio Rubber Floor + Architectural Blueprint Grid + Soft Grounded Contact Shadow
-    const floorGeo = new THREE.CircleGeometry(6.5, 64);
+    // Studio Rubber Floor + Clean Slate Grid + Grounded Contact Shadow
+    const floorGeo = new THREE.CircleGeometry(6.8, 64);
     const floorMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       map: pbr.floorAlbedoMap,
       roughnessMap: pbr.floorRoughnessMap,
       roughness: 0.9,
-      metalness: 0.08,
+      metalness: 0.06,
     });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     scene.add(floor);
 
-    const gridHelper = new THREE.GridHelper(6.0, 24, 0x0369a1, 0x16243b);
+    const gridHelper = new THREE.GridHelper(6.0, 24, 0x334155, 0x161d2b);
     gridHelper.position.y = 0.002;
     scene.add(gridHelper);
 
-    const contactShadowGeo = new THREE.PlaneGeometry(1.45, 1.45);
+    const contactShadowGeo = new THREE.PlaneGeometry(1.48, 1.48);
     const contactShadowMat = new THREE.MeshBasicMaterial({
       map: pbr.contactShadowMap,
       transparent: true,
@@ -823,32 +649,58 @@ export function TrainerStudio3D({
     });
     const contactShadow = new THREE.Mesh(contactShadowGeo, contactShadowMat);
     contactShadow.rotation.x = -Math.PI / 2;
-    contactShadow.position.y = 0.005;
+    contactShadow.position.y = 0.004;
     scene.add(contactShadow);
 
-    // High-Definition Physical Materials (Natural satin organic skin & micro-detail bump, not glossy plastic)
+    // ============================================================================
+    // SYMMETRICAL MATTE-SATIN ANATOMICAL CLAY PBR MATERIALS (Zero Asymmetric Arms)
+    // ============================================================================
+    const MANNEQUIN_BASE_HEX = 0xdfc5a4; // Natural warm matte-satin anatomical alabaster-clay
+    const CHARCOAL_FABRIC_HEX = 0x252a34; // Matte charcoal athletic shorts
+
     const skinMat = new THREE.MeshPhysicalMaterial({
-      color: 0xaab6c8,
-      roughness: 0.54,
-      metalness: 0.04,
-      clearcoat: 0.06,
-      clearcoatRoughness: 0.58,
-      sheen: 0.34,
-      sheenRoughness: 0.58,
-      sheenColor: new THREE.Color(0xf1f5f9),
+      color: MANNEQUIN_BASE_HEX,
+      roughness: 0.64,
+      metalness: 0.02,
+      clearcoat: 0.04,
+      clearcoatRoughness: 0.68,
+      sheen: 0.28,
+      sheenRoughness: 0.72,
+      sheenColor: new THREE.Color(0xf7e8d6),
+      normalMap: pbr.skinNormalMap,
+      normalScale: new THREE.Vector2(0.42, 0.42),
       bumpMap: pbr.skinBumpMap,
-      bumpScale: 0.004,
+      bumpScale: 0.0035,
       roughnessMap: pbr.skinRoughnessMap,
       vertexColors: true,
     });
 
-    const shortsMat = new THREE.MeshPhysicalMaterial({
-      color: 0x161a22,
-      roughness: 0.80,
-      metalness: 0.04,
-      sheen: 0.22,
+    // Identical matte-satin skin WITHOUT vertexColors for sculpted composite hands & feet
+    const skinMatNoVC = new THREE.MeshPhysicalMaterial({
+      color: MANNEQUIN_BASE_HEX,
+      roughness: 0.64,
+      metalness: 0.02,
+      clearcoat: 0.04,
+      clearcoatRoughness: 0.68,
+      sheen: 0.28,
       sheenRoughness: 0.72,
-      sheenColor: new THREE.Color(0x334155),
+      sheenColor: new THREE.Color(0xf7e8d6),
+      normalMap: pbr.skinNormalMap,
+      normalScale: new THREE.Vector2(0.42, 0.42),
+      bumpMap: pbr.skinBumpMap,
+      bumpScale: 0.0035,
+      roughnessMap: pbr.skinRoughnessMap,
+    });
+
+    const shortsMat = new THREE.MeshPhysicalMaterial({
+      color: CHARCOAL_FABRIC_HEX,
+      roughness: 0.84,
+      metalness: 0.03,
+      sheen: 0.22,
+      sheenRoughness: 0.76,
+      sheenColor: new THREE.Color(0x475569),
+      normalMap: pbr.fabricNormalMap,
+      normalScale: new THREE.Vector2(0.58, 0.58),
       bumpMap: pbr.fabricBumpMap,
       bumpScale: 0.005,
       roughnessMap: pbr.fabricRoughnessMap,
@@ -856,52 +708,62 @@ export function TrainerStudio3D({
     });
 
     const shortsTrimMat = new THREE.MeshStandardMaterial({
-      color: 0x2d3748,
-      roughness: 0.62,
-      metalness: 0.10,
-      bumpMap: pbr.fabricBumpMap,
-      bumpScale: 0.003,
-      vertexColors: true,
-    });
-
-    const trimWhiteMat = new THREE.MeshStandardMaterial({
-      color: 0xf1f5f9,
-      roughness: 0.44,
-      metalness: 0.08,
-      vertexColors: true,
-    });
-
-    const hairMat = new THREE.MeshPhysicalMaterial({
-      color: 0x12161f,
+      color: 0x343b48,
       roughness: 0.72,
       metalness: 0.06,
-      clearcoat: 0.08,
-      clearcoatRoughness: 0.62,
+      normalMap: pbr.fabricNormalMap,
+      normalScale: new THREE.Vector2(0.4, 0.4),
+      roughnessMap: pbr.fabricRoughnessMap,
       vertexColors: true,
-    });
-
-    const shoeDarkMat = new THREE.MeshStandardMaterial({
-      color: 0x11151c,
-      roughness: 0.58,
-      metalness: 0.15,
     });
 
     const equipMetalMat = new THREE.MeshStandardMaterial({
-      color: 0x64748b,
-      roughness: 0.24,
-      metalness: 0.86,
+      color: 0x475569,
+      roughness: 0.28,
+      metalness: 0.84,
     });
 
     const equipChromeMat = new THREE.MeshStandardMaterial({
-      color: 0xf1f5f9,
-      roughness: 0.14,
-      metalness: 0.95,
+      color: 0xe2e8f0,
+      roughness: 0.16,
+      metalness: 0.94,
     });
 
     const equipDarkMat = new THREE.MeshStandardMaterial({
-      color: 0x0f172a,
-      roughness: 0.65,
-      metalness: 0.24,
+      color: 0x121826,
+      roughness: 0.68,
+      metalness: 0.22,
+    });
+
+    const matSurfaceMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      roughness: 0.88,
+      metalness: 0.04,
+      normalMap: pbr.fabricNormalMap,
+      normalScale: new THREE.Vector2(0.35, 0.35),
+    });
+
+    const matBorderMat = new THREE.MeshStandardMaterial({
+      color: 0x334155,
+      roughness: 0.82,
+      metalness: 0.05,
+    });
+
+    const pillowMat = new THREE.MeshPhysicalMaterial({
+      color: 0x334155,
+      roughness: 0.86,
+      metalness: 0.02,
+      sheen: 0.35,
+      sheenRoughness: 0.78,
+      sheenColor: new THREE.Color(0x64748b),
+    });
+
+    const towelMat = new THREE.MeshPhysicalMaterial({
+      color: 0x475569,
+      roughness: 0.9,
+      metalness: 0.02,
+      sheen: 0.28,
+      sheenColor: new THREE.Color(0x94a3b8),
     });
 
     const muscleIds: MuscleGroup[] = [
@@ -939,93 +801,126 @@ export function TrainerStudio3D({
 
     muscleIds.forEach((id) => {
       muscleMaterials[id] = new THREE.MeshPhysicalMaterial({
-        color: 0xaab6c8,
-        roughness: 0.52,
-        metalness: 0.05,
-        clearcoat: 0.07,
-        clearcoatRoughness: 0.54,
-        sheen: 0.34,
-        sheenRoughness: 0.56,
-        sheenColor: new THREE.Color(0xf1f5f9),
+        color: MANNEQUIN_BASE_HEX,
+        roughness: 0.64,
+        metalness: 0.02,
+        clearcoat: 0.04,
+        clearcoatRoughness: 0.68,
+        sheen: 0.28,
+        sheenRoughness: 0.72,
+        sheenColor: new THREE.Color(0xf7e8d6),
+        normalMap: pbr.skinNormalMap,
+        normalScale: new THREE.Vector2(0.5, 0.5),
         bumpMap: pbr.skinBumpMap,
-        bumpScale: 0.0045,
+        bumpScale: 0.004,
         roughnessMap: pbr.skinRoughnessMap,
         vertexColors: true,
       });
     });
 
     const shortsGlutesMat = new THREE.MeshPhysicalMaterial({
-      color: 0x161a22,
-      roughness: 0.78,
-      metalness: 0.05,
-      clearcoat: 0.05,
+      color: CHARCOAL_FABRIC_HEX,
+      roughness: 0.84,
+      metalness: 0.03,
+      clearcoat: 0.02,
+      normalMap: pbr.fabricNormalMap,
+      normalScale: new THREE.Vector2(0.55, 0.55),
       bumpMap: pbr.fabricBumpMap,
-      bumpScale: 0.0045,
+      bumpScale: 0.004,
       roughnessMap: pbr.fabricRoughnessMap,
       vertexColors: true,
     });
 
-    // ============================================================================
-    // HIGH-DEFINITION CONTINUOUS SKINNED ANATOMICAL LOFTS (180cm / 70kg Athletic Male)
-    // ============================================================================
-    const PELVIS_DROP = 0.075;
-    const TORSO_LEN = 0.56;
-    const HEAD_NECK_LEN = 0.25;
-    const UPPER_ARM_LEN = 0.30;
-    const FOREARM_LEN = 0.27;
-    const HAND_LEN = 0.08;
-    const THIGH_LEN = 0.43;
-    const CALF_LEN = 0.41;
+    const boneMat = new THREE.MeshPhysicalMaterial({
+      color: 0xf4ecda,
+      roughness: 0.44,
+      metalness: 0.06,
+      clearcoat: 0.12,
+      clearcoatRoughness: 0.48,
+      emissive: new THREE.Color(0x3a2e1a),
+      emissiveIntensity: 0.16,
+      normalMap: pbr.boneNormalMap,
+      normalScale: new THREE.Vector2(0.45, 0.45),
+      roughnessMap: pbr.boneRoughnessMap,
+    });
 
-    // 1. UNIFIED AXIAL BODY MESH (Shorts Crotch Saddle s=0 -> Pelvis -> Waist -> Chest -> Neck -> Face -> Closed Skull Crown s=1)
+    const jointBeaconMat = new THREE.MeshPhysicalMaterial({
+      color: 0xf97316,
+      emissive: new THREE.Color(0xea580c),
+      emissiveIntensity: 0.62,
+      roughness: 0.25,
+      metalness: 0.32,
+      clearcoat: 0.4,
+    });
+
+    // ============================================================================
+    // 180 CM CALIBRATED CONTINUOUS SKINNED ANATOMICAL LOFTS
+    // ============================================================================
+    const {
+      PELVIS_DROP,
+      TORSO_LEN,
+      HEAD_NECK_LEN,
+      UPPER_ARM_LEN,
+      FOREARM_LEN,
+      HAND_LEN,
+      THIGH_LEN,
+      CALF_LEN,
+      SHOULDER_HALF_WIDTH,
+      SHOULDER_DROP_FROM_TOP,
+      HIP_HALF_WIDTH,
+      HIP_OFFSET_UP,
+      BAR_Y,
+      DIP_BAR_Y,
+      DIP_BAR_HALF_X,
+    } = BODY_METRICS;
+
+    // 1. UNIFIED AXIAL BODY MESH (Shorts Crotch Saddle -> Pelvis -> Torso -> Neck -> Bald Faceless Head)
     const buildUnifiedAxialBody = (): SkinnedLoftMeshData => {
       const sections: LoftSection[] = [
-        { s: 0.00, rx: 0.045, rzAnt: 0.052, rzPost: 0.058, pinchCenterZ: 0.006 }, // Closed shorts crotch saddle base
-        { s: 0.04, rx: 0.178, rzAnt: 0.106, rzPost: 0.124, pinchCenterZ: 0.022 }, // Lower pelvis enveloping upper thighs
-        { s: 0.09, rx: 0.168, rzAnt: 0.108, rzPost: 0.134, pinchCenterZ: 0.028 }, // Full gluteal & hip contour
-        { s: 0.16, rx: 0.152, rzAnt: 0.102, rzPost: 0.112, pinchCenterZ: 0.012 }, // Athletic shorts waistband
-        { s: 0.24, rx: 0.136, rzAnt: 0.098, rzPost: 0.098, pinchCenterZ: 0.012 }, // Narrow athletic waist & obliques
-        { s: 0.34, rx: 0.152, rzAnt: 0.110, rzPost: 0.108, pinchCenterZ: 0.016 }, // Mid ribcage & 6-pack abs
-        { s: 0.45, rx: 0.180, rzAnt: 0.128, rzPost: 0.120, pinchCenterZ: 0.022 }, // Lower pectoral shelf & lats flare
-        { s: 0.55, rx: 0.204, rzAnt: 0.140, rzPost: 0.128, pinchCenterZ: 0.025 }, // Full chest & wide V-taper lats
-        { s: 0.63, rx: 0.202, rzAnt: 0.116, rzPost: 0.112, pinchCenterZ: 0.010 }, // Clavicle / shoulder shelf
-        { s: 0.68, rx: 0.106, rzAnt: 0.074, rzPost: 0.076, pinchCenterZ: 0.002 }, // Trapezius slope
-        { s: 0.71, rx: 0.056, rzAnt: 0.055, rzPost: 0.056, pinchCenterZ: 0.000 }, // Base of neck (sternocleidomastoid)
-        { s: 0.76, rx: 0.052, rzAnt: 0.053, rzPost: 0.054, pinchCenterZ: 0.000 }, // Mid neck
-        { s: 0.79, rx: 0.056, rzAnt: 0.062, rzPost: 0.058, pinchCenterZ: 0.000 }, // Sub-jaw transition
-        { s: 0.83, rx: 0.067, rzAnt: 0.082, rzPost: 0.076, pinchCenterZ: 0.000 }, // Jawline & chin
-        { s: 0.87, rx: 0.074, rzAnt: 0.086, rzPost: 0.086, pinchCenterZ: 0.000 }, // Cheekbones & mid-face
-        { s: 0.91, rx: 0.076, rzAnt: 0.084, rzPost: 0.088, pinchCenterZ: 0.000 }, // Brow ridge & cranium
-        { s: 0.95, rx: 0.071, rzAnt: 0.077, rzPost: 0.082, pinchCenterZ: 0.000 }, // Upper forehead
-        { s: 0.98, rx: 0.046, rzAnt: 0.048, rzPost: 0.052, pinchCenterZ: 0.000 }, // Crown dome
-        { s: 1.00, rx: 0.001, rzAnt: 0.001, rzPost: 0.001, pinchCenterZ: 0.000 }, // Closed top pole
+        { s: 0.00, rx: 0.044, rzAnt: 0.050, rzPost: 0.056, pinchCenterZ: 0.005 },
+        { s: 0.04, rx: 0.174, rzAnt: 0.104, rzPost: 0.122, pinchCenterZ: 0.020 },
+        { s: 0.09, rx: 0.166, rzAnt: 0.106, rzPost: 0.130, pinchCenterZ: 0.024 },
+        { s: 0.16, rx: 0.150, rzAnt: 0.100, rzPost: 0.110, pinchCenterZ: 0.011 },
+        { s: 0.24, rx: 0.136, rzAnt: 0.096, rzPost: 0.098, pinchCenterZ: 0.012 },
+        { s: 0.34, rx: 0.152, rzAnt: 0.108, rzPost: 0.108, pinchCenterZ: 0.015 },
+        { s: 0.45, rx: 0.178, rzAnt: 0.125, rzPost: 0.118, pinchCenterZ: 0.020 },
+        { s: 0.55, rx: 0.200, rzAnt: 0.136, rzPost: 0.124, pinchCenterZ: 0.022 },
+        { s: 0.63, rx: 0.198, rzAnt: 0.114, rzPost: 0.110, pinchCenterZ: 0.010 },
+        { s: 0.68, rx: 0.104, rzAnt: 0.074, rzPost: 0.076, pinchCenterZ: 0.002 },
+        { s: 0.71, rx: 0.056, rzAnt: 0.055, rzPost: 0.056, pinchCenterZ: 0.000 },
+        { s: 0.76, rx: 0.052, rzAnt: 0.053, rzPost: 0.054, pinchCenterZ: 0.000 },
+        { s: 0.79, rx: 0.055, rzAnt: 0.062, rzPost: 0.058, pinchCenterZ: 0.000 },
+        { s: 0.83, rx: 0.066, rzAnt: 0.080, rzPost: 0.076, pinchCenterZ: 0.000 },
+        { s: 0.87, rx: 0.073, rzAnt: 0.085, rzPost: 0.085, pinchCenterZ: 0.000 },
+        { s: 0.91, rx: 0.075, rzAnt: 0.083, rzPost: 0.087, pinchCenterZ: 0.000 },
+        { s: 0.95, rx: 0.070, rzAnt: 0.076, rzPost: 0.081, pinchCenterZ: 0.000 },
+        { s: 0.98, rx: 0.045, rzAnt: 0.047, rzPost: 0.051, pinchCenterZ: 0.000 },
+        { s: 1.00, rx: 0.001, rzAnt: 0.001, rzPost: 0.001, pinchCenterZ: 0.000 },
       ];
 
-      // Groups: 0: skin, 1: shorts, 2: shortsTrim, 3: chest, 4: abs, 5: back_lats, 6: shoulders, 7: glutes(shorts), 8: hair
+      // Groups: 0: skin, 1: shorts, 2: shortsTrim, 3: chest, 4: abs, 5: back_lats, 6: shoulders, 7: glutes(shorts)
       const groupFn = (s: number, nx: number, nz: number): number => {
         const absX = Math.abs(nx);
         const isAnt = nz >= 0;
 
-        // Head & Neck region (s >= 0.76) uses smooth skin material; 3D sculpted hair cap sits cleanly on top
-        if (s >= 0.76) {
-          return 0;
+        if (s >= 0.75) return 0; // Neck & Bald Faceless Head
+
+        if (s < 0.175) {
+          if (s >= 0.158) return 2; // Clean athletic shorts waistband trim
+          if (!isAnt && s >= 0.02 && s < 0.158 && absX > 0.10 && absX < 0.90) return 7; // Glutes
+          return 1; // Matte charcoal shorts
         }
 
-        // Athletic shorts cover pelvis saddle from s=0.00 up to s=0.18
-        if (s < 0.18) {
-          if (!isAnt && s >= 0.02 && s < 0.16 && absX > 0.10 && absX < 0.90) return 7; // Glutes
-          return 1; // Sleek matte black shorts
+        // Upper trapezius / shoulder bridge highlights symmetrically with shoulders/back
+        if (s > 0.63 && s < 0.71 && absX > 0.22) {
+          return 6; // shoulders / upper traps
         }
-
-        // Pectorals (Chest) — full armor plates on upper anterior torso
         if (isAnt && s >= 0.40 && s <= 0.64 && absX >= 0.04 && absX <= 0.84 && nz > 0.22) {
           return 3; // chest
         }
-        // 6-Pack Abs & Obliques
-        if (isAnt && s >= 0.18 && s < 0.40 && absX <= 0.68 && nz > 0.28) {
+        if (isAnt && s >= 0.175 && s < 0.40 && absX <= 0.68 && nz > 0.26) {
           return 4; // abs
         }
-        // Latissimus Dorsi & Back (includes lateral V-taper flare visible from both Front and Back views!)
         if (s >= 0.22 && s <= 0.65 && (nz < -0.10 || (absX > 0.66 && nz < 0.28))) {
           return 5; // back_lats
         }
@@ -1043,92 +938,58 @@ export function TrainerStudio3D({
 
         if (s < 0.70) {
           const ts = s / 0.70;
-          // Sculpted Pectoralis Major armor plates with lower & sternal shelf
           if (nz > 0.15 && ts > 0.55 && ts < 0.88 && absX > 0.03 && absX < 0.84) {
             const pecS = Math.sin(((ts - 0.55) / 0.33) * Math.PI);
             const pecX = Math.sin(((absX - 0.03) / 0.81) * Math.PI);
-            const lowerShelf = ts < 0.66 ? Math.sin(((ts - 0.55) / 0.11) * (Math.PI * 0.5)) : 1.0;
-            pos.z += 0.028 * pecS * pecX * lowerShelf * nz;
+            const lowerShelf =
+              ts < 0.66 ? Math.sin(((ts - 0.55) / 0.11) * (Math.PI * 0.5)) : 1.0;
+            pos.z += 0.025 * pecS * pecX * lowerShelf * nz;
           }
-          // Clavicle ridge (collarbones)
           if (nz > 0.35 && ts > 0.85 && ts < 0.93 && absX > 0.10 && absX < 0.76) {
             const clavBell = Math.sin(((ts - 0.85) / 0.08) * Math.PI);
-            pos.z += 0.009 * clavBell * nz;
+            pos.z += 0.008 * clavBell * nz;
           }
-          // 6-Pack Rectus Abdominis (3 distinct sculpted rows + obliques)
           if (nz > 0.30 && ts > 0.25 && ts < 0.55 && absX > 0.03 && absX < 0.46) {
             const rowPhase = ((ts - 0.25) / 0.30) * 3 * Math.PI;
             const abRow = Math.pow(Math.max(0, Math.sin(rowPhase)), 0.65);
             const abCol = Math.sin(((absX - 0.03) / 0.43) * Math.PI);
-            pos.z += 0.017 * abRow * abCol * nz;
+            pos.z += 0.015 * abRow * abCol * nz;
           }
-          // External Oblique iliac crest sweep
           if (nz > -0.1 && nz < 0.65 && ts > 0.22 && ts < 0.38 && absX > 0.48 && absX < 0.92) {
             const obBell = Math.sin(((ts - 0.22) / 0.16) * Math.PI);
-            pos.x += (nx > 0 ? 1 : -1) * 0.009 * obBell;
+            pos.x += (nx > 0 ? 1 : -1) * 0.008 * obBell;
           }
-          // Serratus anterior ribs
           if (nz > -0.1 && nz < 0.65 && ts > 0.34 && ts < 0.62 && absX > 0.54 && absX < 0.92) {
             const ribWave = Math.max(0, Math.sin(((ts - 0.34) / 0.28) * 4 * Math.PI));
-            pos.x += (nx > 0 ? 1 : -1) * 0.007 * ribWave;
+            pos.x += (nx > 0 ? 1 : -1) * 0.006 * ribWave;
           }
-          // Latissimus Dorsi V-taper & Teres Major wings
           if (nz < 0.25 && ts > 0.32 && ts < 0.87 && absX > 0.12 && absX < 0.96) {
             const latS = Math.sin(((ts - 0.32) / 0.55) * Math.PI);
             const latX = Math.sin(((absX - 0.12) / 0.84) * Math.PI);
             if (nz < -0.12) {
-              pos.z -= 0.022 * latS * latX * -nz;
+              pos.z -= 0.020 * latS * latX * -nz;
             }
-            pos.x += (nx > 0 ? 1 : -1) * 0.016 * latS * latX;
+            pos.x += (nx > 0 ? 1 : -1) * 0.014 * latS * latX;
           }
-          // Upper Trapezius / Rhomboid diamond
           if (nz < -0.25 && ts > 0.66 && ts < 0.96 && absX > 0.06 && absX < 0.52) {
             const trapBell = Math.sin(((ts - 0.66) / 0.30) * Math.PI);
-            pos.z -= 0.013 * trapBell * -nz;
+            pos.z -= 0.012 * trapBell * -nz;
           }
-          // Gluteal contour
           if (nz < -0.2 && ts > 0.03 && ts < 0.22 && absX > 0.12 && absX < 0.86) {
             const gluteS = Math.sin(((ts - 0.03) / 0.19) * Math.PI);
             const gluteX = Math.sin(((absX - 0.12) / 0.74) * Math.PI);
-            pos.z -= 0.024 * gluteS * gluteX * -nz;
+            pos.z -= 0.022 * gluteS * gluteX * -nz;
           }
         } else {
-          // Balanced Human Head & Facial Features (hs ∈ [0, 1])
           const hs = (s - 0.70) / 0.30;
-          // Sternocleidomastoid V-muscles on neck
           if (nz > 0.2 && hs > 0.02 && hs < 0.26 && absX > 0.18 && absX < 0.58) {
             pos.z += 0.004 * Math.sin(((hs - 0.02) / 0.24) * Math.PI);
           }
-          // Sculpted nose bridge & tip
-          if (nz > 0.72 && hs > 0.44 && hs < 0.65 && absX < 0.18) {
-            const noseS = Math.sin(((hs - 0.44) / 0.21) * Math.PI);
-            const noseX = Math.cos((absX / 0.18) * (Math.PI * 0.5));
-            pos.z += 0.015 * noseS * noseX;
+          if (nz > 0.30 && hs > 0.28 && hs < 0.42 && absX < 0.52) {
+            pos.z += 0.005 * Math.sin(((hs - 0.28) / 0.14) * Math.PI);
           }
-          // Supraorbital brow ridge
-          if (nz > 0.55 && hs > 0.61 && hs < 0.71 && absX < 0.62) {
-            pos.z += 0.007 * Math.sin(((hs - 0.61) / 0.10) * Math.PI);
-          }
-          // Orbital eye sockets
-          if (nz > 0.58 && hs > 0.54 && hs < 0.63 && absX > 0.16 && absX < 0.52) {
-            pos.z -= 0.007;
-          }
-          // Zygomatic cheekbones
-          if (nz > 0.28 && nz < 0.82 && hs > 0.45 && hs < 0.58 && absX > 0.40 && absX < 0.76) {
-            pos.x += (nx > 0 ? 1 : -1) * 0.004;
-            pos.z += 0.004;
-          }
-          // Lips & mouth contour
-          if (nz > 0.74 && hs > 0.36 && hs < 0.43 && absX < 0.26) {
-            pos.z += 0.004 * Math.sin(((hs - 0.36) / 0.07) * Math.PI * 2);
-          }
-          // Masculine chin & mandible jawline
-          if (nz > 0.35 && hs > 0.28 && hs < 0.39 && absX < 0.55) {
-            pos.z += 0.006 * Math.sin(((hs - 0.28) / 0.11) * Math.PI);
-          }
-          // Anatomical ears
-          if (absX > 0.90 && Math.abs(nz) < 0.30 && hs > 0.45 && hs < 0.64) {
-            pos.x += (nx > 0 ? 1 : -1) * 0.010 * Math.sin(((hs - 0.45) / 0.19) * Math.PI);
+          if (nz > 0.65 && hs > 0.50 && hs < 0.68 && absX < 0.52) {
+            pos.z += 0.003 * Math.sin(((hs - 0.50) / 0.18) * Math.PI);
           }
         }
       };
@@ -1144,56 +1005,47 @@ export function TrainerStudio3D({
 
         if (s < 0.70) {
           const ts = s / 0.70;
-          // Deep linea alba & sternal cleavage
           if (nz > 0.25 && absX < 0.085 && ts > 0.24 && ts < 0.87) {
-            shade -= 0.45 * (1 - absX / 0.085);
+            shade -= 0.34 * (1 - absX / 0.085);
           }
-          // Lower pectoral crease
           if (nz > 0.22 && ts > 0.53 && ts < 0.60 && absX > 0.06 && absX < 0.82) {
             const groove = 1 - Math.abs(ts - 0.565) / 0.035;
-            shade -= 0.46 * Math.max(0, groove);
+            shade -= 0.36 * Math.max(0, groove);
           }
-          // Deltopectoral groove
           if (nz > 0.15 && ts > 0.65 && ts < 0.88 && absX > 0.68 && absX < 0.78) {
-            shade -= 0.32;
+            shade -= 0.24;
           }
-          // 6-pack tendinous intersections & semilunaris lines
           if (nz > 0.28 && ts > 0.24 && ts < 0.55 && absX < 0.48) {
             for (const gS of [0.33, 0.43, 0.52]) {
               const dist = Math.abs(ts - gS);
               if (dist < 0.024) {
-                shade -= 0.42 * (1 - dist / 0.024);
+                shade -= 0.30 * (1 - dist / 0.024);
               }
             }
             if (absX > 0.37 && absX < 0.46) {
-              shade -= 0.38 * (1 - Math.abs(absX - 0.415) / 0.045);
+              shade -= 0.26 * (1 - Math.abs(absX - 0.415) / 0.045);
             }
           }
-          // Serratus rib grooves
           if (nz > -0.05 && nz < 0.70 && ts > 0.35 && ts < 0.60 && absX > 0.46 && absX < 0.88) {
             const ribGroove = Math.abs(Math.sin(((ts - 0.35) / 0.25) * 3 * Math.PI));
-            if (ribGroove < 0.28) shade -= 0.28;
+            if (ribGroove < 0.28) shade -= 0.20;
           }
-          // Spinal erector furrow & scapular border
           if (nz < -0.22 && ts > 0.24 && ts < 0.88) {
-            if (absX < 0.095) shade -= 0.44 * (1 - absX / 0.095);
-            if (ts > 0.58 && ts < 0.85 && absX > 0.40 && absX < 0.52) shade -= 0.30;
+            if (absX < 0.095) shade -= 0.34 * (1 - absX / 0.095);
+            if (ts > 0.58 && ts < 0.85 && absX > 0.40 && absX < 0.52) shade -= 0.22;
           }
-          if (matGroup === 1 || matGroup === 7) {
-            shade = 0.92 + 0.08 * Math.sin(nx * 6);
-            if (nz < -0.2 && absX < 0.12) shade -= 0.34;
+          if (matGroup === 1 || matGroup === 2 || matGroup === 7) {
+            shade = 0.94 + 0.06 * Math.sin(nx * 6);
+            if (nz < -0.2 && absX < 0.12) shade -= 0.26;
           }
         } else {
           const hs = (s - 0.70) / 0.30;
-          // Eye socket shadow
-          if (nz > 0.58 && hs > 0.54 && hs < 0.63 && absX > 0.15 && absX < 0.50) shade -= 0.36;
-          // Sub-chin shadow
-          if (nz > 0.15 && hs > 0.23 && hs < 0.31) shade -= 0.28;
-          // Mouth line shadow
-          if (nz > 0.72 && hs > 0.385 && hs < 0.415 && absX < 0.24) shade -= 0.26;
+          if (nz > 0.12 && hs > 0.21 && hs < 0.30) {
+            shade -= 0.18 * Math.sin(((hs - 0.21) / 0.09) * Math.PI);
+          }
         }
 
-        const c = Math.max(0.32, Math.min(1.08, shade));
+        const c = Math.max(0.45, Math.min(1.06, shade));
         return [c, c, c];
       };
 
@@ -1206,14 +1058,13 @@ export function TrainerStudio3D({
         muscleMaterials.back_lats,
         muscleMaterials.shoulders,
         shortsGlutesMat,
-        hairMat,
       ];
 
       return createContinuousSkinnedLoft(
         PELVIS_DROP + TORSO_LEN + HEAD_NECK_LEN,
         sections,
+        48,
         72,
-        112,
         materials,
         sculptFn,
         groupFn,
@@ -1221,34 +1072,33 @@ export function TrainerStudio3D({
       );
     };
 
-    // 2. CONTINUOUS SKINNED ARM MESH (Full Deltoid Ball Cap s=0 -> Elbow s=0.48 -> Wrist s=0.86 -> Hand Tip s=1.0)
+    // 2. 100% SYMMETRICAL CONTINUOUS SKINNED ARM MESH (Deltoid Cap -> Bicep/Tricep -> Elbow -> Forearm -> Wrist Cuff)
+    // Terminates cleanly at wrist (`s = 1.0`) where the sculpted 3D anatomical hand attaches seamlessly.
     const buildSkinnedArm = (): SkinnedLoftMeshData => {
-      const totalArmLen = UPPER_ARM_LEN + FOREARM_LEN + HAND_LEN; // 0.65m
+      const totalArmLen = UPPER_ARM_LEN + FOREARM_LEN; // 0.565m (shoulder -> wrist)
       const sections: LoftSection[] = [
-        { s: 0.00, rx: 0.044, rzAnt: 0.044, rzPost: 0.044 }, // Full rounded shoulder ball socket nested inside upper torso
-        { s: 0.04, rx: 0.068, rzAnt: 0.068, rzPost: 0.066 }, // Deltoid upper cap
-        { s: 0.11, rx: 0.077, rzAnt: 0.075, rzPost: 0.073 }, // Full 3-head deltoid sweep
-        { s: 0.20, rx: 0.064, rzAnt: 0.067, rzPost: 0.065 }, // Deltoid V-insertion
-        { s: 0.30, rx: 0.058, rzAnt: 0.071, rzPost: 0.067 }, // Bicep peak & tricep horseshoe
-        { s: 0.42, rx: 0.049, rzAnt: 0.053, rzPost: 0.053 }, // Lower humerus
-        { s: 0.48, rx: 0.046, rzAnt: 0.045, rzPost: 0.047 }, // Elbow joint center
-        { s: 0.56, rx: 0.049, rzAnt: 0.047, rzPost: 0.047 }, // Upper forearm brachioradialis
-        { s: 0.72, rx: 0.037, rzAnt: 0.033, rzPost: 0.033 }, // Mid forearm taper
-        { s: 0.86, rx: 0.030, rzAnt: 0.023, rzPost: 0.023 }, // Wrist joint
-        { s: 0.92, rx: 0.042, rzAnt: 0.016, rzPost: 0.018 }, // Palm & metacarpals
-        { s: 0.98, rx: 0.035, rzAnt: 0.012, rzPost: 0.012 }, // Fingers
-        { s: 1.00, rx: 0.005, rzAnt: 0.005, rzPost: 0.005 }, // Closed fingertips
+        { s: 0.00, rx: 0.054, rzAnt: 0.054, rzPost: 0.054 }, // Tucked inside shoulder glenohumeral socket
+        { s: 0.05, rx: 0.072, rzAnt: 0.072, rzPost: 0.070 }, // Full deltoid cap overlap
+        { s: 0.13, rx: 0.078, rzAnt: 0.076, rzPost: 0.074 }, // Lateral deltoid peak
+        { s: 0.24, rx: 0.064, rzAnt: 0.067, rzPost: 0.065 }, // Deltoid insertion
+        { s: 0.36, rx: 0.058, rzAnt: 0.070, rzPost: 0.066 }, // Bicep/Tricep belly
+        { s: 0.48, rx: 0.048, rzAnt: 0.052, rzPost: 0.052 }, // Lower humerus
+        { s: 0.53, rx: 0.046, rzAnt: 0.045, rzPost: 0.047 }, // Elbow hinge
+        { s: 0.62, rx: 0.050, rzAnt: 0.048, rzPost: 0.048 }, // Brachioradialis flare
+        { s: 0.78, rx: 0.039, rzAnt: 0.035, rzPost: 0.035 }, // Mid forearm
+        { s: 0.92, rx: 0.031, rzAnt: 0.025, rzPost: 0.025 }, // Distal forearm
+        { s: 1.00, rx: 0.029, rzAnt: 0.023, rzPost: 0.023 }, // Wrist cuff (seamless hand join)
       ];
 
-      // Groups: 0: skin, 1: shoulders, 2: biceps, 3: triceps, 4: forearms
+      // Groups: 0: skin, 1: shoulders, 2: biceps, 3: triceps, 4: forearms (100% symmetrical L/R!)
       const groupFn = (s: number, _nx: number, nz: number): number => {
-        if (s < 0.21) return 1; // shoulders (deltoids)
-        if (s >= 0.21 && s < 0.45) {
+        if (s < 0.24) return 1; // shoulders (deltoids)
+        if (s >= 0.24 && s < 0.50) {
           if (nz >= 0.06) return 2; // biceps
           if (nz <= -0.06) return 3; // triceps
         }
-        if (s >= 0.50 && s < 0.84) return 4; // forearms
-        return 0; // wrist & hand skin
+        if (s >= 0.56 && s < 0.94) return 4; // forearms
+        return 0; // elbow crease & wrist skin
       };
 
       const sculptFn = (
@@ -1258,17 +1108,14 @@ export function TrainerStudio3D({
         nz: number,
         pos: { x: number; y: number; z: number }
       ) => {
-        // Bicep brachii peak
-        if (nz > 0.2 && s > 0.20 && s < 0.44) {
-          pos.z += 0.012 * Math.sin(((s - 0.20) / 0.24) * Math.PI) * nz;
+        if (nz > 0.2 && s > 0.23 && s < 0.49) {
+          pos.z += 0.012 * Math.sin(((s - 0.23) / 0.26) * Math.PI) * nz;
         }
-        // Tricep lateral & long head horseshoe
-        if (nz < -0.2 && s > 0.18 && s < 0.44) {
-          pos.z -= 0.012 * Math.sin(((s - 0.18) / 0.26) * Math.PI) * -nz;
+        if (nz < -0.2 && s > 0.21 && s < 0.49) {
+          pos.z -= 0.012 * Math.sin(((s - 0.21) / 0.28) * Math.PI) * -nz;
         }
-        // Forearm brachioradialis & flexor contour
-        if (s > 0.50 && s < 0.78) {
-          pos.x += nx * 0.006 * Math.sin(((s - 0.50) / 0.28) * Math.PI);
+        if (s > 0.56 && s < 0.88) {
+          pos.x += nx * 0.005 * Math.sin(((s - 0.56) / 0.32) * Math.PI);
         }
       };
 
@@ -1277,24 +1124,17 @@ export function TrainerStudio3D({
         nx: number,
         nz: number
       ): [number, number, number] => {
-        let shade = 0.94;
-        // Lateral brachial groove separating biceps and triceps
-        if (Math.abs(nz) < 0.16 && s > 0.18 && s < 0.46) {
-          shade -= 0.25 * (1 - Math.abs(nz) / 0.16);
+        let shade = 0.96;
+        if (Math.abs(nz) < 0.16 && s > 0.22 && s < 0.50) {
+          shade -= 0.20 * (1 - Math.abs(nz) / 0.16);
         }
-        // Anterior/lateral/posterior deltoid head striations
-        if (s > 0.05 && s < 0.19 && Math.abs(Math.abs(nz) - 0.55) < 0.08) {
-          shade -= 0.14;
+        if (s > 0.06 && s < 0.22 && Math.abs(Math.abs(nz) - 0.55) < 0.08) {
+          shade -= 0.12;
         }
-        // Deltoid insertion groove
-        if (s > 0.19 && s < 0.23 && Math.abs(nx) > 0.3) {
-          shade -= 0.20;
+        if (s > 0.22 && s < 0.26 && Math.abs(nx) > 0.3) {
+          shade -= 0.16;
         }
-        // Finger grooves on hand
-        if (s > 0.92 && Math.abs(Math.sin(nx * 10)) < 0.25) {
-          shade -= 0.18;
-        }
-        const c = Math.max(0.50, Math.min(1.05, shade));
+        const c = Math.max(0.58, Math.min(1.04, shade));
         return [c, c, c];
       };
 
@@ -1309,8 +1149,8 @@ export function TrainerStudio3D({
       return createContinuousSkinnedLoft(
         totalArmLen,
         sections,
-        40,
-        72,
+        28,
+        44,
         materials,
         sculptFn,
         groupFn,
@@ -1318,27 +1158,149 @@ export function TrainerStudio3D({
       );
     };
 
-    // 3. CONTINUOUS SKINNED LEG MESH (Hip Socket s=0 -> Knee s=0.51 -> Ankle s=0.95 -> Foot/Shoe Base s=1.0)
+    // 2B. SCULPTED 3D ANATOMICAL HAND (Seamless Wrist + Metacarpal Palm + Opposable Thumb + 4 Articulated Fingers)
+    // Local +Y = wrist -> fingertips, +Z = palmar face, +X = radial/ulnar axis
+    const buildAnatomicalHandGroup = (side: 'left' | 'right') => {
+      const thumbSign = side === 'left' ? 1 : -1;
+      const root = new THREE.Group();
+
+      // Seamless wrist joint collar bridging forearm cuff cleanly
+      const wristCap = new THREE.Mesh(new THREE.SphereGeometry(0.025, 16, 12), skinMatNoVC);
+      wristCap.scale.set(1.16, 0.86, 0.88);
+      wristCap.position.set(0, 0.002, 0);
+      wristCap.castShadow = true;
+      root.add(wristCap);
+
+      // Sculpted Metacarpal Palm Body
+      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.064, 0.064, 0.022), skinMatNoVC);
+      palm.position.set(0, 0.036, 0.001);
+      palm.castShadow = true;
+      root.add(palm);
+
+      // Rounded palm borders (thenar & hypothenar pads)
+      const thenar = new THREE.Mesh(new THREE.CapsuleGeometry(0.013, 0.036, 8, 12), skinMatNoVC);
+      thenar.position.set(thumbSign * 0.024, 0.032, 0.005);
+      thenar.rotation.z = -thumbSign * 0.14;
+      thenar.castShadow = true;
+      root.add(thenar);
+
+      const hypothenar = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.011, 0.042, 8, 12),
+        skinMatNoVC
+      );
+      hypothenar.position.set(-thumbSign * 0.026, 0.038, 0.002);
+      hypothenar.castShadow = true;
+      root.add(hypothenar);
+
+      // Knuckle ridge (MCP joints)
+      const knuckles = new THREE.Mesh(new THREE.CapsuleGeometry(0.011, 0.048, 8, 12), skinMatNoVC);
+      knuckles.rotation.z = Math.PI / 2;
+      knuckles.position.set(0, 0.068, 0.0);
+      knuckles.castShadow = true;
+      root.add(knuckles);
+
+      // Opposable Anatomical Thumb
+      const thumbPivot = new THREE.Group();
+      thumbPivot.position.set(thumbSign * 0.031, 0.028, 0.007);
+      const thumbProx = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.0085, 0.022, 8, 10),
+        skinMatNoVC
+      );
+      thumbProx.position.set(0, 0.014, 0);
+      thumbProx.castShadow = true;
+      const thumbDist = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.0075, 0.018, 8, 10),
+        skinMatNoVC
+      );
+      thumbDist.position.set(-thumbSign * 0.003, 0.036, 0.005);
+      thumbDist.rotation.x = 0.24;
+      thumbDist.castShadow = true;
+      thumbPivot.add(thumbProx, thumbDist);
+      root.add(thumbPivot);
+
+      // Articulated 4-Finger Cluster (Index -> Middle -> Ring -> Pinky)
+      const fingersPivot = new THREE.Group();
+      fingersPivot.position.set(0, 0.068, 0.001);
+
+      const fingerSpecs = [
+        { x: thumbSign * 0.023, len: 0.048, r: 0.0072, splay: -thumbSign * 0.04 },
+        { x: thumbSign * 0.008, len: 0.054, r: 0.0075, splay: 0 },
+        { x: -thumbSign * 0.008, len: 0.049, r: 0.0072, splay: thumbSign * 0.03 },
+        { x: -thumbSign * 0.023, len: 0.039, r: 0.0064, splay: thumbSign * 0.06 },
+      ];
+
+      const distalPivot = new THREE.Group();
+      distalPivot.position.set(0, 0.026, 0);
+
+      fingerSpecs.forEach((f) => {
+        const proxLen = f.len * 0.52;
+        const distLen = f.len * 0.48;
+
+        const prox = new THREE.Mesh(new THREE.CapsuleGeometry(f.r, proxLen, 8, 10), skinMatNoVC);
+        prox.position.set(f.x, proxLen * 0.5, 0);
+        prox.rotation.z = f.splay;
+        prox.castShadow = true;
+        fingersPivot.add(prox);
+
+        const dist = new THREE.Mesh(
+          new THREE.CapsuleGeometry(f.r * 0.9, distLen, 8, 10),
+          skinMatNoVC
+        );
+        dist.position.set(f.x - Math.sin(f.splay) * 0.015, distLen * 0.5 + 0.004, 0);
+        dist.rotation.z = f.splay * 0.5;
+        dist.castShadow = true;
+        distalPivot.add(dist);
+      });
+
+      fingersPivot.add(distalPivot);
+      root.add(fingersPivot);
+
+      const setHandPose = (mode: HandPoseMode) => {
+        if (mode === 'grip') {
+          fingersPivot.rotation.x = 1.05;
+          distalPivot.rotation.x = 0.85;
+          thumbPivot.rotation.set(0.75, -thumbSign * 0.45, -thumbSign * 0.42);
+        } else if (mode === 'flat') {
+          fingersPivot.rotation.x = -0.02;
+          distalPivot.rotation.x = 0.0;
+          thumbPivot.rotation.set(0.08, 0, -thumbSign * 0.48);
+        } else if (mode === 'temple' || mode === 'clasp') {
+          fingersPivot.rotation.x = 0.52;
+          distalPivot.rotation.x = 0.42;
+          thumbPivot.rotation.set(0.32, -thumbSign * 0.25, -thumbSign * 0.35);
+        } else {
+          // 'relaxed' natural anatomical curve
+          fingersPivot.rotation.x = 0.26;
+          distalPivot.rotation.x = 0.22;
+          thumbPivot.rotation.set(0.22, -thumbSign * 0.18, -thumbSign * 0.38);
+        }
+      };
+
+      setHandPose('relaxed');
+      return { group: root, setHandPose };
+    };
+
+    // 3. CONTINUOUS SKINNED LEG MESH (Charcoal Shorts + Sculpted Quads/Hamstrings/Calves + Seamless Ankle)
     const buildSkinnedLeg = (): SkinnedLoftMeshData => {
       const totalLegLen = THIGH_LEN + CALF_LEN; // 0.84m
       const sections: LoftSection[] = [
-        { s: 0.00, rx: 0.052, rzAnt: 0.052, rzPost: 0.052 }, // Closed hip socket inside pelvis shorts
-        { s: 0.05, rx: 0.096, rzAnt: 0.095, rzPost: 0.104 }, // Upper thigh nested smoothly inside pelvis saddle
-        { s: 0.20, rx: 0.103, rzAnt: 0.099, rzPost: 0.101 }, // Shorts leg hem
-        { s: 0.30, rx: 0.090, rzAnt: 0.096, rzPost: 0.090 }, // Mid quadriceps & hamstrings sweep
-        { s: 0.43, rx: 0.072, rzAnt: 0.074, rzPost: 0.069 }, // Vastus medialis teardrop above knee
-        { s: 0.51, rx: 0.058, rzAnt: 0.061, rzPost: 0.056 }, // Patella knee joint center
-        { s: 0.64, rx: 0.064, rzAnt: 0.055, rzPost: 0.076 }, // Gastrocnemius calf diamond peak
-        { s: 0.82, rx: 0.042, rzAnt: 0.044, rzPost: 0.046 }, // Achilles tendon taper
-        { s: 0.94, rx: 0.038, rzAnt: 0.040, rzPost: 0.040 }, // Athletic ankle sock
-        { s: 1.00, rx: 0.035, rzAnt: 0.038, rzPost: 0.038 }, // Ankle base into shoe
+        { s: 0.00, rx: 0.056, rzAnt: 0.056, rzPost: 0.056 },
+        { s: 0.05, rx: 0.095, rzAnt: 0.094, rzPost: 0.102 },
+        { s: 0.20, rx: 0.101, rzAnt: 0.098, rzPost: 0.100 },
+        { s: 0.30, rx: 0.089, rzAnt: 0.095, rzPost: 0.089 },
+        { s: 0.43, rx: 0.071, rzAnt: 0.073, rzPost: 0.068 },
+        { s: 0.51, rx: 0.057, rzAnt: 0.060, rzPost: 0.055 },
+        { s: 0.64, rx: 0.063, rzAnt: 0.054, rzPost: 0.075 },
+        { s: 0.82, rx: 0.041, rzAnt: 0.042, rzPost: 0.045 },
+        { s: 0.94, rx: 0.036, rzAnt: 0.038, rzPost: 0.038 },
+        { s: 1.00, rx: 0.034, rzAnt: 0.037, rzPost: 0.037 },
       ];
 
-      // Groups: 0: skin, 1: shorts, 2: shortsTrim, 3: quads, 4: hamstrings, 5: calves, 6: trimWhite(sock)
+      // Groups: 0: skin, 1: shorts, 2: shortsTrim, 3: quads, 4: hamstrings, 5: calves
       const groupFn = (s: number, _nx: number, nz: number): number => {
         if (s <= 0.22) {
-          if (s >= 0.205) return 2; // Subtle dark charcoal shorts hem trim
-          return 1; // Black athletic shorts
+          if (s >= 0.205) return 2;
+          return 1;
         }
         if (s > 0.22 && s < 0.47) {
           if (nz >= 0.06) return 3; // quads
@@ -1347,10 +1309,7 @@ export function TrainerStudio3D({
         if (s >= 0.56 && s < 0.85 && nz < 0.12) {
           return 5; // calves
         }
-        if (s >= 0.91) {
-          return 6; // White athletic crew sock at ankle
-        }
-        return 0; // Knee & shin skin
+        return 0;
       };
 
       const sculptFn = (
@@ -1360,23 +1319,19 @@ export function TrainerStudio3D({
         nz: number,
         pos: { x: number; y: number; z: number }
       ) => {
-        // Quadriceps vastus lateralis & vastus medialis teardrop sweep
         if (nz > 0.15 && s > 0.14 && s < 0.46) {
           const quadProfile = Math.sin(((s - 0.14) / 0.32) * Math.PI);
-          pos.z += 0.017 * quadProfile * nz;
-          pos.x += nx * 0.010 * quadProfile;
+          pos.z += 0.016 * quadProfile * nz;
+          pos.x += nx * 0.009 * quadProfile;
         }
-        // Patella kneecap contour
         if (nz > 0.55 && s > 0.48 && s < 0.54) {
           pos.z += 0.006 * Math.sin(((s - 0.48) / 0.06) * Math.PI);
         }
-        // Hamstrings biceps femoris belly
         if (nz < -0.15 && s > 0.16 && s < 0.46) {
-          pos.z -= 0.015 * Math.sin(((s - 0.16) / 0.30) * Math.PI) * -nz;
+          pos.z -= 0.014 * Math.sin(((s - 0.16) / 0.30) * Math.PI) * -nz;
         }
-        // Gastrocnemius calf diamond peak
         if (nz < -0.15 && s > 0.56 && s < 0.82) {
-          pos.z -= 0.017 * Math.sin(((s - 0.56) / 0.26) * Math.PI) * -nz;
+          pos.z -= 0.016 * Math.sin(((s - 0.56) / 0.26) * Math.PI) * -nz;
         }
       };
 
@@ -1386,22 +1341,19 @@ export function TrainerStudio3D({
         nz: number,
         matGroup: number
       ): [number, number, number] => {
-        if (matGroup === 1 || matGroup === 2) return [0.92, 0.92, 0.94];
+        if (matGroup === 1 || matGroup === 2) return [0.94, 0.94, 0.96];
         const absX = Math.abs(nx);
-        let shade = 0.94;
-        // Quadriceps rectus femoris / vastus separation grooves
+        let shade = 0.96;
         if (nz > 0.35 && s > 0.22 && s < 0.46 && absX > 0.32 && absX < 0.44) {
-          shade -= 0.26 * (1 - Math.abs(absX - 0.38) / 0.06);
+          shade -= 0.20 * (1 - Math.abs(absX - 0.38) / 0.06);
         }
-        // IT band lateral groove
         if (Math.abs(nz) < 0.16 && s > 0.22 && s < 0.46) {
-          shade -= 0.22;
+          shade -= 0.16;
         }
-        // Gastrocnemius medial/lateral head split
         if (nz < -0.4 && s > 0.58 && s < 0.80 && absX < 0.12) {
-          shade -= 0.24;
+          shade -= 0.18;
         }
-        const c = Math.max(0.50, Math.min(1.05, shade));
+        const c = Math.max(0.56, Math.min(1.04, shade));
         return [c, c, c];
       };
 
@@ -1412,14 +1364,13 @@ export function TrainerStudio3D({
         muscleMaterials.quads,
         muscleMaterials.hamstrings,
         muscleMaterials.calves,
-        trimWhiteMat,
       ];
 
       return createContinuousSkinnedLoft(
         totalLegLen,
         sections,
-        40,
-        72,
+        28,
+        48,
         materials,
         sculptFn,
         groupFn,
@@ -1427,72 +1378,299 @@ export function TrainerStudio3D({
       );
     };
 
-    // Athletic Training Shoe Mesh
-    const buildShoeGroup = (): THREE.Group => {
-      const shoeGroup = new THREE.Group();
-      const upperShoeGeo = new THREE.CapsuleGeometry(0.046, 0.125, 12, 16);
-      const upperShoe = new THREE.Mesh(upperShoeGeo, shoeDarkMat);
-      upperShoe.rotation.x = Math.PI / 2;
-      upperShoe.scale.set(1.02, 1.0, 0.78);
-      upperShoe.position.set(0, -0.036, 0.048);
-      upperShoe.castShadow = true;
-      shoeGroup.add(upperShoe);
+    // 3B. SCULPTED ANATOMICAL BAREFOOT FOOT (Seamless Ankle Cuff + Heel + Arched Instep + Medial Toe-Box)
+    // Origin `(0, 0, 0)` = ankle joint center; sole bottom sits precisely at `y = -BODY_METRICS.ANKLE_HEIGHT (-0.072)`.
+    const buildBarefootGroup = (side: 'left' | 'right'): THREE.Group => {
+      const medialSign = side === 'left' ? 1 : -1;
+      const footGroup = new THREE.Group();
 
-      const soleGeo = new THREE.CapsuleGeometry(0.049, 0.138, 10, 16);
-      const sole = new THREE.Mesh(soleGeo, trimWhiteMat);
-      sole.rotation.x = Math.PI / 2;
-      sole.scale.set(1.06, 1.0, 0.36);
-      sole.position.set(0, -0.066, 0.050);
-      sole.castShadow = true;
-      shoeGroup.add(sole);
+      // Seamless talocrural ankle joint collar (eliminates any ankle gap during plantar/dorsiflexion)
+      const ankleCuff = new THREE.Mesh(new THREE.SphereGeometry(0.036, 16, 14), skinMatNoVC);
+      ankleCuff.scale.set(0.98, 1.12, 1.04);
+      ankleCuff.position.set(0, -0.008, -0.002);
+      ankleCuff.castShadow = true;
+      footGroup.add(ankleCuff);
 
-      return shoeGroup;
+      // Calcaneus Heel (bottom sits at y = -0.072)
+      const heel = new THREE.Mesh(new THREE.SphereGeometry(0.033, 16, 14), skinMatNoVC);
+      heel.scale.set(0.95, 0.88, 1.08);
+      heel.position.set(0, -0.043, -0.018);
+      heel.castShadow = true;
+      footGroup.add(heel);
+
+      // Midfoot & Arched Instep
+      const instep = new THREE.Mesh(new THREE.CapsuleGeometry(0.033, 0.105, 12, 16), skinMatNoVC);
+      instep.rotation.x = Math.PI / 2;
+      instep.scale.set(1.04, 1.0, 0.72);
+      instep.position.set(0, -0.046, 0.044);
+      instep.castShadow = true;
+      footGroup.add(instep);
+
+      // Forefoot Ball & Metatarsal Platform
+      const forefoot = new THREE.Mesh(new THREE.SphereGeometry(0.038, 16, 14), skinMatNoVC);
+      forefoot.scale.set(1.12, 0.50, 1.10);
+      forefoot.position.set(medialSign * 0.004, -0.053, 0.102);
+      forefoot.castShadow = true;
+      footGroup.add(forefoot);
+
+      // Anatomically Tapered Toes (Hallux / Big Toe medial -> Pinky lateral)
+      const toes = [
+        { x: medialSign * 0.024, z: 0.145, r: 0.0115, l: 0.022 },
+        { x: medialSign * 0.008, z: 0.148, r: 0.009, l: 0.021 },
+        { x: -medialSign * 0.006, z: 0.143, r: 0.0082, l: 0.019 },
+        { x: -medialSign * 0.019, z: 0.136, r: 0.0075, l: 0.016 },
+        { x: -medialSign * 0.030, z: 0.127, r: 0.0068, l: 0.013 },
+      ];
+      toes.forEach((t) => {
+        const toeMesh = new THREE.Mesh(new THREE.CapsuleGeometry(t.r, t.l, 6, 8), skinMatNoVC);
+        toeMesh.rotation.x = Math.PI / 2;
+        toeMesh.scale.set(1.0, 1.0, 0.78);
+        toeMesh.position.set(t.x, -0.062, t.z);
+        toeMesh.castShadow = true;
+        footGroup.add(toeMesh);
+      });
+
+      return footGroup;
     };
 
-    // Sculpted 3D Athletic Hair Cap & Eyebrow Detail Group (Eliminates polygon stair-stepping on forehead)
-    const buildHeadHairGroup = (): THREE.Group => {
-      const g = new THREE.Group();
+    // ============================================================================
+    // ARTICULATED 3D ANATOMICAL SKELETON (Mode Tulang & X-Ray — Driven by Live IK)
+    // ============================================================================
+    const buildAnatomicalSkeleton = () => {
+      const group = new THREE.Group();
+      group.visible = false;
 
-      // Main crown & occipital short athletic hair cap
-      const crownGeo = new THREE.SphereGeometry(0.080, 32, 24, 0, Math.PI * 2, 0, Math.PI * 0.62);
-      const posAttr = crownGeo.getAttribute('position') as THREE.BufferAttribute;
-      for (let i = 0; i < posAttr.count; i++) {
-        let x = posAttr.getX(i);
-        let y = posAttr.getY(i);
-        let z = posAttr.getZ(i);
-        // Sculpt masculine hairline: higher over forehead (+Z), lower fade down nape of neck (-Z) and temples (±X)
-        if (z > 0.02 && y < 0.035) {
-          y += 0.024 * (z / 0.08);
-        }
-        if (z < -0.02) {
-          y -= 0.018 * (-z / 0.08);
-        }
-        // Slight textured volume on top crown
-        if (y > 0.04 && z > -0.02) {
-          y += 0.008;
-          z += 0.005;
-        }
-        x *= 0.98;
-        z *= 1.08;
-        posAttr.setXYZ(i, x, y, z);
+      const makeJointSphere = (radius: number) => {
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 16, 14), jointBeaconMat);
+        mesh.castShadow = false;
+        group.add(mesh);
+        return mesh;
+      };
+
+      const makeLongBone = (radiusTop: number, radiusBottom: number) => {
+        const boneGeo = new THREE.CylinderGeometry(radiusTop, radiusBottom, 1, 12, 1);
+        const mesh = new THREE.Mesh(boneGeo, boneMat);
+        mesh.castShadow = false;
+        group.add(mesh);
+        return mesh;
+      };
+
+      const skullGroup = new THREE.Group();
+      const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.068, 20, 18), boneMat);
+      cranium.scale.set(0.94, 1.06, 1.08);
+      cranium.position.set(0, 0.165, -0.003);
+      skullGroup.add(cranium);
+
+      const mandible = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.032, 0.052, 14), boneMat);
+      mandible.scale.set(1.0, 1.0, 1.12);
+      mandible.position.set(0, 0.108, 0.016);
+      skullGroup.add(mandible);
+
+      const orbitMat = new THREE.MeshStandardMaterial({ color: 0x16120c, roughness: 0.95 });
+      const orbitGeo = new THREE.SphereGeometry(0.015, 10, 10);
+      const orbitL = new THREE.Mesh(orbitGeo, orbitMat);
+      orbitL.position.set(-0.023, 0.156, 0.058);
+      orbitL.scale.set(1.1, 0.85, 0.45);
+      const orbitR = new THREE.Mesh(orbitGeo, orbitMat);
+      orbitR.position.set(0.023, 0.156, 0.058);
+      orbitR.scale.set(1.1, 0.85, 0.45);
+      skullGroup.add(orbitL, orbitR);
+      group.add(skullGroup);
+
+      const vertebrae: THREE.Mesh[] = [];
+      for (let i = 0; i < 8; i++) {
+        const vGeo = new THREE.CylinderGeometry(0.022, 0.024, 0.038, 12);
+        const v = new THREE.Mesh(vGeo, boneMat);
+        group.add(v);
+        vertebrae.push(v);
       }
-      crownGeo.computeVertexNormals();
-      const crownMesh = new THREE.Mesh(crownGeo, hairMat);
-      crownMesh.position.set(0, 0.165, -0.004);
-      crownMesh.castShadow = true;
-      g.add(crownMesh);
 
-      // Subtle masculine eyebrows for expressive human face read
-      const browGeo = new THREE.BoxGeometry(0.022, 0.0045, 0.008);
-      const browL = new THREE.Mesh(browGeo, hairMat);
-      browL.position.set(-0.021, 0.164, 0.082);
-      browL.rotation.z = -0.08;
-      const browR = new THREE.Mesh(browGeo, hairMat);
-      browR.position.set(0.021, 0.164, 0.082);
-      browR.rotation.z = 0.08;
-      g.add(browL, browR);
+      const ribcageGroup = new THREE.Group();
+      const ribRadii = [
+        { rx: 0.118, rz: 0.082, y: 0.09 },
+        { rx: 0.136, rz: 0.095, y: 0.045 },
+        { rx: 0.142, rz: 0.098, y: 0.0 },
+        { rx: 0.134, rz: 0.092, y: -0.045 },
+        { rx: 0.118, rz: 0.080, y: -0.088 },
+      ];
+      ribRadii.forEach((r) => {
+        const rib = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.075, 10, 28), boneMat);
+        rib.rotation.x = Math.PI / 2;
+        rib.scale.set(r.rx, r.rz, 0.12);
+        rib.position.set(0, r.y, 0.004);
+        ribcageGroup.add(rib);
+      });
+      const sternum = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.165, 0.016), boneMat);
+      sternum.position.set(0, 0.01, 0.094);
+      ribcageGroup.add(sternum);
+      group.add(ribcageGroup);
 
-      return g;
+      const pelvisGroup = new THREE.Group();
+      const iliumL = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.015, 10, 20), boneMat);
+      iliumL.position.set(-0.072, 0.01, 0);
+      iliumL.rotation.y = Math.PI * 0.25;
+      iliumL.scale.set(0.95, 1.15, 0.7);
+      const iliumR = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.015, 10, 20), boneMat);
+      iliumR.position.set(0.072, 0.01, 0);
+      iliumR.rotation.y = -Math.PI * 0.25;
+      iliumR.scale.set(0.95, 1.15, 0.7);
+      const sacrum = new THREE.Mesh(new THREE.ConeGeometry(0.038, 0.095, 10), boneMat);
+      sacrum.rotation.x = Math.PI;
+      sacrum.position.set(0, -0.01, -0.025);
+      pelvisGroup.add(iliumL, iliumR, sacrum);
+      group.add(pelvisGroup);
+
+      const clavicleL = makeLongBone(0.011, 0.010);
+      const clavicleR = makeLongBone(0.011, 0.010);
+      const humerusL = makeLongBone(0.018, 0.014);
+      const humerusR = makeLongBone(0.018, 0.014);
+      const radiusL = makeLongBone(0.011, 0.009);
+      const ulnaL = makeLongBone(0.010, 0.008);
+      const radiusR = makeLongBone(0.011, 0.009);
+      const ulnaR = makeLongBone(0.010, 0.008);
+      const handBoneL = makeLongBone(0.012, 0.008);
+      const handBoneR = makeLongBone(0.012, 0.008);
+      const femurL = makeLongBone(0.022, 0.018);
+      const femurR = makeLongBone(0.022, 0.018);
+      const tibiaL = makeLongBone(0.017, 0.013);
+      const fibulaL = makeLongBone(0.008, 0.007);
+      const tibiaR = makeLongBone(0.017, 0.013);
+      const fibulaR = makeLongBone(0.008, 0.007);
+
+      const jNeck = makeJointSphere(0.022);
+      const jLumbar = makeJointSphere(0.024);
+      const jShoulderL = makeJointSphere(0.025);
+      const jShoulderR = makeJointSphere(0.025);
+      const jElbowL = makeJointSphere(0.020);
+      const jElbowR = makeJointSphere(0.020);
+      const jWristL = makeJointSphere(0.015);
+      const jWristR = makeJointSphere(0.015);
+      const jHipL = makeJointSphere(0.027);
+      const jHipR = makeJointSphere(0.027);
+      const jKneeL = makeJointSphere(0.023);
+      const jKneeR = makeJointSphere(0.023);
+      const jAnkleL = makeJointSphere(0.018);
+      const jAnkleR = makeJointSphere(0.018);
+
+      const upVec = new THREE.Vector3(0, 1, 0);
+      const tmpDir = new THREE.Vector3();
+      const tmpMid = new THREE.Vector3();
+      const tmpSide = new THREE.Vector3();
+      const tmpA = new THREE.Vector3();
+      const tmpB = new THREE.Vector3();
+
+      const alignBone = (mesh: THREE.Mesh, start: THREE.Vector3, end: THREE.Vector3) => {
+        tmpDir.subVectors(end, start);
+        const len = Math.max(0.001, tmpDir.length());
+        tmpMid.addVectors(start, end).multiplyScalar(0.5);
+        mesh.position.copy(tmpMid);
+        mesh.scale.set(1, len, 1);
+        mesh.quaternion.setFromUnitVectors(upVec, tmpDir.divideScalar(len));
+      };
+
+      const alignParallelPair = (
+        m1: THREE.Mesh,
+        m2: THREE.Mesh,
+        start: THREE.Vector3,
+        end: THREE.Vector3,
+        offsetDir: THREE.Vector3,
+        offsetAmt: number
+      ) => {
+        tmpSide.copy(offsetDir).normalize().multiplyScalar(offsetAmt);
+        tmpA.copy(start).add(tmpSide);
+        tmpB.copy(end).add(tmpSide);
+        alignBone(m1, tmpA, tmpB);
+
+        tmpA.copy(start).sub(tmpSide);
+        tmpB.copy(end).sub(tmpSide);
+        alignBone(m2, tmpA, tmpB);
+      };
+
+      const torsoBasisMat = new THREE.Matrix4();
+      const spineCenterTmp = new THREE.Vector3();
+
+      const updatePose = (params: {
+        pelvisBottom: THREE.Vector3;
+        hipsPos: THREE.Vector3;
+        shoulderCenter: THREE.Vector3;
+        torsoRight: THREE.Vector3;
+        torsoUp: THREE.Vector3;
+        torsoAnterior: THREE.Vector3;
+        headBasisMat: THREE.Matrix4;
+        spineArchOffset: number;
+        breathScale: number;
+        shoulderL: THREE.Vector3;
+        shoulderR: THREE.Vector3;
+        elbowL: THREE.Vector3;
+        elbowR: THREE.Vector3;
+        handL: THREE.Vector3;
+        handR: THREE.Vector3;
+        handTipL: THREE.Vector3;
+        handTipR: THREE.Vector3;
+        hipL: THREE.Vector3;
+        hipR: THREE.Vector3;
+        kneeL: THREE.Vector3;
+        kneeR: THREE.Vector3;
+        footL: THREE.Vector3;
+        footR: THREE.Vector3;
+      }) => {
+        if (!group.visible) return;
+
+        torsoBasisMat.makeBasis(params.torsoRight, params.torsoUp, params.torsoAnterior);
+
+        skullGroup.position.copy(params.shoulderCenter);
+        skullGroup.quaternion.setFromRotationMatrix(params.headBasisMat);
+
+        for (let i = 0; i < vertebrae.length; i++) {
+          const u = (i + 0.5) / vertebrae.length;
+          spineCenterTmp.lerpVectors(params.pelvisBottom, params.shoulderCenter, u);
+          const arch = Math.sin(u * Math.PI) * params.spineArchOffset;
+          spineCenterTmp.addScaledVector(params.torsoAnterior, arch - 0.025);
+          vertebrae[i].position.copy(spineCenterTmp);
+          vertebrae[i].quaternion.setFromRotationMatrix(torsoBasisMat);
+        }
+
+        ribcageGroup.position.lerpVectors(params.hipsPos, params.shoulderCenter, 0.68);
+        ribcageGroup.position.addScaledVector(params.torsoAnterior, params.spineArchOffset * 0.65);
+        ribcageGroup.quaternion.setFromRotationMatrix(torsoBasisMat);
+        ribcageGroup.scale.set(params.breathScale, 1.0, params.breathScale);
+
+        pelvisGroup.position.copy(params.hipsPos);
+        pelvisGroup.quaternion.setFromRotationMatrix(torsoBasisMat);
+
+        const collarBase = params.shoulderCenter.clone().addScaledVector(params.torsoUp, -0.025);
+        alignBone(clavicleL, collarBase, params.shoulderL);
+        alignBone(clavicleR, collarBase, params.shoulderR);
+
+        alignBone(humerusL, params.shoulderL, params.elbowL);
+        alignBone(humerusR, params.shoulderR, params.elbowR);
+        alignParallelPair(radiusL, ulnaL, params.elbowL, params.handL, params.torsoRight, 0.011);
+        alignParallelPair(radiusR, ulnaR, params.elbowR, params.handR, params.torsoRight, 0.011);
+        alignBone(handBoneL, params.handL, params.handTipL);
+        alignBone(handBoneR, params.handR, params.handTipR);
+
+        alignBone(femurL, params.hipL, params.kneeL);
+        alignBone(femurR, params.hipR, params.kneeR);
+        alignParallelPair(tibiaL, fibulaL, params.kneeL, params.footL, params.torsoRight, 0.012);
+        alignParallelPair(tibiaR, fibulaR, params.kneeR, params.footR, params.torsoRight, 0.012);
+
+        jNeck.position.copy(params.shoulderCenter);
+        jLumbar.position.lerpVectors(params.hipsPos, params.shoulderCenter, 0.32);
+        jShoulderL.position.copy(params.shoulderL);
+        jShoulderR.position.copy(params.shoulderR);
+        jElbowL.position.copy(params.elbowL);
+        jElbowR.position.copy(params.elbowR);
+        jWristL.position.copy(params.handL);
+        jWristR.position.copy(params.handR);
+        jHipL.position.copy(params.hipL);
+        jHipR.position.copy(params.hipR);
+        jKneeL.position.copy(params.kneeL);
+        jKneeR.position.copy(params.kneeR);
+        jAnkleL.position.copy(params.footL);
+        jAnkleR.position.copy(params.footR);
+      };
+
+      return { group, updatePose };
     };
 
     const characterRoot = new THREE.Group();
@@ -1501,80 +1679,183 @@ export function TrainerStudio3D({
     const axialBody = buildUnifiedAxialBody();
     const armL = buildSkinnedArm();
     const armR = buildSkinnedArm();
+    const handRigL = buildAnatomicalHandGroup('left');
+    const handRigR = buildAnatomicalHandGroup('right');
     const legL = buildSkinnedLeg();
     const legR = buildSkinnedLeg();
-    const shoeL = buildShoeGroup();
-    const shoeR = buildShoeGroup();
-    const headHairGroup = buildHeadHairGroup();
+    const footMeshL = buildBarefootGroup('left');
+    const footMeshR = buildBarefootGroup('right');
+    const skeletonRig = buildAnatomicalSkeleton();
 
     characterRoot.add(
       axialBody.mesh,
       armL.mesh,
       armR.mesh,
+      handRigL.group,
+      handRigR.group,
       legL.mesh,
       legR.mesh,
-      shoeL,
-      shoeR,
-      headHairGroup
+      footMeshL,
+      footMeshR,
+      skeletonRig.group
     );
 
     // ============================================================================
-    // GYM EQUIPMENT PROPS (Pull-Up Bar `bar_ref`, Bench, Barbell, Dumbbells)
+    // COMPLETE GYM & STUDIO EQUIPMENT SUITE (Exact Collision & Anchor Alignment)
     // ============================================================================
     const equipmentRoot = new THREE.Group();
     scene.add(equipmentRoot);
 
+    // 1. Exercise Mat (top at y = BODY_METRICS.MAT_TOP_Y = 0.018) + Recovery Pillow
+    const matGroup = new THREE.Group();
+    const matBody = new THREE.Mesh(new THREE.BoxGeometry(0.80, 0.018, 1.98), matSurfaceMat);
+    matBody.position.set(0, 0.009, -0.05);
+    matBody.receiveShadow = true;
+    const matTrim = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.014, 2.00), matBorderMat);
+    matTrim.position.set(0, 0.007, -0.05);
+    matTrim.receiveShadow = true;
+    matGroup.add(matTrim, matBody);
+    matGroup.visible = false;
+    equipmentRoot.add(matGroup);
+
+    const pillowMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.052, 0.34, 12, 16), pillowMat);
+    pillowMesh.rotation.z = Math.PI / 2;
+    pillowMesh.scale.set(1.0, 1.0, 1.45);
+    pillowMesh.position.set(0, 0.056, -0.78);
+    pillowMesh.castShadow = true;
+    pillowMesh.receiveShadow = true;
+    pillowMesh.visible = false;
+    equipmentRoot.add(pillowMesh);
+
+    // 2. Pull-Up Rig (Crossbar at y = BODY_METRICS.BAR_Y = 2.12)
     const pullupRigGroup = new THREE.Group();
-    const postGeo = new THREE.CylinderGeometry(0.032, 0.032, 2.22, 20);
+    const postGeo = new THREE.CylinderGeometry(0.032, 0.032, BAR_Y + 0.12, 20);
     const postL = new THREE.Mesh(postGeo, equipDarkMat);
-    postL.position.set(-0.68, 1.11, 0);
+    postL.position.set(-0.68, (BAR_Y + 0.12) * 0.5, 0);
     postL.castShadow = true;
     const postR = new THREE.Mesh(postGeo, equipDarkMat);
-    postR.position.set(0.68, 1.11, 0);
+    postR.position.set(0.68, (BAR_Y + 0.12) * 0.5, 0);
     postR.castShadow = true;
 
-    const basePlateGeo = new THREE.BoxGeometry(0.24, 0.03, 0.56);
+    const basePlateGeo = new THREE.BoxGeometry(0.24, 0.03, 0.58);
     const baseL = new THREE.Mesh(basePlateGeo, equipDarkMat);
     baseL.position.set(-0.68, 0.015, 0);
     const baseR = new THREE.Mesh(basePlateGeo, equipDarkMat);
     baseR.position.set(0.68, 0.015, 0);
 
-    const crossbarGeo = new THREE.CylinderGeometry(0.018, 0.018, 1.48, 24);
-    const crossbar = new THREE.Mesh(crossbarGeo, equipChromeMat);
+    const crossbar = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.018, 0.018, 1.48, 24),
+      equipChromeMat
+    );
     crossbar.rotation.z = Math.PI / 2;
-    crossbar.position.set(0, 2.10, 0);
+    crossbar.position.set(0, BAR_Y, 0);
     crossbar.castShadow = true;
 
-    const gripGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.16, 16);
+    const gripGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.18, 16);
     const gripL = new THREE.Mesh(gripGeo, equipDarkMat);
     gripL.rotation.z = Math.PI / 2;
-    gripL.position.set(-0.34, 2.10, 0);
+    gripL.position.set(-0.34, BAR_Y, 0);
     const gripR = new THREE.Mesh(gripGeo, equipDarkMat);
     gripR.rotation.z = Math.PI / 2;
-    gripR.position.set(0.34, 2.10, 0);
+    gripR.position.set(0.34, BAR_Y, 0);
 
     pullupRigGroup.add(postL, postR, baseL, baseR, crossbar, gripL, gripR);
     pullupRigGroup.visible = false;
     equipmentRoot.add(pullupRigGroup);
 
+    // 3. Parallel Dip Bars Station (x = ±0.27, y = BODY_METRICS.DIP_BAR_Y = 1.16)
+    const dipBarsGroup = new THREE.Group();
+    [-DIP_BAR_HALF_X, DIP_BAR_HALF_X].forEach((x) => {
+      const handle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.020, 0.020, 0.86, 18),
+        equipChromeMat
+      );
+      handle.rotation.x = Math.PI / 2;
+      handle.position.set(x, DIP_BAR_Y, 0);
+      handle.castShadow = true;
+
+      const uprightF = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.024, 0.026, DIP_BAR_Y, 14),
+        equipDarkMat
+      );
+      uprightF.position.set(x, DIP_BAR_Y * 0.5, 0.38);
+      uprightF.castShadow = true;
+
+      const uprightB = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.024, 0.026, DIP_BAR_Y, 14),
+        equipDarkMat
+      );
+      uprightB.position.set(x, DIP_BAR_Y * 0.5, -0.38);
+      uprightB.castShadow = true;
+
+      const baseBar = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.036, 0.92), equipMetalMat);
+      baseBar.position.set(x, 0.018, 0);
+
+      dipBarsGroup.add(handle, uprightF, uprightB, baseBar);
+    });
+    const dipCrossBase = new THREE.Mesh(
+      new THREE.BoxGeometry(DIP_BAR_HALF_X * 2 + 0.10, 0.032, 0.07),
+      equipMetalMat
+    );
+    dipCrossBase.position.set(0, 0.016, -0.38);
+    dipBarsGroup.add(dipCrossBase);
+    dipBarsGroup.visible = false;
+    equipmentRoot.add(dipBarsGroup);
+
+    // 4. Flat Utility Bench (Pad centered at local z = 0, top surface at y = 0.455, length = 1.24 => front edge = benchPos.z + 0.62)
     const benchGroup = new THREE.Group();
     const benchPad = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 1.24), equipDarkMat);
-    benchPad.position.set(0, 0.42, -0.10);
+    benchPad.position.set(0, 0.42, 0);
     benchPad.castShadow = true;
     benchPad.receiveShadow = true;
     const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.40, 0.06), equipMetalMat);
-    leg1.position.set(0, 0.20, 0.40);
+    leg1.position.set(0, 0.20, 0.48);
     const leg2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.40, 0.06), equipMetalMat);
-    leg2.position.set(0, 0.20, -0.58);
-    benchGroup.add(benchPad, leg1, leg2);
+    leg2.position.set(0, 0.20, -0.48);
+    const footBar1 = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.035, 0.06), equipMetalMat);
+    footBar1.position.set(0, 0.018, 0.48);
+    const footBar2 = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.035, 0.06), equipMetalMat);
+    footBar2.position.set(0, 0.018, -0.48);
+    benchGroup.add(benchPad, leg1, leg2, footBar1, footBar2);
     benchGroup.visible = false;
     equipmentRoot.add(benchGroup);
 
+    // 5. Adjustable Incline Bench (Used by Incline Dumbbell Press, Incline Curl, Leg Press)
+    const inclineBenchGroup = new THREE.Group();
+    const incSeat = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 0.36), equipDarkMat);
+    incSeat.position.set(0, 0.42, 0.16);
+    incSeat.castShadow = true;
+    incSeat.receiveShadow = true;
+
+    const incBackPivot = new THREE.Group();
+    incBackPivot.position.set(0, 0.42, -0.02);
+    const incBackPad = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 0.84), equipDarkMat);
+    incBackPad.position.set(0, 0, -0.42);
+    incBackPad.castShadow = true;
+    incBackPad.receiveShadow = true;
+    incBackPivot.add(incBackPad);
+
+    const incFrameRail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 1.04), equipMetalMat);
+    incFrameRail.position.set(0, 0.18, -0.18);
+    const incLegF = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.38, 0.06), equipMetalMat);
+    incLegF.position.set(0, 0.19, 0.26);
+    const incLegB = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.38, 0.06), equipMetalMat);
+    incLegB.position.set(0, 0.19, -0.62);
+    const incStrut = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.48, 0.05), equipMetalMat);
+    incStrut.position.set(0, 0.42, -0.34);
+    inclineBenchGroup.add(incSeat, incBackPivot, incFrameRail, incLegF, incLegB, incStrut);
+    inclineBenchGroup.visible = false;
+    equipmentRoot.add(inclineBenchGroup);
+
+    // 6. Olympic Barbell
     const barbellGroup = new THREE.Group();
-    const barMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 1.75, 16), equipChromeMat);
+    const barMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.014, 0.014, 1.78, 16),
+      equipChromeMat
+    );
     barMesh.rotation.z = Math.PI / 2;
     barbellGroup.add(barMesh);
-    [-0.64, -0.59, 0.59, 0.64].forEach((xOffset, idx) => {
+    [-0.66, -0.60, 0.60, 0.66].forEach((xOffset, idx) => {
       const r = idx === 0 || idx === 3 ? 0.16 : 0.20;
       const plate = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.032, 24), equipDarkMat);
       plate.rotation.z = Math.PI / 2;
@@ -1585,15 +1866,23 @@ export function TrainerStudio3D({
     barbellGroup.visible = false;
     equipmentRoot.add(barbellGroup);
 
+    // 7. Pair of Dumbbells
     const makeDumbbell = () => {
       const g = new THREE.Group();
-      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.14, 12), equipChromeMat);
+      const handle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.013, 0.013, 0.14, 12),
+        equipChromeMat
+      );
       handle.rotation.z = Math.PI / 2;
       g.add(handle);
-      [-0.06, 0.06].forEach((x) => {
-        const head = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.035, 16), equipDarkMat);
+      [-0.062, 0.062].forEach((x) => {
+        const head = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.056, 0.056, 0.036, 16),
+          equipDarkMat
+        );
         head.rotation.z = Math.PI / 2;
         head.position.x = x;
+        head.castShadow = true;
         g.add(head);
       });
       g.visible = false;
@@ -1603,8 +1892,62 @@ export function TrainerStudio3D({
     const dumbbellL = makeDumbbell();
     const dumbbellR = makeDumbbell();
 
+    // 8. Cable Attachment Bar + Dynamic Taut Cable Line (Lat Pulldown, Seated Cable Row, Pushdowns)
+    const cableBarGroup = new THREE.Group();
+    const cableHandle = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.015, 0.015, 0.88, 16),
+      equipChromeMat
+    );
+    cableHandle.rotation.z = Math.PI / 2;
+    cableHandle.castShadow = true;
+    const cableLineMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.004, 0.004, 1, 8),
+      equipMetalMat
+    );
+    const cablePulley = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.03, 16), equipDarkMat);
+    cablePulley.rotation.z = Math.PI / 2;
+    cableBarGroup.add(cableHandle, cableLineMesh, cablePulley);
+    cableBarGroup.visible = false;
+    equipmentRoot.add(cableBarGroup);
+
+    // 9. Inverted Row / Table Row Bar
+    const rowBarGroup = new THREE.Group();
+    const rowCross = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.018, 0.018, 1.24, 18),
+      equipChromeMat
+    );
+    rowCross.rotation.z = Math.PI / 2;
+    rowCross.castShadow = true;
+    const rowPostL = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.024, 1.0, 14), equipDarkMat);
+    const rowPostR = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.024, 1.0, 14), equipDarkMat);
+    rowBarGroup.add(rowCross, rowPostL, rowPostR);
+    rowBarGroup.visible = false;
+    equipmentRoot.add(rowBarGroup);
+
+    // 10. Resistance Towel Strap (Towel Bicep Curls / Isometric Towel Curls)
+    const towelGroup = new THREE.Group();
+    const towelSegL = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1, 10), towelMat);
+    const towelSegR = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1, 10), towelMat);
+    const towelLoop = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.015, 8, 16), towelMat);
+    towelLoop.rotation.x = Math.PI / 2;
+    towelGroup.add(towelSegL, towelSegR, towelLoop);
+    towelGroup.visible = false;
+    equipmentRoot.add(towelGroup);
+
+    const _segUp = new THREE.Vector3(0, 1, 0);
+    const _segDir = new THREE.Vector3();
+    const _segMid = new THREE.Vector3();
+    const alignCylinderBetween = (mesh: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3) => {
+      _segDir.subVectors(b, a);
+      const len = Math.max(0.005, _segDir.length());
+      _segMid.addVectors(a, b).multiplyScalar(0.5);
+      mesh.position.copy(_segMid);
+      mesh.scale.set(1, len, 1);
+      mesh.quaternion.setFromUnitVectors(_segUp, _segDir.divideScalar(len));
+    };
+
     // ============================================================================
-    // SMOOTH MUSCLE HIGHLIGHT INTERPOLATION (Zero instant snap / zero flicker)
+    // SMOOTH MUSCLE HIGHLIGHT INTERPOLATION (Symmetrical Red-Orange Anatomical Glow)
     // ============================================================================
     interface MaterialTargetState {
       color: THREE.Color;
@@ -1619,18 +1962,45 @@ export function TrainerStudio3D({
     >;
     muscleIds.forEach((id) => {
       muscleTargets[id] = {
-        color: new THREE.Color(0xaab6c8),
+        color: new THREE.Color(MANNEQUIN_BASE_HEX),
         emissive: new THREE.Color(0x000000),
         emissiveIntensity: 0,
-        roughness: 0.52,
+        roughness: 0.64,
       };
     });
 
     const shortsGlutesTarget: MaterialTargetState = {
-      color: new THREE.Color(0x161a22),
+      color: new THREE.Color(CHARCOAL_FABRIC_HEX),
       emissive: new THREE.Color(0x000000),
       emissiveIntensity: 0,
-      roughness: 0.78,
+      roughness: 0.84,
+    };
+
+    const applyDisplayModeVisuals = (mode: MannequinDisplayMode) => {
+      const isXray = mode === 'xray';
+      const isSkeletonOnly = mode === 'skeleton';
+      const skinOpacity = isSkeletonOnly ? 0.09 : isXray ? 0.30 : 1.0;
+      const shortsOpacity = isSkeletonOnly ? 0.07 : isXray ? 0.24 : 1.0;
+      const isTranslucent = isXray || isSkeletonOnly;
+
+      skeletonRig.group.visible = isTranslucent;
+
+      const setMatAlpha = (mat: THREE.Material, opacity: number) => {
+        const m = mat as THREE.MeshPhysicalMaterial;
+        m.transparent = isTranslucent;
+        m.opacity = opacity;
+        m.depthWrite = !isTranslucent;
+        m.needsUpdate = true;
+      };
+
+      setMatAlpha(skinMat, skinOpacity);
+      setMatAlpha(skinMatNoVC, skinOpacity);
+      setMatAlpha(shortsMat, shortsOpacity);
+      setMatAlpha(shortsTrimMat, shortsOpacity);
+      setMatAlpha(shortsGlutesMat, shortsOpacity);
+      muscleIds.forEach((id) => {
+        setMatAlpha(muscleMaterials[id], skinOpacity);
+      });
     };
 
     const applyMuscleTargetImmediate = () => {
@@ -1666,7 +2036,14 @@ export function TrainerStudio3D({
     };
 
     const updateMuscleMaterials = (immediate = false) => {
-      const { primaryMuscles: prim, secondaryMuscles: sec, showMaskDebug: debug } = stateRef.current;
+      const {
+        primaryMuscles: prim,
+        secondaryMuscles: sec,
+        showMaskDebug: debug,
+        displayMode: mode,
+      } = stateRef.current;
+
+      applyDisplayModeVisuals(mode);
 
       muscleIds.forEach((id) => {
         const tgt = muscleTargets[id];
@@ -1676,22 +2053,22 @@ export function TrainerStudio3D({
           tgt.color.setHex(debugColors[id]);
           tgt.emissive.setHex(debugColors[id]);
           tgt.emissiveIntensity = 0.28;
-          tgt.roughness = 0.45;
+          tgt.roughness = 0.52;
         } else if (prim.includes(id)) {
-          tgt.color.setHex(0xdc2626);
-          tgt.emissive.setHex(0x991b1b);
+          tgt.color.setHex(0xe53935);
+          tgt.emissive.setHex(0xb71c1c);
           tgt.emissiveIntensity = 0.36;
-          tgt.roughness = 0.46;
+          tgt.roughness = 0.52;
         } else if (sec.includes(id)) {
-          tgt.color.setHex(0xea580c);
-          tgt.emissive.setHex(0x9a3412);
+          tgt.color.setHex(0xf57c00);
+          tgt.emissive.setHex(0xc2410c);
           tgt.emissiveIntensity = 0.22;
-          tgt.roughness = 0.50;
+          tgt.roughness = 0.56;
         } else {
-          tgt.color.setHex(0xaab6c8);
+          tgt.color.setHex(MANNEQUIN_BASE_HEX);
           tgt.emissive.setHex(0x000000);
           tgt.emissiveIntensity = 0.0;
-          tgt.roughness = 0.54;
+          tgt.roughness = 0.64;
         }
       });
 
@@ -1700,15 +2077,15 @@ export function TrainerStudio3D({
         shortsGlutesTarget.emissive.setHex(debugColors.glutes);
         shortsGlutesTarget.emissiveIntensity = 0.28;
       } else if (prim.includes('glutes')) {
-        shortsGlutesTarget.color.setHex(0xdc2626);
-        shortsGlutesTarget.emissive.setHex(0x991b1b);
+        shortsGlutesTarget.color.setHex(0xe53935);
+        shortsGlutesTarget.emissive.setHex(0xb71c1c);
         shortsGlutesTarget.emissiveIntensity = 0.34;
       } else if (sec.includes('glutes')) {
-        shortsGlutesTarget.color.setHex(0xea580c);
-        shortsGlutesTarget.emissive.setHex(0x9a3412);
-        shortsGlutesTarget.emissiveIntensity = 0.24;
+        shortsGlutesTarget.color.setHex(0xf57c00);
+        shortsGlutesTarget.emissive.setHex(0xc2410c);
+        shortsGlutesTarget.emissiveIntensity = 0.22;
       } else {
-        shortsGlutesTarget.color.setHex(0x161a22);
+        shortsGlutesTarget.color.setHex(CHARCOAL_FABRIC_HEX);
         shortsGlutesTarget.emissive.setHex(0x000000);
         shortsGlutesTarget.emissiveIntensity = 0.0;
       }
@@ -1719,70 +2096,96 @@ export function TrainerStudio3D({
     };
 
     // ============================================================================
-    // CAMERA PRESETS (Smooth damped framing — cancels on manual user orbit)
+    // CAMERA PRESETS (Per-Exercise Framing across Floor, Sleep, Bench, Hanging, Standing)
     // ============================================================================
+    const getCameraGroup = (): CameraGroup => {
+      const st = stateRef.current;
+      const resolved = resolveExerciseId(st.exerciseId, st.exerciseName, st.clipName);
+      return evaluateExercisePose(resolved, st.clipName, st.exerciseName, 0).cameraGroup;
+    };
+
     const computeCameraView = (
       preset: CameraPreset,
-      clip: AnimationClipName
+      group: CameraGroup
     ): { pos: THREE.Vector3; target: THREE.Vector3 } => {
-      const isGround =
-        clip === 'pushup' ||
-        clip === 'diamond_pushup' ||
-        clip === 'plank' ||
-        clip === 'mountain_climber' ||
-        clip === 'crunch' ||
-        clip === 'glute_bridge';
-      const isHanging = clip === 'pullup';
-
-      if (isGround) {
-        const target = new THREE.Vector3(0, 0.34, -0.14);
+      if (group === 'sleep') {
+        const target = new THREE.Vector3(0, 0.18, -0.05);
         switch (preset) {
           case 'front':
-            return { pos: new THREE.Vector3(0, 0.80, 1.95), target };
+            return { pos: new THREE.Vector3(0, 0.95, 2.25), target };
           case 'side':
-            return { pos: new THREE.Vector3(2.25, 0.68, -0.14), target };
+            return { pos: new THREE.Vector3(2.35, 0.92, -0.05), target };
           case 'back':
-            return { pos: new THREE.Vector3(0, 0.85, -2.15), target };
+            return { pos: new THREE.Vector3(0, 0.95, -2.35), target };
           case 'top':
-            return { pos: new THREE.Vector3(0.01, 2.65, -0.14), target };
+            return { pos: new THREE.Vector3(0.02, 2.65, -0.05), target };
         }
       }
 
-      if (isHanging) {
+      if (group === 'floor') {
+        const target = new THREE.Vector3(0, 0.42, -0.06);
+        switch (preset) {
+          case 'front':
+            return { pos: new THREE.Vector3(0, 0.92, 2.45), target };
+          case 'side':
+            return { pos: new THREE.Vector3(2.58, 0.82, 0.42), target };
+          case 'back':
+            return { pos: new THREE.Vector3(0, 0.92, -2.55), target };
+          case 'top':
+            return { pos: new THREE.Vector3(0.01, 2.85, -0.06), target };
+        }
+      }
+
+      if (group === 'bench') {
+        const target = new THREE.Vector3(0, 0.64, -0.06);
+        switch (preset) {
+          case 'front':
+            return { pos: new THREE.Vector3(0, 0.98, 2.65), target };
+          case 'side':
+            return { pos: new THREE.Vector3(2.62, 0.88, 0.48), target };
+          case 'back':
+            return { pos: new THREE.Vector3(0, 1.02, -2.75), target };
+          case 'top':
+            return { pos: new THREE.Vector3(0.01, 3.10, -0.06), target };
+        }
+      }
+
+      if (group === 'hanging') {
         const target = new THREE.Vector3(0, 1.24, 0);
         switch (preset) {
           case 'front':
-            return { pos: new THREE.Vector3(0, 1.28, 3.60), target };
+            return { pos: new THREE.Vector3(0, 1.26, 3.65), target };
           case 'side':
-            return { pos: new THREE.Vector3(3.50, 1.28, 0), target };
+            // 3/4 athletic side view prevents vertical rig post from occluding body
+            return { pos: new THREE.Vector3(3.15, 1.24, 1.25), target };
           case 'back':
-            return { pos: new THREE.Vector3(0, 1.28, -3.60), target };
+            return { pos: new THREE.Vector3(0, 1.26, -3.65), target };
           case 'top':
-            return { pos: new THREE.Vector3(0.01, 3.85, 0.05), target };
+            return { pos: new THREE.Vector3(0.01, 3.90, 0.05), target };
         }
       }
 
       const target = new THREE.Vector3(0, 0.94, 0);
       switch (preset) {
         case 'front':
-          return { pos: new THREE.Vector3(0, 1.02, 3.15), target };
+          return { pos: new THREE.Vector3(0, 1.04, 3.35), target };
         case 'side':
-          return { pos: new THREE.Vector3(3.05, 0.98, 0), target };
+          return { pos: new THREE.Vector3(2.95, 1.00, 0.85), target };
         case 'back':
-          return { pos: new THREE.Vector3(0, 1.02, -3.15), target };
+          return { pos: new THREE.Vector3(0, 1.04, -3.35), target };
         case 'top':
-          return { pos: new THREE.Vector3(0.01, 3.25, 0.05), target };
+          return { pos: new THREE.Vector3(0.01, 3.35, 0.05), target };
       }
     };
 
     let cameraTransition: { pos: THREE.Vector3; target: THREE.Vector3 } | null = null;
     const onControlsStart = () => {
-      cameraTransition = null; // Never fight manual orbit/zoom
+      cameraTransition = null;
     };
     controls.addEventListener('start', onControlsStart);
 
     const applyCameraPreset = (preset: CameraPreset, immediate = false) => {
-      const { pos, target } = computeCameraView(preset, stateRef.current.clipName);
+      const { pos, target } = computeCameraView(preset, getCameraGroup());
       if (immediate || prefersReducedMotion) {
         cameraTransition = null;
         camera.position.copy(pos);
@@ -1796,922 +2199,153 @@ export function TrainerStudio3D({
     updateMuscleMaterials(true);
     applyCameraPreset(stateRef.current.cameraPreset, true);
 
+    // Reusable scratch vectors/matrices for 60 FPS zero-GC updates
+    const torsoRight = new THREE.Vector3();
+    const torsoUp = new THREE.Vector3();
+    const torsoAnterior = new THREE.Vector3();
+    const headFrameX = new THREE.Vector3();
+    const headFrameY = new THREE.Vector3();
+    const headFrameZ = new THREE.Vector3();
+    const headBasisMat = new THREE.Matrix4();
+    const armAntRootL = new THREE.Vector3();
+    const armAntEndL = new THREE.Vector3();
+    const armAntRootR = new THREE.Vector3();
+    const armAntEndR = new THREE.Vector3();
+    const legAntRootL = new THREE.Vector3();
+    const legAntEndL = new THREE.Vector3();
+    const legAntRootR = new THREE.Vector3();
+    const legAntEndR = new THREE.Vector3();
+    const handMatL = new THREE.Matrix4();
+    const handMatR = new THREE.Matrix4();
+    const footMatL = new THREE.Matrix4();
+    const footMatR = new THREE.Matrix4();
+    const footWorldPosL = new THREE.Vector3();
+    const footWorldPosR = new THREE.Vector3();
+    const forearmDirL = new THREE.Vector3();
+    const forearmDirR = new THREE.Vector3();
+    const handTipL = new THREE.Vector3();
+    const handTipR = new THREE.Vector3();
+
+    const armElbowJointS = UPPER_ARM_LEN / (UPPER_ARM_LEN + FOREARM_LEN);
+    const legKneeJointS = THIGH_LEN / (THIGH_LEN + CALF_LEN);
+
     // ============================================================================
-    // BIOMECHANICAL IK & SKINNED DEFORMATION ENGINE (30 FPS / 60 Frames)
+    // BIOMECHANICAL IK & SKINNED DEFORMATION ENGINE (All 56 Exercises)
     // ============================================================================
     const applyProceduralPose = (
+      exId: string | undefined,
       clip: AnimationClipName,
-      variant: string,
       exName: string,
       frame: number
-    ) => {
-      const norm = (frame % 60) / 60;
-      const p = 0.5 - 0.5 * Math.cos(norm * Math.PI * 2);
+    ): CameraGroup => {
+      const pose = evaluateExercisePose(exId, clip, exName, frame);
+      const norm = (((frame % 60) + 60) % 60) / 60;
+      const breathWave = Math.sin(norm * Math.PI * 2);
+
+      // 1. Orthonormal Torso & Spine Curve
+      const rawTorsoVec = new THREE.Vector3().subVectors(pose.shoulderCenter, pose.hipsPos);
+      computeOrthonormalFrame(rawTorsoVec, pose.torsoAnterior, torsoRight, torsoUp, torsoAnterior);
+
+      const pelvisBottom = pose.hipsPos.clone().addScaledVector(torsoUp, -PELVIS_DROP);
+      const headUpDir = torsoUp
+        .clone()
+        .addScaledVector(pose.headLookDir, 0.08)
+        .normalize();
+      const headTop = pose.shoulderCenter.clone().addScaledVector(headUpDir, HEAD_NECK_LEN);
+      const dynamicSpineArch = pose.spineArchOffset + breathWave * pose.breathAmplitude;
+
+      const totalAxialLen = PELVIS_DROP + TORSO_LEN + HEAD_NECK_LEN;
+      const sPelvisEnd = PELVIS_DROP / totalAxialLen;
+      const sTorsoEnd = (PELVIS_DROP + TORSO_LEN) / totalAxialLen;
 
-      pullupRigGroup.visible = false;
-      benchGroup.visible = false;
-      barbellGroup.visible = false;
-      dumbbellL.visible = false;
-      dumbbellR.visible = false;
-      dumbbellL.rotation.set(0, 0, 0);
-      dumbbellR.rotation.set(0, 0, 0);
-
-      const hipsPos = new THREE.Vector3(0, 0.94, 0);
-      const shoulderCenter = new THREE.Vector3(0, 1.48, 0);
-      const torsoAnterior = new THREE.Vector3(0, 0, 1);
-      const headLookDir = new THREE.Vector3(0, 0, 1);
-      let spineArchOffset = 0.012; // Natural slight thoracic/lumbar curve
-
-      const handL = new THREE.Vector3(-0.24, 0.76, 0.06);
-      const handR = new THREE.Vector3(0.24, 0.76, 0.06);
-      const elbowPoleL = new THREE.Vector3(-0.34, 1.10, -0.25);
-      const elbowPoleR = new THREE.Vector3(0.34, 1.10, -0.25);
-      let directElbowL: THREE.Vector3 | null = null;
-      let directElbowR: THREE.Vector3 | null = null;
-
-      const footL = new THREE.Vector3(-0.14, 0.075, 0);
-      const footR = new THREE.Vector3(0.14, 0.075, 0);
-      const kneePoleL = new THREE.Vector3(-0.16, 0.52, 0.50);
-      const kneePoleR = new THREE.Vector3(0.16, 0.52, 0.50);
-
-      const nameLower = exName.toLowerCase();
-
-      // Special Gym & Home Exercises Check by Name for Authentic Human Biomechanics
-      if (nameLower.includes('bench press') || nameLower.includes('incline dumbbell')) {
-        benchGroup.visible = true;
-        benchGroup.position.set(0, 0, -0.10);
-        const press = 1 - p;
-        hipsPos.set(0, 0.48, -0.35);
-        shoulderCenter.set(0, 0.48, 0.20);
-        torsoAnterior.set(0, 1, 0);
-        headLookDir.set(0, 1, 0);
-
-        const barY = 0.62 + 0.28 * press;
-        const barZ = 0.18;
-        if (nameLower.includes('dumbbell')) {
-          dumbbellL.visible = true;
-          dumbbellR.visible = true;
-          handL.set(-0.25, barY, barZ);
-          handR.set(0.25, barY, barZ);
-          dumbbellL.position.copy(handL);
-          dumbbellR.position.copy(handR);
-        } else {
-          barbellGroup.visible = true;
-          barbellGroup.position.set(0, barY, barZ);
-          handL.set(-0.32, barY, barZ);
-          handR.set(0.32, barY, barZ);
-        }
-
-        elbowPoleL.set(-0.48, 0.24, 0.08);
-        elbowPoleR.set(0.48, 0.24, 0.08);
-        footL.set(-0.22, 0.075, -0.76);
-        footR.set(0.22, 0.075, -0.76);
-        kneePoleL.set(-0.24, 0.52, -0.68);
-        kneePoleR.set(0.24, 0.52, -0.68);
-      } else if (nameLower.includes('dip')) {
-        // Chair Dips / Bench Dips / Gym Dips
-        benchGroup.visible = true;
-        benchGroup.position.set(0, 0, -0.36);
-        const dip = p;
-        const hipY = 0.54 - 0.18 * dip;
-        hipsPos.set(0, hipY, 0.02);
-        shoulderCenter.set(0, hipY + TORSO_LEN, -0.02);
-        torsoAnterior.set(0, 0.06, 1).normalize();
-        headLookDir.set(0, 0, 1);
-
-        handL.set(-0.23, 0.45, -0.14);
-        handR.set(0.23, 0.45, -0.14);
-        elbowPoleL.set(-0.28, 0.68, -0.52);
-        elbowPoleR.set(0.28, 0.68, -0.52);
-
-        footL.set(-0.13, 0.075, 0.66);
-        footR.set(0.13, 0.075, 0.66);
-        kneePoleL.set(-0.14, 0.42, 0.48);
-        kneePoleR.set(0.14, 0.42, 0.48);
-      } else if (nameLower.includes('lat pulldown')) {
-        // Seated Lat Pulldown: Seated upright on bench, pulling wide overhead bar down to upper chest
-        benchGroup.visible = true;
-        benchGroup.position.set(0, 0, -0.08);
-        const pull = p;
-        hipsPos.set(0, 0.50, -0.06);
-        const leanBack = -0.12 * pull;
-        shoulderCenter.set(
-          0,
-          0.50 + Math.cos(leanBack) * TORSO_LEN,
-          -0.06 + Math.sin(leanBack) * TORSO_LEN
-        );
-        torsoAnterior.set(0, -Math.sin(leanBack), Math.cos(leanBack)).normalize();
-        headLookDir.set(0, 0.15, 0.98).normalize();
-
-        const barY = 1.54 - 0.44 * pull;
-        const barZ = 0.12;
-        barbellGroup.visible = true;
-        barbellGroup.position.set(0, barY, barZ);
-        handL.set(-0.38, barY, barZ);
-        handR.set(0.38, barY, barZ);
-        elbowPoleL.set(-0.62, 0.88, -0.12);
-        elbowPoleR.set(0.62, 0.88, -0.12);
-
-        footL.set(-0.18, 0.075, 0.36);
-        footR.set(0.18, 0.075, 0.36);
-        kneePoleL.set(-0.19, 0.52, 0.42);
-        kneePoleR.set(0.19, 0.52, 0.42);
-      } else if (nameLower.includes('seated cable row')) {
-        // Seated Cable Row: Seated on bench, legs extended forward, pulling handle horizontally to ribs
-        benchGroup.visible = true;
-        benchGroup.position.set(0, 0, -0.08);
-        const pull = p;
-        hipsPos.set(0, 0.50, -0.16);
-        const torsoRock = 0.18 * (1 - pull) - 0.06 * pull;
-        shoulderCenter.set(
-          0,
-          0.50 + Math.cos(torsoRock) * TORSO_LEN,
-          -0.16 + Math.sin(torsoRock) * TORSO_LEN
-        );
-        torsoAnterior.set(0, -Math.sin(torsoRock), Math.cos(torsoRock)).normalize();
-        headLookDir.set(0, 0, 1);
-
-        const handZ = 0.36 - 0.34 * pull;
-        const handY = 0.78 + 0.04 * pull;
-        dumbbellL.visible = true;
-        dumbbellR.visible = true;
-        handL.set(-0.18, handY, handZ);
-        handR.set(0.18, handY, handZ);
-        dumbbellL.position.copy(handL);
-        dumbbellR.position.copy(handR);
-        dumbbellL.rotation.set(0, Math.PI / 2, 0);
-        dumbbellR.rotation.set(0, Math.PI / 2, 0);
-
-        elbowPoleL.set(-0.36, 0.76, -0.45);
-        elbowPoleR.set(0.36, 0.76, -0.45);
-
-        footL.set(-0.15, 0.14, 0.56);
-        footR.set(0.15, 0.14, 0.56);
-        kneePoleL.set(-0.16, 0.44, 0.32);
-        kneePoleR.set(0.16, 0.44, 0.32);
-      } else if (nameLower.includes('calf raise')) {
-        // Standing Calf Raises: Smooth vertical ankle plantarflexion lifting heels +0.085m
-        const lift = p;
-        const riseY = 0.085 * lift;
-        hipsPos.set(0, 0.94 + riseY, 0.02 * lift);
-        shoulderCenter.set(0, 0.94 + TORSO_LEN + riseY, 0.02 * lift);
-        torsoAnterior.set(0, 0, 1);
-        headLookDir.set(0, 0, 1);
-
-        dumbbellL.visible = true;
-        dumbbellR.visible = true;
-        handL.set(-0.24, 0.80 + riseY, 0.04);
-        handR.set(0.24, 0.80 + riseY, 0.04);
-        dumbbellL.position.copy(handL);
-        dumbbellR.position.copy(handR);
-        dumbbellL.rotation.set(0, Math.PI / 2, 0);
-        dumbbellR.rotation.set(0, Math.PI / 2, 0);
-        elbowPoleL.set(-0.34, 1.15 + riseY, -0.22);
-        elbowPoleR.set(0.34, 1.15 + riseY, -0.22);
-
-        footL.set(-0.14, 0.075 + riseY, 0);
-        footR.set(0.14, 0.075 + riseY, 0);
-        kneePoleL.set(-0.15, 0.54 + riseY, 0.45);
-        kneePoleR.set(0.15, 0.54 + riseY, 0.45);
-      } else if (nameLower.includes('leg curl')) {
-        // Prone Hamstring Leg Curl on Bench
-        benchGroup.visible = true;
-        benchGroup.position.set(0, 0, -0.10);
-        const curl = p;
-        hipsPos.set(0, 0.48, -0.14);
-        shoulderCenter.set(0, 0.52, 0.42);
-        torsoAnterior.set(0, -1, 0.1).normalize();
-        headLookDir.set(0, -0.6, 0.8).normalize();
-
-        handL.set(-0.22, 0.36, 0.48);
-        handR.set(0.22, 0.36, 0.48);
-        elbowPoleL.set(-0.34, 0.56, 0.25);
-        elbowPoleR.set(0.34, 0.56, 0.25);
-
-        const curlAngle = (15 + 95 * curl) * (Math.PI / 180);
-        const kneeY = 0.47;
-        const kneeZ = -0.55;
-        footL.set(-0.13, kneeY + Math.sin(curlAngle) * CALF_LEN, kneeZ - Math.cos(curlAngle) * CALF_LEN);
-        footR.set(0.13, kneeY + Math.sin(curlAngle) * CALF_LEN, kneeZ - Math.cos(curlAngle) * CALF_LEN);
-        kneePoleL.set(-0.13, 0.15, -0.58);
-        kneePoleR.set(0.13, 0.15, -0.58);
-      } else if (nameLower.includes('leg raise')) {
-        // Supine Lying Leg Raises: Back flat on floor, raising straight legs from 10° to 82°
-        const lift = p;
-        hipsPos.set(0, 0.11, -0.08);
-        shoulderCenter.set(0, 0.12, -0.64);
-        torsoAnterior.set(0, 1, 0.05).normalize();
-        headLookDir.set(0, 0.92, 0.38).normalize();
-
-        handL.set(-0.24, 0.04, -0.12);
-        handR.set(0.24, 0.04, -0.12);
-        elbowPoleL.set(-0.34, 0.08, -0.38);
-        elbowPoleR.set(0.34, 0.08, -0.38);
-
-        const legAngle = (10 + 72 * lift) * (Math.PI / 180);
-        const legReach = 0.79;
-        footL.set(-0.11, 0.11 + Math.sin(legAngle) * legReach, -0.08 + Math.cos(legAngle) * legReach);
-        footR.set(0.11, 0.11 + Math.sin(legAngle) * legReach, -0.08 + Math.cos(legAngle) * legReach);
-        kneePoleL.set(-0.12, footL.y + 0.22, footL.z - 0.18);
-        kneePoleR.set(0.12, footR.y + 0.22, footR.z - 0.18);
-      } else if (nameLower.includes('russian twist')) {
-        // Seated V-Sit Russian Twists: Rotating shoulders & hands left-to-right across obliques
-        const twist = Math.sin(norm * Math.PI * 2); // -1 to +1
-        hipsPos.set(0, 0.12, -0.10);
-        shoulderCenter.set(0.06 * twist, 0.50, -0.48);
-        torsoAnterior.set(0.45 * twist, 0.65, 0.60).normalize();
-        headLookDir.set(0.35 * twist, 0.25, 0.90).normalize();
-
-        const claspX = 0.26 * twist;
-        const claspY = 0.42;
-        const claspZ = -0.14;
-        handL.set(claspX - 0.04, claspY, claspZ);
-        handR.set(claspX + 0.04, claspY, claspZ);
-        elbowPoleL.set(-0.36 + 0.15 * twist, 0.36, -0.42);
-        elbowPoleR.set(0.36 + 0.15 * twist, 0.36, -0.42);
-
-        footL.set(-0.11 - 0.04 * twist, 0.22, 0.48);
-        footR.set(0.11 - 0.04 * twist, 0.22, 0.48);
-        kneePoleL.set(-0.13, 0.52, 0.20);
-        kneePoleR.set(0.13, 0.52, 0.20);
-      } else if (nameLower.includes('superman') || nameLower.includes('snow angel')) {
-        // Prone Back Extension / Superman Pulls
-        const lift = p;
-        hipsPos.set(0, 0.09, -0.12);
-        shoulderCenter.set(0, 0.12 + 0.14 * lift, 0.43);
-        torsoAnterior.set(0, -1, 0.22 * lift).normalize();
-        headLookDir.set(0, -0.45 + 0.35 * lift, 0.90).normalize();
-        spineArchOffset = -0.022 * lift;
-
-        const sweep = 0.38 - 0.42 * lift;
-        handL.set(-0.34 - 0.12 * lift, 0.18 + 0.16 * lift, 0.42 + sweep);
-        handR.set(0.34 + 0.12 * lift, 0.18 + 0.16 * lift, 0.42 + sweep);
-        elbowPoleL.set(-0.48, 0.32, 0.12);
-        elbowPoleR.set(0.48, 0.32, 0.12);
-
-        footL.set(-0.14, 0.09 + 0.12 * lift, -0.92);
-        footR.set(0.14, 0.09 + 0.12 * lift, -0.92);
-        kneePoleL.set(-0.14, 0.02, -0.52);
-        kneePoleR.set(0.14, 0.02, -0.52);
-      } else if (nameLower.includes('shrug')) {
-        // Dumbbell Shrugs: Heavy dumbbells at sides, elevating shoulders/traps vertically
-        const shrug = p;
-        hipsPos.set(0, 0.94, 0);
-        shoulderCenter.set(0, 0.94 + TORSO_LEN + 0.055 * shrug, 0);
-        torsoAnterior.set(0, 0, 1);
-        headLookDir.set(0, 0, 1);
-
-        dumbbellL.visible = true;
-        dumbbellR.visible = true;
-        handL.set(-0.24, 0.78 + 0.065 * shrug, 0.04);
-        handR.set(0.24, 0.78 + 0.065 * shrug, 0.04);
-        dumbbellL.position.copy(handL);
-        dumbbellR.position.copy(handR);
-        dumbbellL.rotation.set(0, Math.PI / 2, 0);
-        dumbbellR.rotation.set(0, Math.PI / 2, 0);
-        elbowPoleL.set(-0.34, 1.15 + 0.06 * shrug, -0.18);
-        elbowPoleR.set(0.34, 1.15 + 0.06 * shrug, -0.18);
-
-        footL.set(-0.15, 0.075, 0);
-        footR.set(0.15, 0.075, 0);
-        kneePoleL.set(-0.16, 0.52, 0.45);
-        kneePoleR.set(0.16, 0.52, 0.45);
-      } else if (nameLower.includes('rear delt')) {
-        // Bent-Over Rear Delt Fly: Torso hinged forward, sweeping dumbbells out to sides
-        const fly = p;
-        const hipY = 0.88;
-        const hipZ = -0.16;
-        hipsPos.set(0, hipY, hipZ);
-        const torsoAngle = 0.78; // ~45 deg forward hinge
-        shoulderCenter.set(
-          0,
-          hipY + Math.cos(torsoAngle) * TORSO_LEN,
-          hipZ + Math.sin(torsoAngle) * TORSO_LEN
-        );
-        torsoAnterior.set(0, -Math.sin(torsoAngle), Math.cos(torsoAngle)).normalize();
-        headLookDir.set(0, -0.45, 0.89).normalize();
-
-        dumbbellL.visible = true;
-        dumbbellR.visible = true;
-        const abd = (14 + 72 * fly) * (Math.PI / 180);
-        const reach = 0.52;
-        handL.set(
-          -0.19 - Math.sin(abd) * reach,
-          shoulderCenter.y - Math.cos(abd) * reach,
-          shoulderCenter.z + 0.06 * (1 - fly)
-        );
-        handR.set(
-          0.19 + Math.sin(abd) * reach,
-          shoulderCenter.y - Math.cos(abd) * reach,
-          shoulderCenter.z + 0.06 * (1 - fly)
-        );
-        dumbbellL.position.copy(handL);
-        dumbbellR.position.copy(handR);
-        elbowPoleL.set(-0.48, shoulderCenter.y + 0.18, shoulderCenter.z - 0.14);
-        elbowPoleR.set(0.48, shoulderCenter.y + 0.18, shoulderCenter.z - 0.14);
-
-        footL.set(-0.16, 0.075, 0);
-        footR.set(0.16, 0.075, 0);
-        kneePoleL.set(-0.17, 0.50, 0.38);
-        kneePoleR.set(0.17, 0.50, 0.38);
-      } else {
-        switch (clip) {
-          case 'pushup':
-          case 'diamond_pushup': {
-            const lift = 1 - p;
-            const isDiamond =
-              clip === 'diamond_pushup' ||
-              variant === 'narrow_press' ||
-              nameLower.includes('diamond') ||
-              nameLower.includes('close-grip');
-            const isDecline = nameLower.includes('decline');
-            const isPike = variant === 'overhead_push' || nameLower.includes('pike');
-
-            const handSpread = isDiamond ? 0.11 : 0.25;
-            const footY = isDecline ? 0.40 : 0.085;
-            const footZ = -0.84;
-
-            if (isDecline) {
-              benchGroup.visible = true;
-              benchGroup.position.set(0, 0, -0.95);
-            }
-
-            if (isPike) {
-              hipsPos.set(0, 0.84 - 0.08 * p, -0.16);
-              shoulderCenter.set(0, 0.46 - 0.18 * p, 0.34);
-              torsoAnterior.set(0, -0.65, -0.75).normalize();
-              headLookDir.set(0, -0.85, 0.52).normalize();
-            } else {
-              // Authentic Human Push-Up Plank Geometry (matching reference_blueprint.png Row 1):
-              // Hands planted directly below chest (z = 0.36); as elbows bend to 90°, chest lowers slightly ahead of wrists (z = 0.42) so forearms stay vertical!
-              const plankAngle = (6.5 + 16.5 * lift) * (Math.PI / 180);
-              const legDist = 0.78;
-              const hipY = footY + legDist * Math.sin(plankAngle);
-              const hipZ = footZ + legDist * Math.cos(plankAngle);
-              const chestY = hipY + TORSO_LEN * Math.sin(plankAngle);
-              const chestZ = hipZ + TORSO_LEN * Math.cos(plankAngle);
-
-              hipsPos.set(0, hipY, hipZ);
-              shoulderCenter.set(0, chestY, chestZ);
-              torsoAnterior.set(0, -Math.cos(plankAngle), Math.sin(plankAngle)).normalize();
-              headLookDir.set(0, -0.58, 0.81).normalize();
-              spineArchOffset = 0.004;
-            }
-
-            // Wrists planted on floor directly under shoulders/upper chest; elbows tuck 45° back & out
-            handL.set(-handSpread, 0.032, 0.36);
-            handR.set(handSpread, 0.032, 0.36);
-
-            const elbowSpread = isDiamond ? 0.25 : 0.44;
-            elbowPoleL.set(-elbowSpread, shoulderCenter.y + 0.12, 0.08);
-            elbowPoleR.set(elbowSpread, shoulderCenter.y + 0.12, 0.08);
-
-            footL.set(-0.11, footY, footZ);
-            footR.set(0.11, footY, footZ);
-            kneePoleL.set(-0.11, (hipsPos.y + footY) * 0.5 + 0.15, (hipsPos.z + footZ) * 0.5);
-            kneePoleR.set(0.11, (hipsPos.y + footY) * 0.5 + 0.15, (hipsPos.z + footZ) * 0.5);
-            break;
-          }
-
-          case 'squat': {
-            const isDeadlift = variant === 'hinge' || nameLower.includes('deadlift');
-            const depth = p;
-
-            if (isDeadlift) {
-              const hipY = 0.92 - 0.14 * depth;
-              const hipZ = -0.24 * depth;
-              hipsPos.set(0, hipY, hipZ);
-              const torsoAngle = 0.92 * depth;
-              shoulderCenter.set(
-                0,
-                hipY + Math.cos(torsoAngle) * TORSO_LEN,
-                hipZ + Math.sin(torsoAngle) * TORSO_LEN
-              );
-              torsoAnterior.set(0, -Math.sin(torsoAngle), Math.cos(torsoAngle)).normalize();
-              headLookDir.set(0, -0.25 * depth, 1).normalize();
-
-              const barY = shoulderCenter.y - 0.52;
-              const barZ = 0.14;
-              barbellGroup.visible = true;
-              barbellGroup.position.set(0, barY, barZ);
-              handL.set(-0.26, barY, barZ);
-              handR.set(0.26, barY, barZ);
-              elbowPoleL.set(-0.36, barY + 0.26, -0.14);
-              elbowPoleR.set(0.36, barY + 0.26, -0.14);
-
-              footL.set(-0.15, 0.075, 0);
-              footR.set(0.15, 0.075, 0);
-              kneePoleL.set(-0.16, 0.50, 0.36);
-              kneePoleR.set(0.16, 0.50, 0.36);
-            } else {
-              const hipY = 0.94 - 0.37 * depth;
-              const hipZ = -0.22 * depth;
-              hipsPos.set(0, hipY, hipZ);
-
-              const leanAngle = 0.42 * depth;
-              shoulderCenter.set(
-                0,
-                hipY + Math.cos(leanAngle) * TORSO_LEN,
-                hipZ + Math.sin(leanAngle) * TORSO_LEN
-              );
-              torsoAnterior.set(0, -Math.sin(leanAngle), Math.cos(leanAngle)).normalize();
-              headLookDir.set(0, 0.04, 1).normalize();
-
-              footL.set(-0.17, 0.075, 0.02);
-              footR.set(0.17, 0.075, 0.02);
-              kneePoleL.set(-0.23, 0.48, 0.58);
-              kneePoleR.set(0.23, 0.48, 0.58);
-
-              // Blueprint Counterbalance Arms:
-              // Extend straight forward and parallel in the sagittal plane (x = ±0.195) as hips descend
-              const armSwingAngle = depth * (Math.PI * 0.49); // 0 rad (down at sides) to ~88 deg (parallel forward horizontal)
-              const reach = 0.555;
-              const sL = new THREE.Vector3(-0.195, shoulderCenter.y - 0.05, shoulderCenter.z);
-              const sR = new THREE.Vector3(0.195, shoulderCenter.y - 0.05, shoulderCenter.z);
-
-              handL.set(
-                sL.x,
-                sL.y - Math.cos(armSwingAngle) * reach,
-                sL.z + Math.sin(armSwingAngle) * reach + 0.03 * (1 - depth)
-              );
-              handR.set(
-                sR.x,
-                sR.y - Math.cos(armSwingAngle) * reach,
-                sR.z + Math.sin(armSwingAngle) * reach + 0.03 * (1 - depth)
-              );
-
-              // Keep elbow pole strictly in the sagittal plane below/behind the arm so elbows never flare outward
-              elbowPoleL.set(
-                sL.x - 0.02 * (1 - depth),
-                sL.y - Math.cos(armSwingAngle) * 0.28 - 0.22 * depth,
-                sL.z + Math.sin(armSwingAngle) * 0.24 - 0.22 * (1 - depth)
-              );
-              elbowPoleR.set(
-                sR.x + 0.02 * (1 - depth),
-                sR.y - Math.cos(armSwingAngle) * 0.28 - 0.22 * depth,
-                sR.z + Math.sin(armSwingAngle) * 0.24 - 0.22 * (1 - depth)
-              );
-            }
-            break;
-          }
-
-          case 'pullup': {
-            pullupRigGroup.visible = true;
-            const pull = p;
-
-            // At pull=0 (Dead Hang): shoulderCenter.y = 1.54, chin below 2.10m bar
-            // At pull=1 (Chin Over Bar, Frame 30): shoulderCenter.y = 1.94, chin rises cleanly ABOVE 2.10m bar!
-            const hipY = 0.98 + 0.40 * pull;
-            const hipZ = -0.04 - 0.06 * pull;
-            hipsPos.set(0, hipY, hipZ);
-
-            const archAngle = -0.14 * pull;
-            shoulderCenter.set(
-              0,
-              hipY + Math.cos(archAngle) * TORSO_LEN,
-              hipZ + Math.sin(archAngle) * TORSO_LEN
-            );
-            torsoAnterior.set(0, -Math.sin(archAngle), Math.cos(archAngle)).normalize();
-            headLookDir.set(0, 0.12 * pull, 1).normalize();
-            spineArchOffset = 0.016 * pull;
-
-            handL.set(-0.35, 2.09, 0.0);
-            handR.set(0.35, 2.09, 0.0);
-            elbowPoleL.set(-0.68, shoulderCenter.y - 0.16, -0.12);
-            elbowPoleR.set(0.68, shoulderCenter.y - 0.16, -0.12);
-
-            footL.set(-0.10, hipY - 0.78, hipZ - 0.05 - 0.04 * pull);
-            footR.set(0.10, hipY - 0.78, hipZ - 0.05 - 0.04 * pull);
-            kneePoleL.set(-0.12, hipY - 0.38, hipZ + 0.24);
-            kneePoleR.set(0.12, hipY - 0.38, hipZ + 0.24);
-            break;
-          }
-
-          case 'lunge': {
-            const depth = p;
-            const isBulgarian = nameLower.includes('bulgarian');
-            if (isBulgarian) {
-              benchGroup.visible = true;
-              benchGroup.position.set(0, 0, -0.78);
-            }
-            const hipY = 0.90 - 0.25 * depth;
-            hipsPos.set(0, hipY, 0);
-            shoulderCenter.set(0, hipY + TORSO_LEN, 0.04 * depth);
-            torsoAnterior.set(0, -0.06 * depth, 1).normalize();
-            headLookDir.set(0, 0, 1);
-
-            footL.set(-0.14, 0.075, 0.38);
-            footR.set(0.14, isBulgarian ? 0.42 : 0.085, -0.46);
-            kneePoleL.set(-0.16, 0.48, 0.85);
-            kneePoleR.set(0.16, 0.12, 0.25);
-
-            handL.set(-0.23, hipY + 0.06, 0.05);
-            handR.set(0.23, hipY + 0.06, 0.05);
-            elbowPoleL.set(-0.34, hipY + 0.28, -0.20);
-            elbowPoleR.set(0.34, hipY + 0.28, -0.20);
-            break;
-          }
-
-          case 'plank':
-          case 'mountain_climber':
-          case 'crunch':
-          case 'glute_bridge': {
-            if (clip === 'crunch' || clip === 'glute_bridge') {
-              const lift = p;
-              const isBridge = clip === 'glute_bridge';
-              hipsPos.set(0, isBridge ? 0.14 + 0.24 * lift : 0.12, -0.10);
-              shoulderCenter.set(
-                0,
-                isBridge ? 0.14 : 0.14 + 0.22 * lift,
-                isBridge ? -0.64 : -0.60 + 0.10 * lift
-              );
-              torsoAnterior.set(0, 1, isBridge ? -0.22 * lift : 0.38 * lift).normalize();
-              headLookDir.set(0, 0.82, 0.55).normalize();
-
-              handL.set(
-                -0.22,
-                isBridge ? 0.04 : shoulderCenter.y + 0.10,
-                isBridge ? -0.15 : shoulderCenter.z + 0.08
-              );
-              handR.set(
-                0.22,
-                isBridge ? 0.04 : shoulderCenter.y + 0.10,
-                isBridge ? -0.15 : shoulderCenter.z + 0.08
-              );
-              elbowPoleL.set(-0.42, shoulderCenter.y + 0.06, shoulderCenter.z - 0.08);
-              elbowPoleR.set(0.42, shoulderCenter.y + 0.06, shoulderCenter.z - 0.08);
-
-              footL.set(-0.14, 0.075, 0.44);
-              footR.set(0.14, 0.075, 0.44);
-              kneePoleL.set(-0.16, 0.54, 0.20);
-              kneePoleR.set(0.16, 0.54, 0.20);
-            } else {
-              const isClimber = clip === 'mountain_climber';
-              const plankAngle = 16 * (Math.PI / 180);
-              const footY = 0.095;
-              const footZ = -0.84;
-              const legDist = 0.818;
-              const hipY = footY + legDist * Math.sin(plankAngle);
-              const hipZ = footZ + legDist * Math.cos(plankAngle);
-              const chestY = hipY + TORSO_LEN * Math.sin(plankAngle);
-              const chestZ = hipZ + TORSO_LEN * Math.cos(plankAngle);
-
-              hipsPos.set(0, hipY, hipZ);
-              shoulderCenter.set(0, chestY, chestZ);
-              torsoAnterior.set(0, -1, 0.18).normalize();
-              headLookDir.set(0, -0.52, 0.85).normalize();
-
-              handL.set(-0.22, 0.028, 0.50);
-              handR.set(0.22, 0.028, 0.50);
-              elbowPoleL.set(-0.34, chestY + 0.10, 0.25);
-              elbowPoleR.set(0.34, chestY + 0.10, 0.25);
-
-              footL.set(
-                -0.12,
-                footY + (isClimber ? 0.12 * p : 0),
-                footZ + (isClimber ? 0.38 * p : 0)
-              );
-              footR.set(
-                0.12,
-                footY + (isClimber ? 0.12 * (1 - p) : 0),
-                footZ + (isClimber ? 0.38 * (1 - p) : 0)
-              );
-              kneePoleL.set(-0.12, hipY - 0.12, (hipZ + footL.z) * 0.5 + 0.15);
-              kneePoleR.set(0.12, hipY - 0.12, (hipZ + footR.z) * 0.5 + 0.15);
-            }
-            break;
-          }
-
-          case 'stretch_flow': {
-            if (variant === 'curl') {
-              hipsPos.set(0, 0.94, 0);
-              shoulderCenter.set(0, 0.94 + TORSO_LEN, 0);
-              torsoAnterior.set(0, 0, 1);
-              headLookDir.set(0, 0, 1);
-
-              const isBarbellCurl = nameLower.includes('barbell') || nameLower.includes('ez bar');
-              const flexAngle = 0.20 + p * 2.05; // 11 deg to 129 deg flexion
-              const eL = new THREE.Vector3(-0.22, 1.15, 0.02);
-              const eR = new THREE.Vector3(0.22, 1.15, 0.02);
-              directElbowL = eL;
-              directElbowR = eR;
-
-              const handY = eL.y - Math.cos(flexAngle) * FOREARM_LEN;
-              const handZ = eL.z + Math.sin(flexAngle) * FOREARM_LEN;
-              handL.set(-0.23, handY, handZ);
-              handR.set(0.23, handY, handZ);
-              elbowPoleL.set(-0.26, 1.12, -0.28);
-              elbowPoleR.set(0.26, 1.12, -0.28);
-
-              if (isBarbellCurl) {
-                barbellGroup.visible = true;
-                barbellGroup.position.set(0, handY, handZ);
-              } else {
-                dumbbellL.visible = true;
-                dumbbellR.visible = true;
-                dumbbellL.position.copy(handL);
-                dumbbellR.position.copy(handR);
-                if (nameLower.includes('hammer')) {
-                  dumbbellL.rotation.set(0, Math.PI / 2, 0);
-                  dumbbellR.rotation.set(0, Math.PI / 2, 0);
-                }
-              }
-            } else if (variant === 'tricep_ext') {
-              hipsPos.set(0, 0.94, 0);
-              shoulderCenter.set(0, 0.94 + TORSO_LEN, 0);
-              torsoAnterior.set(0, 0, 1);
-              headLookDir.set(0, 0, 1);
-              dumbbellL.visible = true;
-              dumbbellR.visible = true;
-
-              if (nameLower.includes('overhead') || nameLower.includes('skull')) {
-                const eL = new THREE.Vector3(-0.18, 1.72, 0.06);
-                const eR = new THREE.Vector3(0.18, 1.72, 0.06);
-                directElbowL = eL;
-                directElbowR = eR;
-                const extAngle = -0.75 + p * 2.15;
-                const handY = eL.y + Math.sin(extAngle) * FOREARM_LEN;
-                const handZ = eL.z - Math.cos(extAngle) * FOREARM_LEN;
-                handL.set(-0.16, handY, handZ);
-                handR.set(0.16, handY, handZ);
-                elbowPoleL.set(-0.24, 1.76, 0.28);
-                elbowPoleR.set(0.24, 1.76, 0.28);
-              } else {
-                const eL = new THREE.Vector3(-0.22, 1.15, 0.03);
-                const eR = new THREE.Vector3(0.22, 1.15, 0.03);
-                directElbowL = eL;
-                directElbowR = eR;
-                const extAngle = 1.65 - p * 1.45;
-                const handY = eL.y - Math.cos(extAngle) * FOREARM_LEN;
-                const handZ = eL.z + Math.sin(extAngle) * FOREARM_LEN;
-                handL.set(-0.22, handY, handZ);
-                handR.set(0.22, handY, handZ);
-                elbowPoleL.set(-0.26, 1.12, -0.28);
-                elbowPoleR.set(0.26, 1.12, -0.28);
-              }
-              dumbbellL.position.copy(handL);
-              dumbbellR.position.copy(handR);
-            } else if (variant === 'overhead_push') {
-              hipsPos.set(0, 0.94, 0);
-              shoulderCenter.set(0, 0.94 + TORSO_LEN, 0);
-              torsoAnterior.set(0, 0, 1);
-              headLookDir.set(0, 0.06, 1).normalize();
-
-              const sL = new THREE.Vector3(-0.195, 1.445, 0);
-              const sR = new THREE.Vector3(0.195, 1.445, 0);
-
-              if (nameLower.includes('lateral')) {
-                dumbbellL.visible = true;
-                dumbbellR.visible = true;
-                const abdAngle = (12 + 76 * p) * (Math.PI / 180);
-                const reach = 0.53;
-                handL.set(
-                  sL.x - Math.sin(abdAngle) * reach,
-                  sL.y - Math.cos(abdAngle) * reach,
-                  0.10 * Math.sin(abdAngle)
-                );
-                handR.set(
-                  sR.x + Math.sin(abdAngle) * reach,
-                  sR.y - Math.cos(abdAngle) * reach,
-                  0.10 * Math.sin(abdAngle)
-                );
-                elbowPoleL.set(
-                  sL.x - Math.sin(abdAngle) * 0.27,
-                  sL.y - Math.cos(abdAngle) * 0.27 + 0.22,
-                  -0.18
-                );
-                elbowPoleR.set(
-                  sR.x + Math.sin(abdAngle) * 0.27,
-                  sR.y - Math.cos(abdAngle) * 0.27 + 0.22,
-                  -0.18
-                );
-                dumbbellL.position.copy(handL);
-                dumbbellR.position.copy(handR);
-                dumbbellL.rotation.set(0, Math.PI / 2, 0);
-                dumbbellR.rotation.set(0, Math.PI / 2, 0);
-              } else if (nameLower.includes('front')) {
-                dumbbellL.visible = true;
-                dumbbellR.visible = true;
-                const flxAngle = (10 + 80 * p) * (Math.PI / 180);
-                const reach = 0.53;
-                handL.set(sL.x, sL.y - Math.cos(flxAngle) * reach, Math.sin(flxAngle) * reach + 0.04);
-                handR.set(sR.x, sR.y - Math.cos(flxAngle) * reach, Math.sin(flxAngle) * reach + 0.04);
-                elbowPoleL.set(-0.22, sL.y - Math.cos(flxAngle) * 0.26 - 0.18, Math.sin(flxAngle) * 0.24 - 0.18);
-                elbowPoleR.set(0.22, sR.y - Math.cos(flxAngle) * 0.26 - 0.18, Math.sin(flxAngle) * 0.24 - 0.18);
-                dumbbellL.position.copy(handL);
-                dumbbellR.position.copy(handR);
-              } else {
-                // Overhead Barbell Press
-                const barY = 1.48 + 0.48 * p;
-                const barZ = 0.14 - 0.10 * p;
-                barbellGroup.visible = true;
-                barbellGroup.position.set(0, barY, barZ);
-                handL.set(-0.30, barY, barZ);
-                handR.set(0.30, barY, barZ);
-                elbowPoleL.set(-0.46, 1.18, 0.20);
-                elbowPoleR.set(0.46, 1.18, 0.20);
-              }
-            } else if (variant === 'row_pull') {
-              const hipY = 0.86;
-              const hipZ = -0.14;
-              hipsPos.set(0, hipY, hipZ);
-              const torsoAngle = 0.62;
-              shoulderCenter.set(
-                0,
-                hipY + Math.cos(torsoAngle) * TORSO_LEN,
-                hipZ + Math.sin(torsoAngle) * TORSO_LEN
-              );
-              torsoAnterior.set(0, -Math.sin(torsoAngle), Math.cos(torsoAngle)).normalize();
-              headLookDir.set(0, -0.22, 0.97).normalize();
-
-              const barY = 0.60 + 0.26 * p;
-              const barZ = 0.24 - 0.12 * p;
-              barbellGroup.visible = true;
-              barbellGroup.position.set(0, barY, barZ);
-              handL.set(-0.28, barY, barZ);
-              handR.set(0.28, barY, barZ);
-              elbowPoleL.set(-0.42, shoulderCenter.y + 0.15, hipZ - 0.28);
-              elbowPoleR.set(0.42, shoulderCenter.y + 0.15, hipZ - 0.28);
-            } else {
-              // Full-Body Stretching / Chest Fly
-              hipsPos.set(0, 0.94, 0);
-              shoulderCenter.set(0, 0.94 + TORSO_LEN, 0);
-              torsoAnterior.set(0, 0, 1);
-              headLookDir.set(0, 0, 1);
-              const sL = new THREE.Vector3(-0.195, 1.445, 0);
-              const sR = new THREE.Vector3(0.195, 1.445, 0);
-              const abdAngle = (25 + 65 * p) * (Math.PI / 180);
-              const reach = 0.53;
-              handL.set(sL.x - Math.sin(abdAngle) * reach, sL.y - Math.cos(abdAngle) * reach, 0.14);
-              handR.set(sR.x + Math.sin(abdAngle) * reach, sR.y - Math.cos(abdAngle) * reach, 0.14);
-              elbowPoleL.set(-0.40, 1.15, -0.18);
-              elbowPoleR.set(0.40, 1.15, -0.18);
-            }
-
-            footL.set(-0.15, 0.075, 0);
-            footR.set(0.15, 0.075, 0);
-            kneePoleL.set(-0.16, 0.52, 0.45);
-            kneePoleR.set(0.16, 0.52, 0.45);
-            break;
-          }
-
-          case 'burpee':
-          case 'jog':
-          case 'idle':
-          default: {
-            if (clip === 'jog' || nameLower.includes('running') || nameLower.includes('walking')) {
-              // Authentic Contralateral Human Gait Cycle (Left arm + Right leg forward, Right arm + Left leg back)
-              const isWalk = nameLower.includes('walking');
-              const strideAmp = isWalk ? 0.20 : 0.30;
-              const liftAmp = isWalk ? 0.05 : 0.14;
-              const phase = norm * Math.PI * 2;
-              const swing = Math.sin(phase);
-              const doubleFreq = Math.abs(Math.cos(phase));
-              const bounce = (isWalk ? 0.022 : 0.055) * doubleFreq;
-
-              hipsPos.set(0, 0.92 + bounce, 0);
-              const forwardLean = isWalk ? 0.04 : 0.12;
-              shoulderCenter.set(0, 0.92 + TORSO_LEN + bounce, forwardLean);
-              torsoAnterior.set(0.08 * swing, -forwardLean, 1).normalize();
-              headLookDir.set(0, 0, 1);
-
-              // Arms swing opposite to legs with natural 90° athletic elbow bend
-              const armSwingZ = (isWalk ? 0.16 : 0.26) * swing;
-              const armSwingY = isWalk ? 0.84 : 1.02;
-              handL.set(-0.22, armSwingY + bounce + 0.06 * swing, 0.12 + armSwingZ);
-              handR.set(0.22, armSwingY + bounce - 0.06 * swing, 0.12 - armSwingZ);
-              elbowPoleL.set(-0.32, 1.12 + bounce, -0.24 - 0.12 * swing);
-              elbowPoleR.set(0.32, 1.12 + bounce, -0.24 + 0.12 * swing);
-
-              const liftL = Math.max(0, -Math.cos(phase)) * liftAmp;
-              const liftR = Math.max(0, Math.cos(phase)) * liftAmp;
-              footL.set(-0.13, 0.075 + liftL, -strideAmp * swing);
-              footR.set(0.13, 0.075 + liftR, strideAmp * swing);
-              kneePoleL.set(-0.14, 0.50 + liftL * 0.6, footL.z + 0.42);
-              kneePoleR.set(0.14, 0.50 + liftR * 0.6, footR.z + 0.42);
-            } else {
-              const bounce = clip === 'burpee' ? 0.08 * p : 0.015 * p;
-              hipsPos.set(0, 0.94 + bounce, 0);
-              shoulderCenter.set(0, 0.94 + TORSO_LEN + bounce, 0);
-              torsoAnterior.set(0, 0, 1);
-              headLookDir.set(0, 0, 1);
-
-              handL.set(-0.23, 0.78 + bounce + 0.12 * p, 0.08);
-              handR.set(0.23, 0.78 + bounce + 0.12 * p, 0.08);
-              elbowPoleL.set(-0.34, 1.15, -0.22);
-              elbowPoleR.set(0.34, 1.15, -0.22);
-
-              footL.set(-0.15, 0.075, 0);
-              footR.set(0.15, 0.075, 0);
-              kneePoleL.set(-0.16, 0.52, 0.45);
-              kneePoleR.set(0.16, 0.52, 0.45);
-            }
-            break;
-          }
-        }
-      }
-
-      // ============================================================================
-      // REAL-TIME CONTINUOUS SKINNED MESH DEFORMATION (SINGULARITY-FREE)
-      // ============================================================================
-      const torsoUp = new THREE.Vector3().subVectors(shoulderCenter, hipsPos).normalize();
-      const torsoRight = new THREE.Vector3().crossVectors(torsoUp, torsoAnterior).normalize();
-
-      // Keep cranial axis aligned naturally with torsoUp (no unnatural forward neck shear)
-      const headUpDir = torsoUp.clone().addScaledVector(headLookDir, 0.04).normalize();
-      const headTop = shoulderCenter.clone().addScaledVector(headUpDir, HEAD_NECK_LEN);
-
-      const pelvisBottom = hipsPos.clone().addScaledVector(torsoUp, -PELVIS_DROP);
-
-      // 1. Deform Unified Axial Body (Shorts Saddle s=0 -> Neck s=0.70 -> Head Crown s=1.0)
       axialBody.deformBySpineCurve((s, outCenter, outX, outY, outZ) => {
-        if (s <= 0.70) {
-          const u = s / 0.70;
-          outCenter.lerpVectors(pelvisBottom, shoulderCenter, u);
-          const archU = Math.max(0, (u - 0.12) / 0.88);
-          const arch = Math.sin(archU * Math.PI) * spineArchOffset;
-          outCenter.addScaledVector(torsoAnterior, arch);
-          computeOrthonormalFrame(torsoUp, torsoAnterior, outX, outY, outZ);
+        if (s <= sPelvisEnd) {
+          const u = s / sPelvisEnd;
+          outCenter.lerpVectors(pelvisBottom, pose.hipsPos, u);
+          outX.copy(torsoRight);
+          outY.copy(torsoUp);
+          outZ.copy(torsoAnterior);
+        } else if (s <= sTorsoEnd) {
+          const u = (s - sPelvisEnd) / (sTorsoEnd - sPelvisEnd);
+          outCenter.lerpVectors(pose.hipsPos, pose.shoulderCenter, u);
+          const archCurve = Math.sin(u * Math.PI);
+          outCenter.addScaledVector(torsoAnterior, archCurve * dynamicSpineArch);
+          const archDeriv = (Math.cos(u * Math.PI) * Math.PI * dynamicSpineArch) / TORSO_LEN;
+          const localTang = torsoUp.clone().addScaledVector(torsoAnterior, archDeriv).normalize();
+          computeOrthonormalFrame(localTang, torsoAnterior, outX, outY, outZ);
         } else {
-          const u = (s - 0.70) / 0.30;
-          outCenter.lerpVectors(shoulderCenter, headTop, u);
+          const u = (s - sTorsoEnd) / (1 - sTorsoEnd);
+          outCenter.lerpVectors(pose.shoulderCenter, headTop, u);
           const neckBlend = Math.min(1, u * 2.0);
-          const ant = new THREE.Vector3().lerpVectors(torsoAnterior, headLookDir, neckBlend).normalize();
+          const ant = new THREE.Vector3()
+            .lerpVectors(torsoAnterior, pose.headLookDir, neckBlend)
+            .normalize();
           const tang = new THREE.Vector3().lerpVectors(torsoUp, headUpDir, neckBlend).normalize();
           computeOrthonormalFrame(tang, ant, outX, outY, outZ);
         }
       });
 
-      // Position & orient 3D Sculpted Hair Cap & Eyebrows directly onto the head frame
-      const headFrameX = new THREE.Vector3();
-      const headFrameY = new THREE.Vector3();
-      const headFrameZ = new THREE.Vector3();
-      computeOrthonormalFrame(headUpDir, headLookDir, headFrameX, headFrameY, headFrameZ);
-      const headBasisMat = new THREE.Matrix4().makeBasis(headFrameX, headFrameY, headFrameZ);
-      headHairGroup.position.copy(shoulderCenter);
-      headHairGroup.quaternion.setFromRotationMatrix(headBasisMat);
+      computeOrthonormalFrame(headUpDir, pose.headLookDir, headFrameX, headFrameY, headFrameZ);
+      headBasisMat.makeBasis(headFrameX, headFrameY, headFrameZ);
 
-      // 2. Shoulder & Hip Joint Sockets (Nested seamlessly inside upper lateral chest & pelvis)
-      const shoulderL = shoulderCenter
+      // 2. Shoulder & Hip Sockets (With real Shrug elevation!)
+      const shoulderDrop = -SHOULDER_DROP_FROM_TOP + pose.shoulderShrugY;
+      const shoulderL = pose.shoulderCenter
         .clone()
-        .addScaledVector(torsoRight, -0.172)
-        .addScaledVector(torsoUp, -0.048);
-      const shoulderR = shoulderCenter
+        .addScaledVector(torsoRight, -SHOULDER_HALF_WIDTH)
+        .addScaledVector(torsoUp, shoulderDrop);
+      const shoulderR = pose.shoulderCenter
         .clone()
-        .addScaledVector(torsoRight, 0.172)
-        .addScaledVector(torsoUp, -0.048);
+        .addScaledVector(torsoRight, SHOULDER_HALF_WIDTH)
+        .addScaledVector(torsoUp, shoulderDrop);
 
-      const hipL = hipsPos
+      const hipL = pose.hipsPos
         .clone()
-        .addScaledVector(torsoRight, -0.10)
-        .addScaledVector(torsoUp, 0.03);
-      const hipR = hipsPos
+        .addScaledVector(torsoRight, -HIP_HALF_WIDTH)
+        .addScaledVector(torsoUp, HIP_OFFSET_UP);
+      const hipR = pose.hipsPos
         .clone()
-        .addScaledVector(torsoRight, 0.10)
-        .addScaledVector(torsoUp, 0.03);
+        .addScaledVector(torsoRight, HIP_HALF_WIDTH)
+        .addScaledVector(torsoUp, HIP_OFFSET_UP);
 
-      // 3. Solve Arm IK & Deform Continuous Skinned Left/Right Arms with 3-Bone Wrist Articulation
-      const elbowL =
-        directElbowL || solveTwoBoneIK(shoulderL, handL, UPPER_ARM_LEN, FOREARM_LEN, elbowPoleL);
-      const elbowR =
-        directElbowR || solveTwoBoneIK(shoulderR, handR, UPPER_ARM_LEN, FOREARM_LEN, elbowPoleR);
+      // 3. Constrained Arm IK (Elbow strictly 0°..150°, zero dislocation) + Sculpted 3D Hands
+      const armIkL = solveConstrainedTwoBoneIK(
+        shoulderL,
+        pose.handL,
+        UPPER_ARM_LEN,
+        FOREARM_LEN,
+        pose.elbowPoleL,
+        JOINT_LIMITS_DEG.ELBOW_MAX
+      );
+      const armIkR = solveConstrainedTwoBoneIK(
+        shoulderR,
+        pose.handR,
+        UPPER_ARM_LEN,
+        FOREARM_LEN,
+        pose.elbowPoleR,
+        JOINT_LIMITS_DEG.ELBOW_MAX
+      );
 
-      const forearmDirL = new THREE.Vector3().subVectors(handL, elbowL).normalize();
-      const forearmDirR = new THREE.Vector3().subVectors(handR, elbowR).normalize();
+      const elbowL = armIkL.midPos;
+      const elbowR = armIkR.midPos;
+      const wristL = armIkL.clampedEndPos;
+      const wristR = armIkR.clampedEndPos;
 
-      const isGroundPalm =
-        clip === 'pushup' ||
-        clip === 'diamond_pushup' ||
-        clip === 'plank' ||
-        clip === 'mountain_climber';
-
-      const handTipL = isGroundPalm
-        ? new THREE.Vector3(handL.x, 0.020, handL.z + 0.085)
-        : handL.clone().addScaledVector(forearmDirL, HAND_LEN);
-      const handTipR = isGroundPalm
-        ? new THREE.Vector3(handR.x, 0.020, handR.z + 0.085)
-        : handR.clone().addScaledVector(forearmDirR, HAND_LEN);
-
-      const armAntRootL = new THREE.Vector3();
-      const armAntEndL = new THREE.Vector3();
       computeTwoBoneAnatomicalFrames(
         shoulderL,
         elbowL,
-        handL,
-        elbowPoleL,
+        wristL,
+        pose.elbowPoleL,
         true,
         torsoAnterior,
         armAntRootL,
         armAntEndL
       );
-
-      const armAntRootR = new THREE.Vector3();
-      const armAntEndR = new THREE.Vector3();
       computeTwoBoneAnatomicalFrames(
         shoulderR,
         elbowR,
-        handR,
-        elbowPoleR,
+        wristR,
+        pose.elbowPoleR,
         true,
         torsoAnterior,
         armAntRootR,
@@ -2719,15 +2353,16 @@ export function TrainerStudio3D({
       );
 
       armL.deformBySpineCurve((s, outCenter, outX, outY, outZ) => {
-        evaluateThreeBoneArmRing(
+        evaluateTwoBoneSkinnedRing(
           s,
+          armElbowJointS,
+          0.09,
           shoulderL,
           elbowL,
-          handL,
-          handTipL,
+          wristL,
           armAntRootL,
           armAntEndL,
-          isGroundPalm,
+          -0.006,
           outCenter,
           outX,
           outY,
@@ -2736,15 +2371,16 @@ export function TrainerStudio3D({
       });
 
       armR.deformBySpineCurve((s, outCenter, outX, outY, outZ) => {
-        evaluateThreeBoneArmRing(
+        evaluateTwoBoneSkinnedRing(
           s,
+          armElbowJointS,
+          0.09,
           shoulderR,
           elbowR,
-          handR,
-          handTipR,
+          wristR,
           armAntRootR,
           armAntEndR,
-          isGroundPalm,
+          -0.006,
           outCenter,
           outX,
           outY,
@@ -2752,30 +2388,75 @@ export function TrainerStudio3D({
         );
       });
 
-      // 4. Solve Leg IK & Deform Continuous Skinned Left/Right Legs with Singularity-Free Hinge Plane Frames
-      const kneeL = solveTwoBoneIK(hipL, footL, THIGH_LEN, CALF_LEN, kneePoleL);
-      const kneeR = solveTwoBoneIK(hipR, footR, THIGH_LEN, CALF_LEN, kneePoleR);
+      // Orient & Pose Sculpted 3D Anatomical Hands
+      computeAnatomicalHandBasis(
+        elbowL,
+        wristL,
+        armAntEndL,
+        pose.handMode,
+        pose.palmNormalHint,
+        handMatL
+      );
+      computeAnatomicalHandBasis(
+        elbowR,
+        wristR,
+        armAntEndR,
+        pose.handMode,
+        pose.palmNormalHint,
+        handMatR
+      );
 
-      const legAntRootL = new THREE.Vector3();
-      const legAntEndL = new THREE.Vector3();
+      handRigL.group.position.copy(wristL);
+      handRigL.group.quaternion.setFromRotationMatrix(handMatL);
+      handRigL.setHandPose(pose.handMode);
+
+      handRigR.group.position.copy(wristR);
+      handRigR.group.quaternion.setFromRotationMatrix(handMatR);
+      handRigR.setHandPose(pose.handMode);
+
+      forearmDirL.subVectors(wristL, elbowL).normalize();
+      forearmDirR.subVectors(wristR, elbowR).normalize();
+      handTipL.copy(wristL).addScaledVector(forearmDirL, HAND_LEN);
+      handTipR.copy(wristR).addScaledVector(forearmDirR, HAND_LEN);
+
+      // 4. Constrained Leg IK (Knee strictly 0°..145°, zero backward bend) + Tibia-Aligned Feet
+      const legIkL = solveConstrainedTwoBoneIK(
+        hipL,
+        pose.footL,
+        THIGH_LEN,
+        CALF_LEN,
+        pose.kneePoleL,
+        JOINT_LIMITS_DEG.KNEE_MAX
+      );
+      const legIkR = solveConstrainedTwoBoneIK(
+        hipR,
+        pose.footR,
+        THIGH_LEN,
+        CALF_LEN,
+        pose.kneePoleR,
+        JOINT_LIMITS_DEG.KNEE_MAX
+      );
+
+      const kneeL = legIkL.midPos;
+      const kneeR = legIkR.midPos;
+      const ankleL = legIkL.clampedEndPos;
+      const ankleR = legIkR.clampedEndPos;
+
       computeTwoBoneAnatomicalFrames(
         hipL,
         kneeL,
-        footL,
-        kneePoleL,
+        ankleL,
+        pose.kneePoleL,
         false,
         torsoAnterior,
         legAntRootL,
         legAntEndL
       );
-
-      const legAntRootR = new THREE.Vector3();
-      const legAntEndR = new THREE.Vector3();
       computeTwoBoneAnatomicalFrames(
         hipR,
         kneeR,
-        footR,
-        kneePoleR,
+        ankleR,
+        pose.kneePoleR,
         false,
         torsoAnterior,
         legAntRootR,
@@ -2785,14 +2466,14 @@ export function TrainerStudio3D({
       legL.deformBySpineCurve((s, outCenter, outX, outY, outZ) => {
         evaluateTwoBoneSkinnedRing(
           s,
-          0.51,
+          legKneeJointS,
           0.09,
           hipL,
           kneeL,
-          footL,
+          ankleL,
           legAntRootL,
           legAntEndL,
-          0.012,
+          0.011,
           outCenter,
           outX,
           outY,
@@ -2803,14 +2484,14 @@ export function TrainerStudio3D({
       legR.deformBySpineCurve((s, outCenter, outX, outY, outZ) => {
         evaluateTwoBoneSkinnedRing(
           s,
-          0.51,
+          legKneeJointS,
           0.09,
           hipR,
           kneeR,
-          footR,
+          ankleR,
           legAntRootR,
           legAntEndR,
-          0.012,
+          0.011,
           outCenter,
           outX,
           outY,
@@ -2818,16 +2499,124 @@ export function TrainerStudio3D({
         );
       });
 
-      // 5. Position & Orient Shoes at Ankles (`footL`, `footR`)
-      shoeL.position.copy(footL);
-      shoeR.position.copy(footR);
-      if (isGroundPalm) {
-        shoeL.rotation.set(Math.PI / 3.2, 0, 0);
-        shoeR.rotation.set(Math.PI / 3.2, 0, 0);
-      } else {
-        shoeL.rotation.set(0, 0, 0);
-        shoeR.rotation.set(0, 0, 0);
+      // 5. Orient Sculpted Anatomical Feet from Live Tibia & Anterior Shin Basis (ZERO reversed feet!)
+      computeAnatomicalFootBasis(
+        kneeL,
+        ankleL,
+        legAntEndL,
+        pose.footModeL,
+        pose.footPitchL,
+        'left',
+        pose.groundY,
+        footWorldPosL,
+        footMatL
+      );
+      computeAnatomicalFootBasis(
+        kneeR,
+        ankleR,
+        legAntEndR,
+        pose.footModeR,
+        pose.footPitchR,
+        'right',
+        pose.groundY,
+        footWorldPosR,
+        footMatR
+      );
+
+      footMeshL.position.copy(footWorldPosL);
+      footMeshL.quaternion.setFromRotationMatrix(footMatL);
+      footMeshR.position.copy(footWorldPosR);
+      footMeshR.quaternion.setFromRotationMatrix(footMatR);
+
+      // 6. Position & Synchronize Gym/Studio Equipment Props directly with Clamped Hands
+      const eq = pose.equipment;
+      matGroup.visible = eq.showMat;
+      pillowMesh.visible = eq.showPillow;
+      pullupRigGroup.visible = eq.showPullupRig;
+      dipBarsGroup.visible = eq.showDipBars;
+
+      benchGroup.visible = eq.showFlatBench;
+      if (eq.showFlatBench) {
+        benchGroup.position.copy(eq.benchPos);
       }
+
+      inclineBenchGroup.visible = eq.showInclineBench;
+      if (eq.showInclineBench) {
+        inclineBenchGroup.position.copy(eq.benchPos);
+        incBackPivot.rotation.x = eq.inclineAngleRad;
+      }
+
+      barbellGroup.visible = eq.showBarbell;
+      if (eq.showBarbell) {
+        // Center barbell precisely across clamped wrist grip midpoint so hands never detach from bar
+        const gripMid = new THREE.Vector3().addVectors(wristL, wristR).multiplyScalar(0.5);
+        barbellGroup.position.copy(gripMid);
+        barbellGroup.position.y = Math.max(0.20, gripMid.y);
+      }
+
+      dumbbellL.visible = eq.showDumbbells;
+      dumbbellR.visible = eq.showDumbbells;
+      if (eq.showDumbbells) {
+        const palmOffsetL = forearmDirL.clone().multiplyScalar(0.045);
+        const palmOffsetR = forearmDirR.clone().multiplyScalar(0.045);
+        dumbbellL.position.copy(wristL).add(palmOffsetL);
+        dumbbellL.rotation.copy(eq.dumbbellLRot);
+        dumbbellR.position.copy(wristR).add(palmOffsetR);
+        dumbbellR.rotation.copy(eq.dumbbellRRot);
+      }
+
+      cableBarGroup.visible = eq.showCableBar;
+      if (eq.showCableBar) {
+        const handleCenter = new THREE.Vector3().addVectors(wristL, wristR).multiplyScalar(0.5);
+        cableHandle.position.copy(handleCenter);
+        cablePulley.position.copy(eq.cableAnchorTop);
+        alignCylinderBetween(cableLineMesh, handleCenter, eq.cableAnchorTop);
+      }
+
+      rowBarGroup.visible = eq.showRowBar;
+      if (eq.showRowBar) {
+        rowCross.position.set(0, eq.rowBarY, eq.rowBarZ);
+        rowPostL.position.set(-0.56, eq.rowBarY * 0.5, eq.rowBarZ);
+        rowPostL.scale.set(1, eq.rowBarY, 1);
+        rowPostR.position.set(0.56, eq.rowBarY * 0.5, eq.rowBarZ);
+        rowPostR.scale.set(1, eq.rowBarY, 1);
+      }
+
+      towelGroup.visible = eq.showTowel;
+      if (eq.showTowel) {
+        towelLoop.position.copy(eq.towelFootPos);
+        alignCylinderBetween(towelSegL, wristL, eq.towelFootPos);
+        alignCylinderBetween(towelSegR, wristR, eq.towelFootPos);
+      }
+
+      // 7. Sync Live 22-Bone Articulated Anatomical Skeleton (Mode Tulang & X-Ray)
+      skeletonRig.updatePose({
+        pelvisBottom,
+        hipsPos: pose.hipsPos,
+        shoulderCenter: pose.shoulderCenter,
+        torsoRight,
+        torsoUp,
+        torsoAnterior,
+        headBasisMat,
+        spineArchOffset: dynamicSpineArch,
+        breathScale: 1 + breathWave * 0.025,
+        shoulderL,
+        shoulderR,
+        elbowL,
+        elbowR,
+        handL: wristL,
+        handR: wristR,
+        handTipL,
+        handTipR,
+        hipL,
+        hipR,
+        kneeL,
+        kneeR,
+        footL: ankleL,
+        footR: ankleR,
+      });
+
+      return pose.cameraGroup;
     };
 
     sceneRef.current = {
@@ -2907,7 +2696,6 @@ export function TrainerStudio3D({
         frameBadgeRef.current.textContent = `FRAME ${String(currentFrameInt).padStart(2, '0')} / 60 · 30 FPS`;
       }
 
-      // Smooth muscle highlight & camera preset damping
       stepMuscleTransitions(dt);
 
       if (cameraTransition) {
@@ -2924,18 +2712,16 @@ export function TrainerStudio3D({
         }
       }
 
-      applyProceduralPose(st.clipName, st.biomechanicalVariant, st.exerciseName, frameFloat);
+      const activeCamGroup = applyProceduralPose(
+        st.exerciseId,
+        st.clipName,
+        st.exerciseName,
+        frameFloat
+      );
 
-      // Keep grounded contact shadow aligned under athlete footprint
-      const isGroundPose =
-        st.clipName === 'pushup' ||
-        st.clipName === 'diamond_pushup' ||
-        st.clipName === 'plank' ||
-        st.clipName === 'mountain_climber' ||
-        st.clipName === 'crunch' ||
-        st.clipName === 'glute_bridge';
-      contactShadow.scale.set(isGroundPose ? 1.15 : 0.82, isGroundPose ? 1.55 : 0.82, 1);
-      contactShadow.position.z = isGroundPose ? -0.14 : 0;
+      const isHorizontal = activeCamGroup === 'floor' || activeCamGroup === 'sleep';
+      contactShadow.scale.set(isHorizontal ? 1.15 : 0.86, isHorizontal ? 1.55 : 0.86, 1);
+      contactShadow.position.z = isHorizontal ? -0.10 : 0;
 
       controls.update();
 
@@ -2967,7 +2753,7 @@ export function TrainerStudio3D({
         ];
 
         views.forEach((v) => {
-          const { pos, target } = computeCameraView(v.preset, st.clipName);
+          const { pos, target } = computeCameraView(v.preset, activeCamGroup);
           auxCamera.position.copy(pos);
           auxCamera.lookAt(target);
           renderer.setViewport(v.x, v.y, halfW, halfH);
@@ -3081,34 +2867,25 @@ export function TrainerStudio3D({
         className="w-full h-full cursor-grab active:cursor-grabbing"
       />
 
-      {/* Minimal Top-Left Frame Telemetry Pill */}
-      <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-2">
-        <div className="px-2.5 py-1 rounded-lg bg-[#0B1324]/92 border border-sky-500/25 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
-          <span
-            ref={frameBadgeRef}
-            className="text-[10px] font-mono font-bold text-sky-300 tracking-wider"
-          >
-            FRAME 00 / 60 · 30 FPS
-          </span>
-        </div>
+      {/* Minimal Top-Left Frame Telemetry */}
+      <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-3 text-[10px] font-mono font-bold text-amber-200/90 bg-[#0B1120]/80 px-2.5 py-1 rounded-lg border border-white/10">
+        <span ref={frameBadgeRef} className="tracking-wider">
+          FRAME 00 / 60 · 30 FPS
+        </span>
         {bpSpec && (
-          <div className="hidden sm:flex px-2.5 py-1 rounded-lg bg-[#0B1324]/92 border border-white/10 items-center gap-1.5">
-            <span className="text-[10px] font-semibold text-slate-300">
-              180 cm · 70 kg · IK Rig
-            </span>
-          </div>
+          <span className="hidden sm:inline text-slate-300 font-sans font-semibold">
+            · 180 cm · 22-Bone IK
+          </span>
         )}
       </div>
 
-      {/* Minimal Top-Right Muscle Status Pill */}
-      <div className="pointer-events-none absolute top-3 right-3 hidden sm:flex items-center gap-2">
-        <div className="px-2.5 py-1 rounded-lg bg-[#0B1324]/92 border border-red-500/30 flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-[#DC2626]" />
-          <span className="text-[10px] font-bold text-slate-200">
-            Anatomical Human IK
-          </span>
-        </div>
+      {/* Minimal Top-Right Active Mode Label */}
+      <div className="pointer-events-none absolute top-3 right-3 hidden sm:flex items-center text-[10px] font-semibold text-slate-200 bg-[#0B1120]/80 px-2.5 py-1 rounded-lg border border-white/10">
+        {displayMode === 'skeleton'
+          ? 'Mode Tulang · Kerangka 3D'
+          : displayMode === 'xray'
+          ? 'Mode X-Ray · Otot + Tulang'
+          : 'Mannequin PBR · Otot Aktif'}
       </div>
 
       {/* 4-Angle Blueprint Quadrant Labels when quadView is active */}

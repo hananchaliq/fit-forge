@@ -1,8 +1,12 @@
 import * as THREE from 'three';
 
 export interface ProceduralPBRTextureSet {
+  skinNormalMap: THREE.CanvasTexture;
   skinBumpMap: THREE.CanvasTexture;
   skinRoughnessMap: THREE.CanvasTexture;
+  boneNormalMap: THREE.CanvasTexture;
+  boneRoughnessMap: THREE.CanvasTexture;
+  fabricNormalMap: THREE.CanvasTexture;
   fabricBumpMap: THREE.CanvasTexture;
   fabricRoughnessMap: THREE.CanvasTexture;
   carbonBumpMap: THREE.CanvasTexture;
@@ -36,6 +40,61 @@ function createCanvas(size: number): [HTMLCanvasElement, CanvasRenderingContext2
   return [canvas, ctx];
 }
 
+/**
+ * Computes a true tangent-space normal map from a grayscale heightfield canvas
+ * using Sobel derivatives so Three.js PBR materials render authentic 3D sculptural relief.
+ */
+function buildNormalMapFromHeightCanvas(
+  heightCanvas: HTMLCanvasElement,
+  strength = 2.4
+): HTMLCanvasElement {
+  const size = heightCanvas.width;
+  const srcCtx = heightCanvas.getContext('2d');
+  const [normCanvas, normCtx] = createCanvas(size);
+  if (!srcCtx) return normCanvas;
+
+  const srcData = srcCtx.getImageData(0, 0, size, size).data;
+  const outImg = normCtx.createImageData(size, size);
+  const out = outImg.data;
+
+  const sample = (x: number, y: number) => {
+    const wx = ((x % size) + size) % size;
+    const wy = ((y % size) + size) % size;
+    return srcData[(wy * size + wx) * 4] / 255;
+  };
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const tl = sample(x - 1, y - 1);
+      const t = sample(x, y - 1);
+      const tr = sample(x + 1, y - 1);
+      const l = sample(x - 1, y);
+      const r = sample(x + 1, y);
+      const bl = sample(x - 1, y + 1);
+      const b = sample(x, y + 1);
+      const br = sample(x + 1, y + 1);
+
+      const dX = (tr + 2 * r + br - (tl + 2 * l + bl)) * strength;
+      const dY = (bl + 2 * b + br - (tl + 2 * t + tr)) * strength;
+      const dZ = 1.0;
+
+      const invLen = 1 / Math.sqrt(dX * dX + dY * dY + dZ * dZ);
+      const nx = -dX * invLen;
+      const ny = -dY * invLen;
+      const nz = dZ * invLen;
+
+      const idx = (y * size + x) * 4;
+      out[idx] = Math.round((nx * 0.5 + 0.5) * 255);
+      out[idx + 1] = Math.round((ny * 0.5 + 0.5) * 255);
+      out[idx + 2] = Math.round((nz * 0.5 + 0.5) * 255);
+      out[idx + 3] = 255;
+    }
+  }
+
+  normCtx.putImageData(outImg, 0, 0);
+  return normCanvas;
+}
+
 function finalizeTexture(
   canvas: HTMLCanvasElement,
   repeatX: number,
@@ -54,80 +113,123 @@ function finalizeTexture(
 }
 
 /**
- * Generates lightweight procedural PBR textures (skin micro-grain & fiber striations,
- * athletic compression weave, carbon-fiber armor weave, vulcanized gym floor, and
- * soft radial contact shadow) with zero external file dependencies.
+ * Generates high-detail 512x512 procedural 3D PBR maps:
+ * - Sculpted mannequin satin clay + anatomical muscle-fiber striation Normal/Bump/Roughness
+ * - Cortical bone Normal/Roughness for X-Ray & Mode Tulang
+ * - Woven athletic compression fabric Normal/Bump/Roughness for charcoal shorts & arm sleeve
+ * - Vulcanized studio gym floor Albedo/Roughness & soft radial contact shadow
  */
 export function createProceduralPBRTextures(maxAnisotropy = 4): ProceduralPBRTextureSet {
-  const size = 256;
+  const size = 512;
+  const smallSize = 256;
   const rand = mulberry32(20250311);
 
-  // 1. Organic Skin & Muscle-Fiber Micro-Detail (Bump + Roughness)
+  // 1. Sculpted Mannequin Muscle-Fiber + Micro-Clay Relief (512x512 Height -> Normal + Roughness)
   const [skinBumpCanvas, skinBumpCtx] = createCanvas(size);
   const [skinRoughCanvas, skinRoughCtx] = createCanvas(size);
 
   skinBumpCtx.fillStyle = '#808080';
   skinBumpCtx.fillRect(0, 0, size, size);
-  skinRoughCtx.fillStyle = '#929292'; // base ~0.57 roughness for natural satin skin
+  skinRoughCtx.fillStyle = '#7e7e7e'; // satin sculpted matte-resin ~0.49 base roughness
   skinRoughCtx.fillRect(0, 0, size, size);
 
-  // Subtle vertical muscle-fiber striation waves
+  // Fine anatomical muscle-fiber striations (layered harmonic waves)
   for (let x = 0; x < size; x += 2) {
-    const wave = Math.sin((x / size) * Math.PI * 18) * 10;
-    const vBump = Math.max(0, Math.min(255, Math.round(128 + wave)));
-    const vRough = Math.max(0, Math.min(255, Math.round(146 - wave * 0.7)));
-    skinBumpCtx.fillStyle = `rgba(${vBump},${vBump},${vBump},0.28)`;
+    const primaryWave = Math.sin((x / size) * Math.PI * 36) * 16;
+    const secondaryWave = Math.sin((x / size) * Math.PI * 12 + 0.7) * 9;
+    const combined = primaryWave + secondaryWave;
+    const vBump = Math.max(0, Math.min(255, Math.round(128 + combined)));
+    const vRough = Math.max(0, Math.min(255, Math.round(128 - combined * 0.75)));
+    skinBumpCtx.fillStyle = `rgba(${vBump},${vBump},${vBump},0.42)`;
     skinBumpCtx.fillRect(x, 0, 2, size);
-    skinRoughCtx.fillStyle = `rgba(${vRough},${vRough},${vRough},0.22)`;
+    skinRoughCtx.fillStyle = `rgba(${vRough},${vRough},${vRough},0.32)`;
     skinRoughCtx.fillRect(x, 0, 2, size);
   }
 
-  // Fine organic skin pores / micro-grain
-  for (let i = 0; i < 3600; i++) {
+  // Subtle horizontal sculptural fascia contours
+  for (let y = 0; y < size; y += 3) {
+    const band = Math.cos((y / size) * Math.PI * 16) * 8;
+    const vBump = Math.max(0, Math.min(255, Math.round(128 + band)));
+    skinBumpCtx.fillStyle = `rgba(${vBump},${vBump},${vBump},0.18)`;
+    skinBumpCtx.fillRect(0, y, size, 3);
+  }
+
+  // Sculptural micro-clay / satin resin grain pores
+  for (let i = 0; i < 11000; i++) {
     const px = Math.floor(rand() * size);
     const py = Math.floor(rand() * size);
-    const tone = rand() > 0.5 ? 148 : 108;
-    const r = rand() > 0.75 ? 2 : 1;
-    skinBumpCtx.fillStyle = `rgba(${tone},${tone},${tone},0.16)`;
+    const tone = rand() > 0.5 ? 162 : 94;
+    const r = rand() > 0.8 ? 2 : 1;
+    skinBumpCtx.fillStyle = `rgba(${tone},${tone},${tone},0.22)`;
     skinBumpCtx.fillRect(px, py, r, r);
 
-    const rt = rand() > 0.5 ? 168 : 128;
-    skinRoughCtx.fillStyle = `rgba(${rt},${rt},${rt},0.15)`;
+    const rt = rand() > 0.5 ? 158 : 108;
+    skinRoughCtx.fillStyle = `rgba(${rt},${rt},${rt},0.20)`;
     skinRoughCtx.fillRect(px, py, r, r);
   }
 
-  // 2. Athletic Compression Fabric Weave (Shorts)
-  const [fabBumpCanvas, fabBumpCtx] = createCanvas(size);
-  const [fabRoughCanvas, fabRoughCtx] = createCanvas(size);
+  const skinNormalCanvas = buildNormalMapFromHeightCanvas(skinBumpCanvas, 2.8);
+
+  // 2. Cortical Ivory Bone Texture (for Mode Tulang & X-Ray)
+  const [boneHeightCanvas, boneHeightCtx] = createCanvas(smallSize);
+  const [boneRoughCanvas, boneRoughCtx] = createCanvas(smallSize);
+
+  boneHeightCtx.fillStyle = '#828282';
+  boneHeightCtx.fillRect(0, 0, smallSize, smallSize);
+  boneRoughCtx.fillStyle = '#767676';
+  boneRoughCtx.fillRect(0, 0, smallSize, smallSize);
+
+  for (let x = 0; x < smallSize; x += 2) {
+    const grain = Math.sin((x / smallSize) * Math.PI * 22) * 10;
+    const v = Math.max(0, Math.min(255, Math.round(128 + grain)));
+    boneHeightCtx.fillStyle = `rgba(${v},${v},${v},0.35)`;
+    boneHeightCtx.fillRect(x, 0, 2, smallSize);
+  }
+  for (let i = 0; i < 3000; i++) {
+    const px = Math.floor(rand() * smallSize);
+    const py = Math.floor(rand() * smallSize);
+    const v = rand() > 0.5 ? 154 : 102;
+    boneHeightCtx.fillStyle = `rgba(${v},${v},${v},0.22)`;
+    boneHeightCtx.fillRect(px, py, 2, 1);
+    const rv = rand() > 0.5 ? 142 : 98;
+    boneRoughCtx.fillStyle = `rgba(${rv},${rv},${rv},0.25)`;
+    boneRoughCtx.fillRect(px, py, 2, 2);
+  }
+  const boneNormalCanvas = buildNormalMapFromHeightCanvas(boneHeightCanvas, 2.1);
+
+  // 3. Athletic Compression Fabric Weave (Charcoal Shorts, Left Arm Sleeve & Right Wrist Wrap)
+  const [fabBumpCanvas, fabBumpCtx] = createCanvas(smallSize);
+  const [fabRoughCanvas, fabRoughCtx] = createCanvas(smallSize);
 
   fabBumpCtx.fillStyle = '#787878';
-  fabBumpCtx.fillRect(0, 0, size, size);
-  fabRoughCtx.fillStyle = '#c8c8c8'; // matte fabric ~0.78 roughness
-  fabRoughCtx.fillRect(0, 0, size, size);
+  fabBumpCtx.fillRect(0, 0, smallSize, smallSize);
+  fabRoughCtx.fillStyle = '#c4c4c4'; // matte technical jersey ~0.77 roughness
+  fabRoughCtx.fillRect(0, 0, smallSize, smallSize);
 
   const step = 4;
-  for (let y = 0; y < size; y += step) {
-    for (let x = 0; x < size; x += step) {
+  for (let y = 0; y < smallSize; y += step) {
+    for (let x = 0; x < smallSize; x += step) {
       const checker = ((x / step + y / step) & 1) === 0;
-      fabBumpCtx.fillStyle = checker ? '#969696' : '#5e5e5e';
+      fabBumpCtx.fillStyle = checker ? '#a4a4a4' : '#525252';
       fabBumpCtx.fillRect(x, y, step - 1, step - 1);
-      fabRoughCtx.fillStyle = checker ? '#d8d8d8' : '#b2b2b2';
+      fabRoughCtx.fillStyle = checker ? '#dadada' : '#a8a8a8';
       fabRoughCtx.fillRect(x, y, step - 1, step - 1);
     }
   }
+  const fabNormalCanvas = buildNormalMapFromHeightCanvas(fabBumpCanvas, 2.2);
 
-  // 3. Diagonal Carbon-Fiber Weave (Hero Runner Armor)
-  const [carbBumpCanvas, carbBumpCtx] = createCanvas(size);
-  const [carbRoughCanvas, carbRoughCtx] = createCanvas(size);
+  // 4. Diagonal Carbon-Fiber Weave (Gym Equipment & Stage Accent)
+  const [carbBumpCanvas, carbBumpCtx] = createCanvas(smallSize);
+  const [carbRoughCanvas, carbRoughCtx] = createCanvas(smallSize);
 
   carbBumpCtx.fillStyle = '#6e6e6e';
-  carbBumpCtx.fillRect(0, 0, size, size);
-  carbRoughCtx.fillStyle = '#5a5a5a'; // sleek satin carbon ~0.35
-  carbRoughCtx.fillRect(0, 0, size, size);
+  carbBumpCtx.fillRect(0, 0, smallSize, smallSize);
+  carbRoughCtx.fillStyle = '#5a5a5a';
+  carbRoughCtx.fillRect(0, 0, smallSize, smallSize);
 
   const cell = 8;
-  for (let y = 0; y < size; y += cell) {
-    for (let x = 0; x < size; x += cell) {
+  for (let y = 0; y < smallSize; y += cell) {
+    for (let x = 0; x < smallSize; x += cell) {
       const diag = ((x / cell + y / cell) % 2) === 0;
       carbBumpCtx.fillStyle = diag ? '#a6a6a6' : '#4a4a4a';
       carbBumpCtx.fillRect(x + 1, y + 1, cell - 2, cell - 2);
@@ -136,25 +238,24 @@ export function createProceduralPBRTextures(maxAnisotropy = 4): ProceduralPBRTex
     }
   }
 
-  // 4. Studio Gym Rubber Floor (Albedo + Roughness)
-  const [floorAlbCanvas, floorAlbCtx] = createCanvas(size);
-  const [floorRoughCanvas, floorRoughCtx] = createCanvas(size);
+  // 5. Studio Gym Rubber Floor (Albedo + Roughness)
+  const [floorAlbCanvas, floorAlbCtx] = createCanvas(smallSize);
+  const [floorRoughCanvas, floorRoughCtx] = createCanvas(smallSize);
 
-  floorAlbCtx.fillStyle = '#0b1221';
-  floorAlbCtx.fillRect(0, 0, size, size);
+  floorAlbCtx.fillStyle = '#0c111b';
+  floorAlbCtx.fillRect(0, 0, smallSize, smallSize);
   floorRoughCtx.fillStyle = '#d4d4d4';
-  floorRoughCtx.fillRect(0, 0, size, size);
+  floorRoughCtx.fillRect(0, 0, smallSize, smallSize);
 
-  // Fine architectural tile seams
-  floorAlbCtx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
+  floorAlbCtx.strokeStyle = 'rgba(245, 184, 0, 0.08)';
   floorAlbCtx.lineWidth = 1;
-  floorAlbCtx.strokeRect(0.5, 0.5, size - 1, size - 1);
+  floorAlbCtx.strokeRect(0.5, 0.5, smallSize - 1, smallSize - 1);
 
   for (let i = 0; i < 4200; i++) {
-    const px = Math.floor(rand() * size);
-    const py = Math.floor(rand() * size);
-    const bright = rand() > 0.85 ? 36 : 18;
-    floorAlbCtx.fillStyle = `rgba(${bright}, ${bright + 10}, ${bright + 24}, 0.35)`;
+    const px = Math.floor(rand() * smallSize);
+    const py = Math.floor(rand() * smallSize);
+    const bright = rand() > 0.85 ? 34 : 18;
+    floorAlbCtx.fillStyle = `rgba(${bright}, ${bright + 4}, ${bright + 10}, 0.36)`;
     floorAlbCtx.fillRect(px, py, 2, 2);
 
     const rv = Math.round(185 + rand() * 55);
@@ -162,7 +263,7 @@ export function createProceduralPBRTextures(maxAnisotropy = 4): ProceduralPBRTex
     floorRoughCtx.fillRect(px, py, 2, 2);
   }
 
-  // 5. Soft Radial Contact Shadow Map (grounded beneath athlete / runner)
+  // 6. Soft Radial Contact Shadow Map
   const [shadowCanvas, shadowCtx] = createCanvas(256);
   const grad = shadowCtx.createRadialGradient(128, 128, 14, 128, 128, 124);
   grad.addColorStop(0, 'rgba(0, 0, 0, 0.88)');
@@ -172,10 +273,14 @@ export function createProceduralPBRTextures(maxAnisotropy = 4): ProceduralPBRTex
   shadowCtx.fillStyle = grad;
   shadowCtx.fillRect(0, 0, 256, 256);
 
-  const skinBumpMap = finalizeTexture(skinBumpCanvas, 4, 4, maxAnisotropy, false);
-  const skinRoughnessMap = finalizeTexture(skinRoughCanvas, 4, 4, maxAnisotropy, false);
-  const fabricBumpMap = finalizeTexture(fabBumpCanvas, 8, 8, maxAnisotropy, false);
-  const fabricRoughnessMap = finalizeTexture(fabRoughCanvas, 8, 8, maxAnisotropy, false);
+  const skinNormalMap = finalizeTexture(skinNormalCanvas, 3, 3, maxAnisotropy, false);
+  const skinBumpMap = finalizeTexture(skinBumpCanvas, 3, 3, maxAnisotropy, false);
+  const skinRoughnessMap = finalizeTexture(skinRoughCanvas, 3, 3, maxAnisotropy, false);
+  const boneNormalMap = finalizeTexture(boneNormalCanvas, 2, 2, maxAnisotropy, false);
+  const boneRoughnessMap = finalizeTexture(boneRoughCanvas, 2, 2, maxAnisotropy, false);
+  const fabricNormalMap = finalizeTexture(fabNormalCanvas, 6, 6, maxAnisotropy, false);
+  const fabricBumpMap = finalizeTexture(fabBumpCanvas, 6, 6, maxAnisotropy, false);
+  const fabricRoughnessMap = finalizeTexture(fabRoughCanvas, 6, 6, maxAnisotropy, false);
   const carbonBumpMap = finalizeTexture(carbBumpCanvas, 6, 6, maxAnisotropy, false);
   const carbonRoughnessMap = finalizeTexture(carbRoughCanvas, 6, 6, maxAnisotropy, false);
   const floorAlbedoMap = finalizeTexture(floorAlbCanvas, 10, 10, maxAnisotropy, true);
@@ -186,8 +291,12 @@ export function createProceduralPBRTextures(maxAnisotropy = 4): ProceduralPBRTex
   contactShadowMap.needsUpdate = true;
 
   return {
+    skinNormalMap,
     skinBumpMap,
     skinRoughnessMap,
+    boneNormalMap,
+    boneRoughnessMap,
+    fabricNormalMap,
     fabricBumpMap,
     fabricRoughnessMap,
     carbonBumpMap,
@@ -196,8 +305,12 @@ export function createProceduralPBRTextures(maxAnisotropy = 4): ProceduralPBRTex
     floorRoughnessMap,
     contactShadowMap,
     dispose: () => {
+      skinNormalMap.dispose();
       skinBumpMap.dispose();
       skinRoughnessMap.dispose();
+      boneNormalMap.dispose();
+      boneRoughnessMap.dispose();
+      fabricNormalMap.dispose();
       fabricBumpMap.dispose();
       fabricRoughnessMap.dispose();
       carbonBumpMap.dispose();

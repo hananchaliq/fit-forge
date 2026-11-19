@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   Volume2,
   Eye,
-  Sparkles,
   AlertTriangle,
   Dumbbell,
   Timer,
@@ -25,6 +24,7 @@ import {
   Sliders,
   Grid2X2,
   Box,
+  Bone,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
 import { BodyHighlighter2D } from '@/components/plan/BodyHighlighter2D';
@@ -42,7 +42,10 @@ import {
   type BlueprintExerciseSpec,
 } from '@/data/blueprintPack';
 import { soundEngine } from '@/lib/audio';
-import type { CameraPreset } from '@/components/workout3d/TrainerStudio3D';
+import type {
+  CameraPreset,
+  MannequinDisplayMode,
+} from '@/components/workout3d/TrainerStudio3D';
 
 const TrainerStudio3D = dynamic(
   () => import('@/components/workout3d/TrainerStudio3D').then((m) => m.TrainerStudio3D),
@@ -98,6 +101,7 @@ function WorkoutStudioContent() {
   const [isPaused, setIsPaused] = useState(false);
   const [timeScale, setTimeScale] = useState(1.0);
   const [cameraPreset, setCameraPreset] = useState<CameraPreset>('side');
+  const [displayMode, setDisplayMode] = useState<MannequinDisplayMode>('muscle');
   const [quadView, setQuadView] = useState(false);
   const [lockedFrame, setLockedFrame] = useState<number | null>(null);
   const [debugMuscleMask, setDebugMuscleMask] = useState(false);
@@ -246,8 +250,8 @@ function WorkoutStudioContent() {
       </AnimatePresence>
 
       {/* Top Exercise & Blueprint Selector Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 sm:gap-3 mb-3 sm:mb-4">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
           <select
             aria-label="Pilih hari program latihan"
             value={selectedDayKey}
@@ -257,7 +261,7 @@ function WorkoutStudioContent() {
               const list = getExercisesForDay(nextDay, planMode);
               if (list[0]) setSelectedExerciseId(list[0].id);
             }}
-            className="min-h-[44px] w-full sm:w-auto max-w-full px-3.5 py-2 rounded-xl bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] text-xs font-bold text-[#111114] dark:text-white shadow-xs"
+            className="min-h-[40px] sm:min-h-[44px] w-full sm:w-auto max-w-full px-2.5 sm:px-3.5 py-2 rounded-xl bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] text-[11px] sm:text-xs font-bold text-[#111114] dark:text-white shadow-xs truncate"
           >
             {WEEKLY_PLAN.map((d) => (
               <option key={d.key} value={d.key}>
@@ -276,7 +280,7 @@ function WorkoutStudioContent() {
               const bp = BLUEPRINT_EXERCISES.find((b) => b.fitforgeExerciseId === exId);
               if (bp) setActiveBlueprintId(bp.id);
             }}
-            className="min-h-[44px] w-full sm:w-auto max-w-full px-3.5 py-2 rounded-xl bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] text-xs font-bold text-[#111114] dark:text-white shadow-xs"
+            className="min-h-[40px] sm:min-h-[44px] w-full sm:w-auto max-w-full px-2.5 sm:px-3.5 py-2 rounded-xl bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] text-[11px] sm:text-xs font-bold text-[#111114] dark:text-white shadow-xs truncate"
           >
             {Object.values(EXERCISES).map((ex) => (
               <option key={ex.id} value={ex.id}>
@@ -285,38 +289,66 @@ function WorkoutStudioContent() {
             ))}
           </select>
 
-          <div className="inline-flex rounded-xl bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] p-1 shadow-xs">
-            {(
-              [
-                { key: 'gym', label: 'Gym' },
-                { key: 'home', label: 'Rumah' },
-              ] as const
-            ).map((mode) => (
-              <button
-                key={mode.key}
-                type="button"
-                onClick={() => setPlanMode(mode.key)}
-                className={`relative min-h-[38px] px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${
-                  planMode === mode.key
-                    ? 'text-white dark:text-black'
-                    : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-white'
-                }`}
-              >
-                {planMode === mode.key && (
-                  <motion.span
-                    layoutId="workout-plan-mode-pill"
-                    transition={MOTION_SPRING}
-                    className="absolute inset-0 rounded-lg bg-[#141418] dark:bg-[#F97316] shadow-xs"
-                  />
-                )}
-                <span className="relative z-10">{mode.label}</span>
-              </button>
-            ))}
+          <div className="col-span-2 sm:col-span-1 flex items-center gap-2 min-w-0">
+            <div className="inline-flex rounded-xl bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] p-1 shadow-xs shrink-0">
+              {(
+                [
+                  { key: 'gym', label: 'Gym' },
+                  { key: 'home', label: 'Rumah' },
+                ] as const
+              ).map((mode) => (
+                <button
+                  key={mode.key}
+                  type="button"
+                  onClick={() => setPlanMode(mode.key)}
+                  className={`relative min-h-[34px] sm:min-h-[38px] px-3 sm:px-3.5 py-1 sm:py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${
+                    planMode === mode.key
+                      ? 'text-white dark:text-black'
+                      : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-white'
+                  }`}
+                >
+                  {planMode === mode.key && (
+                    <motion.span
+                      layoutId="workout-plan-mode-pill"
+                      transition={MOTION_SPRING}
+                      className="absolute inset-0 rounded-lg bg-[#141418] dark:bg-[#F97316] shadow-xs"
+                    />
+                  )}
+                  <span className="relative z-10">{mode.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Mobile horizontal swipeable Blueprint trio */}
+            <div className="lg:hidden flex items-center gap-1 overflow-x-auto no-scrollbar snap-x snap-mandatory bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] p-1 rounded-xl shadow-xs min-w-0 flex-1">
+              {BLUEPRINT_EXERCISES.map((bp) => {
+                const isSelected = currentExercise.id === bp.fitforgeExerciseId;
+                return (
+                  <button
+                    key={`mob-${bp.id}`}
+                    type="button"
+                    onClick={() => {
+                      setSelectedExerciseId(bp.fitforgeExerciseId);
+                      setActiveBlueprintId(bp.id);
+                      setCurrentSet(1);
+                      setCameraPreset(bp.id === '03_pull_up' ? 'front' : 'side');
+                    }}
+                    className={`snap-start shrink-0 min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black'
+                        : 'text-[#111114] dark:text-neutral-300'
+                    }`}
+                  >
+                    {bp.code}. {bp.exercise.replace('_', '-').toUpperCase()}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        {/* Blueprint 3D Core Trio Quick-Switch (01. PUSH-UP · 02. SQUAT · 03. PULL-UP) */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] p-1.5 rounded-2xl shadow-xs w-full sm:w-auto">
+        {/* Desktop Blueprint 3D Core Trio Quick-Switch (01. PUSH-UP · 02. SQUAT · 03. PULL-UP) */}
+        <div className="hidden lg:flex items-center gap-1.5 bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] p-1.5 rounded-2xl shadow-xs">
           <span className="px-2 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             Blueprint:
           </span>
@@ -361,41 +393,76 @@ function WorkoutStudioContent() {
       <div className="w-full rounded-3xl bg-[#070B14] border border-[#1E293B] overflow-hidden shadow-2xl mb-6">
         {/* 1. Studio Top Bar */}
         <div className="px-3.5 sm:px-5 py-3 bg-[#0B1120] border-b border-[#1E293B] flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-2.5 h-2.5 rounded-full bg-[#EF4444] shrink-0 shadow-[0_0_10px_#EF4444]" />
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xs sm:text-sm font-extrabold text-white truncate">
-                  {currentExercise.name}
-                </h2>
-                <span className="px-2 py-0.5 rounded-md bg-sky-500/15 border border-sky-500/30 text-[10px] font-bold text-sky-300 font-telemetry">
-                  Set {currentSet}/{currentExercise.sets} · {currentExercise.reps} rep
-                </span>
-              </div>
-              <div className="hidden sm:flex items-center gap-3 mt-0.5 text-[11px] text-slate-400">
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-[#DC2626]" />
-                  Otot Aktif
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-[#B8C1CC]" />
-                  Anatomi PBR
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-[#161920] border border-slate-600" />
-                  Kompresi
-                </span>
-              </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+              <h2 className="text-xs sm:text-sm font-extrabold text-white truncate">
+                {currentExercise.name}
+              </h2>
+              <span className="text-[11px] font-semibold text-amber-400 font-telemetry">
+                Set {currentSet}/{currentExercise.sets} · {currentExercise.reps} rep
+              </span>
+            </div>
+            <div className="hidden sm:flex items-center gap-3 mt-1 text-[11px] text-slate-400">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#E53935]" />
+                Otot Aktif
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#DFC5A4]" />
+                Mannequin PBR
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#F4ECDA]" />
+                Kerangka Tulang
+              </span>
             </div>
           </div>
 
-          {/* Right: Single Studio vs 4-Angle Quad View + Camera Angle Pills */}
+          {/* Right: 3D Anatomy Mode (Otot PBR / X-Ray / Mode Tulang) + View & Camera Controls */}
           <div className="flex flex-wrap items-center gap-2 max-w-full">
+            {/* Mannequin Display Mode Switcher */}
+            <div
+              className="inline-flex rounded-xl bg-[#070B14] p-1 border border-[#1E293B] overflow-x-auto no-scrollbar max-w-full"
+              role="group"
+              aria-label="Mode tampilan anatomi 3D"
+            >
+              {(
+                [
+                  { key: 'muscle', label: 'Otot PBR' },
+                  { key: 'xray', label: 'X-Ray' },
+                  { key: 'skeleton', label: 'Mode Tulang' },
+                ] as const
+              ).map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => setDisplayMode(m.key)}
+                  className={`relative min-h-[38px] px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                    displayMode === m.key
+                      ? 'text-black'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {displayMode === m.key && (
+                    <motion.span
+                      layoutId="workout-displaymode-pill"
+                      transition={MOTION_SPRING}
+                      className="absolute inset-0 rounded-lg bg-gradient-to-r from-[#F97316] to-[#F59E0B]"
+                    />
+                  )}
+                  {m.key === 'skeleton' && (
+                    <Bone className="relative z-10 w-3.5 h-3.5 shrink-0" />
+                  )}
+                  <span className="relative z-10">{m.label}</span>
+                </button>
+              ))}
+            </div>
+
             <div className="inline-flex rounded-xl bg-[#070B14] p-1 border border-[#1E293B]">
               <button
                 type="button"
                 onClick={() => setQuadView(false)}
-                className={`relative min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                className={`relative min-h-[38px] px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
                   !quadView ? 'text-slate-950' : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -407,12 +474,12 @@ function WorkoutStudioContent() {
                   />
                 )}
                 <Box className="relative z-10 w-3.5 h-3.5 shrink-0" />
-                <span className="relative z-10">Studio 3D</span>
+                <span className="relative z-10">Studio</span>
               </button>
               <button
                 type="button"
                 onClick={() => setQuadView(true)}
-                className={`relative min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                className={`relative min-h-[38px] px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
                   quadView ? 'text-slate-950' : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -451,7 +518,7 @@ function WorkoutStudioContent() {
                     {cameraPreset === cam.key && (
                       <motion.span
                         layoutId="workout-cam-preset-pill"
-                        className="absolute inset-0 rounded-lg bg-[#162033] border border-sky-500/30"
+                        className="absolute inset-0 rounded-lg bg-[#162033] border border-amber-500/30"
                         transition={{ type: 'spring', stiffness: 420, damping: 32 }}
                       />
                     )}
@@ -471,6 +538,7 @@ function WorkoutStudioContent() {
             heightClass="h-full"
           >
             <TrainerStudio3D
+              exerciseId={currentExercise.id}
               clip={currentExercise.clip}
               biomechanicalVariant={currentExercise.biomechanicalVariant}
               exerciseName={currentExercise.name}
@@ -479,6 +547,7 @@ function WorkoutStudioContent() {
               timeScale={timeScale}
               isPaused={isPaused}
               cameraPreset={cameraPreset}
+              displayMode={displayMode}
               debugMuscleMask={debugMuscleMask}
               quadView={quadView}
               lockedFrame={lockedFrame}
@@ -488,12 +557,12 @@ function WorkoutStudioContent() {
 
         {/* 3. Studio Bottom Control Dock */}
         <div className="bg-[#0B1120] border-t border-[#1E293B] p-3 sm:p-4 space-y-3">
-          {/* Row A: 3D Pose Sequence Scrubber */}
+          {/* Row A: 3D Pose Sequence Scrubber (Horizontal snap scroll on mobile, 6-col grid on sm+) */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#1E293B]/80">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-sky-400 shrink-0">
-              Urutan Pose 3D:
+            <span className="text-xs font-bold text-amber-400 shrink-0">
+              Urutan Pose 3D
             </span>
-            <div className="grid grid-cols-2 min-[420px]:grid-cols-3 sm:grid-cols-6 gap-1.5 w-full sm:w-auto flex-1 max-w-[780px]">
+            <div className="flex sm:grid sm:grid-cols-6 gap-1.5 w-full sm:w-auto flex-1 max-w-[780px] overflow-x-auto sm:overflow-visible snap-x snap-mandatory pb-1 sm:pb-0">
               {keyframeButtons.map((btn) => {
                 const isSelected = lockedFrame === btn.frame;
                 return (
@@ -504,9 +573,9 @@ function WorkoutStudioContent() {
                       setLockedFrame(btn.frame);
                       if (btn.frame === null) setIsPaused(false);
                     }}
-                    className={`min-h-[44px] px-2.5 py-1.5 rounded-xl border text-left transition cursor-pointer min-w-0 ${
+                    className={`min-w-[118px] sm:min-w-0 snap-start min-h-[44px] px-2.5 py-1.5 rounded-xl border text-left transition cursor-pointer shrink-0 sm:shrink ${
                       isSelected
-                        ? 'bg-sky-500/20 border-sky-400 text-white'
+                        ? 'bg-amber-500/20 border-amber-400 text-white'
                         : 'bg-[#070B14] border-[#1E293B] text-slate-400 hover:text-white hover:border-slate-700'
                     }`}
                   >
@@ -656,7 +725,7 @@ function WorkoutStudioContent() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card">
               <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="w-4 h-4 text-emerald-500" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                 <h3 className="text-sm font-semibold text-[#111111] dark:text-white">
                   3 Kunci Teknik Form yang Benar
                 </h3>
