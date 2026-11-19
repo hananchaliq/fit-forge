@@ -31,6 +31,7 @@ import {
   Cell,
 } from 'recharts';
 import { AppShell } from '@/components/layout/AppShell';
+import { CountUpMetric, ProgressRing } from '@/components/ui/CountUpMetric';
 import { useFitForgeStore } from '@/store/useFitForgeStore';
 import { getExercisesForDay, GOLDEN_RULES, WEEKLY_PLAN } from '@/data/weeklyPlan';
 import { MUSCLE_LABELS_ID } from '@/data/exerciseClipMap';
@@ -118,31 +119,31 @@ export default function DashboardPage() {
       ctaLabel="Mulai Latihan Hari Ini"
       ctaHref={`/workout?exercise=${todayExercises[0]?.id || 'pushup'}`}
     >
-      {/* ROW 1 — 4 KPI CARDS (Matches ref-1 Quantro: Card 1 is DARK HERO #161616) */}
+      {/* ROW 1 — 4 EDITORIAL-ATHLETIC KPI CARDS (Card 1 is Layered Obsidian Hero) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-        {/* KPI 1: HERO DARK CARD (#161616) — Jarak Lari Mingguan */}
+        {/* KPI 1: HERO OBSIDIAN CARD — Jarak Lari Mingguan */}
         <motion.div
-          whileHover={{ y: -3 }}
+          whileHover={{ y: -2 }}
           transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-          className="rounded-2xl bg-[#161616] text-white p-5 border border-[#262626] shadow-card flex flex-col justify-between"
+          className="rounded-2xl bg-[#141418] athletic-grain text-white p-5 border border-[#27272F] shadow-card flex flex-col justify-between min-w-0"
         >
-          <div className="flex items-center justify-between">
-            <div className="w-9 h-9 rounded-xl bg-[#262626] flex items-center justify-center">
+          <div className="flex items-center justify-between gap-2">
+            <div className="w-9 h-9 rounded-xl bg-[#22222A] border border-[#32323D] flex items-center justify-center shrink-0">
               <MapPin className="w-4 h-4 text-[#F59E0B]" />
             </div>
-            <span className="text-xs font-semibold text-emerald-400 tabular-nums">
+            <span className="text-xs font-semibold text-emerald-400 font-telemetry truncate">
               {totalRunKmWeek > 0 ? `${runSessions.length} sesi aktif` : '0.0 km minggu ini'}
             </span>
           </div>
 
-          <div className="my-3">
+          <div className="my-3.5 min-w-0">
             <p className="text-xs font-medium text-neutral-400">Jarak Lari Mingguan</p>
             <div className="flex items-baseline justify-between gap-2 mt-1">
-              <p className="text-[32px] leading-[38px] font-bold tracking-tight tabular-nums text-white">
-                {totalRunKmWeek.toFixed(1)} <span className="text-base font-semibold text-neutral-400">km</span>
+              <p className="text-[30px] sm:text-[34px] leading-none font-extrabold tracking-tight font-telemetry text-white">
+                <CountUpMetric value={totalRunKmWeek} decimals={1} />{' '}
+                <span className="text-sm font-sans font-semibold text-neutral-400">km</span>
               </p>
-              {/* Amber SVG Sparkline */}
-              <svg className="w-20 h-8 overflow-visible" viewBox="0 0 80 28">
+              <svg className="w-20 h-8 overflow-visible shrink-0" viewBox="0 0 80 28" aria-hidden="true">
                 <path
                   d="M2 22 L15 18 L28 24 L42 12 L55 15 L68 5 L78 8"
                   fill="none"
@@ -155,9 +156,12 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-[#262626] text-xs text-neutral-400">
-            <span>{runSessions.length} sesi tercatat</span>
-            <Link href="/run" className="text-[#F59E0B] font-semibold hover:underline">
+          <div className="flex items-center justify-between pt-2.5 border-t border-[#27272F] text-xs text-neutral-400">
+            <span className="truncate">{runSessions.length} sesi tercatat</span>
+            <Link
+              href="/run"
+              className="min-h-[44px] -my-2 px-1 flex items-center text-[#F59E0B] font-bold hover:underline shrink-0"
+            >
               Lacak GPS →
             </Link>
           </div>
@@ -165,31 +169,31 @@ export default function DashboardPage() {
 
         {/* KPI 2: Latihan Selesai (Sesi + Volume) */}
         <motion.div
-          whileHover={{ y: -3 }}
+          whileHover={{ y: -2 }}
           transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-          className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card flex flex-col justify-between"
+          className="surface-card p-5 flex flex-col justify-between min-w-0"
         >
-          <div className="flex items-center justify-between">
-            <div className="w-9 h-9 rounded-xl bg-[#FEF3C7] dark:bg-[#262626] flex items-center justify-center">
-              <Dumbbell className="w-4 h-4 text-[#B45309] dark:text-[#F59E0B]" />
+          <div className="flex items-center justify-between gap-2">
+            <div className="w-9 h-9 rounded-xl bg-[#FEF3C7] dark:bg-[#22222A] flex items-center justify-center shrink-0">
+              <Dumbbell className="w-4 h-4 text-[#92400E] dark:text-[#F59E0B]" />
             </div>
-            <span className="text-xs font-semibold text-[#047857] dark:text-emerald-400 tabular-nums">
+            <span className="text-xs font-semibold text-[#065F46] dark:text-emerald-400 font-telemetry truncate">
               {totalVolumeWeek > 0 ? `${totalVolumeWeek.toLocaleString('id-ID')} kg` : '0 kg volume'}
             </span>
           </div>
 
-          <div className="my-3">
-            <p className="text-xs font-medium text-[#6B7280] dark:text-neutral-400">
-              Latihan Selesai & Volume
+          <div className="my-3.5 min-w-0">
+            <p className="text-xs font-medium text-[#52525B] dark:text-neutral-400">
+              Latihan Selesai &amp; Volume
             </p>
             <div className="flex items-baseline justify-between gap-2 mt-1">
-              <p className="text-[32px] leading-[38px] font-bold tracking-tight tabular-nums text-[#111111] dark:text-white">
-                {workouts.length}{' '}
-                <span className="text-sm font-semibold text-[#6B7280] dark:text-neutral-400">
+              <p className="text-[30px] sm:text-[34px] leading-none font-extrabold tracking-tight font-telemetry text-[#111114] dark:text-white">
+                <CountUpMetric value={workouts.length} />{' '}
+                <span className="text-xs sm:text-sm font-sans font-semibold text-[#52525B] dark:text-neutral-400">
                   sesi · {(totalVolumeWeek / 1000).toFixed(1)}t
                 </span>
               </p>
-              <svg className="w-16 h-8 overflow-visible" viewBox="0 0 64 28">
+              <svg className="w-16 h-8 overflow-visible shrink-0" viewBox="0 0 64 28" aria-hidden="true">
                 <path
                   d="M2 20 L16 16 L30 18 L44 9 L62 4"
                   fill="none"
@@ -201,46 +205,59 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-[#EFEFEF] dark:border-[#262626] text-xs text-[#6B7280] dark:text-neutral-400">
-            <span>Total beban: {totalVolumeWeek.toLocaleString('id-ID')} kg</span>
-            <Link href="/workout" className="text-[#F97316] font-semibold hover:underline">
+          <div className="flex items-center justify-between pt-2.5 border-t border-[#E6E6E2] dark:border-[#27272F] text-xs text-[#52525B] dark:text-neutral-400">
+            <span className="truncate font-telemetry">Beban: {totalVolumeWeek.toLocaleString('id-ID')} kg</span>
+            <Link
+              href="/workout"
+              className="min-h-[44px] -my-2 px-1 flex items-center text-[#F97316] font-bold hover:underline shrink-0"
+            >
               Studio 3D →
             </Link>
           </div>
         </motion.div>
 
-        {/* KPI 3: Kalori & Protein Hari Ini */}
+        {/* KPI 3: Kalori & Protein Hari Ini + ProgressRing */}
         <motion.div
-          whileHover={{ y: -3 }}
+          whileHover={{ y: -2 }}
           transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-          className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card flex flex-col justify-between"
+          className="surface-card p-5 flex flex-col justify-between min-w-0"
         >
-          <div className="flex items-center justify-between">
-            <div className="w-9 h-9 rounded-xl bg-[#FFE4E6] dark:bg-[#262626] flex items-center justify-center">
-              <Flame className="w-4 h-4 text-[#BE123C] dark:text-[#EF4444]" />
+          <div className="flex items-center justify-between gap-2">
+            <div className="w-9 h-9 rounded-xl bg-[#FFE4E6] dark:bg-[#22222A] flex items-center justify-center shrink-0">
+              <Flame className="w-4 h-4 text-[#9F1239] dark:text-[#EF4444]" />
             </div>
-            <span className="text-xs font-semibold text-[#047857] dark:text-emerald-400 tabular-nums">
-              {Math.round((totalProteinToday / profile.dailyProteinTargetG) * 100)}% target protein
+            <span className="text-xs font-semibold text-[#065F46] dark:text-emerald-400 font-telemetry truncate">
+              {Math.round((totalProteinToday / Math.max(1, profile.dailyProteinTargetG)) * 100)}% protein
             </span>
           </div>
 
-          <div className="my-3">
-            <p className="text-xs font-medium text-[#6B7280] dark:text-neutral-400">
-              Kalori & Protein Hari Ini
-            </p>
-            <div className="flex items-baseline justify-between gap-2 mt-1">
-              <p className="text-[32px] leading-[38px] font-bold tracking-tight tabular-nums text-[#111111] dark:text-white">
-                {totalProteinToday}g{' '}
-                <span className="text-sm font-semibold text-[#6B7280] dark:text-neutral-400">
-                  / {totalCaloriesToday} kkal
-                </span>
+          <div className="my-3 flex items-center justify-between gap-2 min-w-0">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-[#52525B] dark:text-neutral-400">
+                Protein &amp; Kalori
+              </p>
+              <p className="text-[28px] sm:text-[32px] leading-tight font-extrabold tracking-tight font-telemetry text-[#111114] dark:text-white mt-0.5">
+                <CountUpMetric value={totalProteinToday} suffix="g" />
+              </p>
+              <p className="text-xs font-telemetry text-[#52525B] dark:text-neutral-400">
+                {totalCaloriesToday} kkal hari ini
               </p>
             </div>
+            <ProgressRing
+              percent={(totalProteinToday / Math.max(1, profile.dailyProteinTargetG)) * 100}
+              size={52}
+              strokeWidth={5}
+              color="#F97316"
+              label="Progres target protein harian"
+            />
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-[#EFEFEF] dark:border-[#262626] text-xs text-[#6B7280] dark:text-neutral-400">
-            <span>Target: {profile.dailyProteinTargetG}g protein</span>
-            <Link href="/nutrisi" className="text-[#F97316] font-semibold hover:underline">
+          <div className="flex items-center justify-between pt-2.5 border-t border-[#E6E6E2] dark:border-[#27272F] text-xs text-[#52525B] dark:text-neutral-400">
+            <span className="truncate font-telemetry">Target: {profile.dailyProteinTargetG}g</span>
+            <Link
+              href="/nutrisi"
+              className="min-h-[44px] -my-2 px-1 flex items-center text-[#F97316] font-bold hover:underline shrink-0"
+            >
               Scan AI →
             </Link>
           </div>
@@ -248,43 +265,47 @@ export default function DashboardPage() {
 
         {/* KPI 4: Hidrasi & Skor Pemulihan */}
         <motion.div
-          whileHover={{ y: -3 }}
+          whileHover={{ y: -2 }}
           transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-          className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card flex flex-col justify-between"
+          className="surface-card p-5 flex flex-col justify-between min-w-0"
         >
-          <div className="flex items-center justify-between">
-            <div className="w-9 h-9 rounded-xl bg-[#E0F2FE] dark:bg-[#262626] flex items-center justify-center">
-              <Droplets className="w-4 h-4 text-[#0369A1] dark:text-sky-400" />
+          <div className="flex items-center justify-between gap-2">
+            <div className="w-9 h-9 rounded-xl bg-[#E0F2FE] dark:bg-[#22222A] flex items-center justify-center shrink-0">
+              <Droplets className="w-4 h-4 text-[#075985] dark:text-sky-400" />
             </div>
-            <span className="text-xs font-semibold text-[#0369A1] dark:text-sky-400 tabular-nums">
+            <span className="text-xs font-semibold text-[#075985] dark:text-sky-400 font-telemetry truncate">
               Pemulihan {recoveryScore}%
             </span>
           </div>
 
-          <div className="my-3">
-            <p className="text-xs font-medium text-[#6B7280] dark:text-neutral-400">
-              Hidrasi & Skor Pemulihan
-            </p>
-            <div className="flex items-baseline justify-between gap-2 mt-1">
-              <p className="text-[32px] leading-[38px] font-bold tracking-tight tabular-nums text-[#111111] dark:text-white">
-                {(waterMl / 1000).toFixed(2)}L{' '}
-                <span className="text-sm font-semibold text-[#6B7280] dark:text-neutral-400">
-                  / {(profile.dailyWaterTargetMl / 1000).toFixed(1)}L
-                </span>
+          <div className="my-3 flex items-center justify-between gap-2 min-w-0">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-[#52525B] dark:text-neutral-400">
+                Hidrasi Harian
               </p>
-              <button
-                type="button"
-                onClick={() => addWaterMl(250)}
-                className="px-2.5 py-1 rounded-lg bg-[#FEF3C7] text-[#B45309] text-xs font-bold hover:opacity-90 transition cursor-pointer"
-              >
-                +250ml
-              </button>
+              <p className="text-[28px] sm:text-[32px] leading-tight font-extrabold tracking-tight font-telemetry text-[#111114] dark:text-white mt-0.5">
+                <CountUpMetric value={waterMl / 1000} decimals={2} suffix="L" />
+              </p>
+              <p className="text-xs font-telemetry text-[#52525B] dark:text-neutral-400">
+                / {(profile.dailyWaterTargetMl / 1000).toFixed(1)}L target
+              </p>
             </div>
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.94 }}
+              onClick={() => addWaterMl(250)}
+              className="min-h-[44px] px-3 rounded-xl bg-[#FEF3C7] text-[#92400E] text-xs font-extrabold hover:opacity-90 transition cursor-pointer shrink-0"
+            >
+              +250ml
+            </motion.button>
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-[#EFEFEF] dark:border-[#262626] text-xs text-[#6B7280] dark:text-neutral-400">
-            <span>Tidur: {useFitForgeStore.getState().sleepHoursToday} jam</span>
-            <Link href="/jadwal" className="text-[#F97316] font-semibold hover:underline">
+          <div className="flex items-center justify-between pt-2.5 border-t border-[#E6E6E2] dark:border-[#27272F] text-xs text-[#52525B] dark:text-neutral-400">
+            <span className="truncate font-telemetry">Tidur: {useFitForgeStore.getState().sleepHoursToday} jam</span>
+            <Link
+              href="/jadwal"
+              className="min-h-[44px] -my-2 px-1 flex items-center text-[#F97316] font-bold hover:underline shrink-0"
+            >
               Jadwal →
             </Link>
           </div>
@@ -525,7 +546,7 @@ export default function DashboardPage() {
                       setSelectedExerciseId(ex.id);
                       router.push(`/workout?exercise=${ex.id}`);
                     }}
-                    className="px-2.5 py-1.5 rounded-lg bg-[#161616] hover:bg-[#262626] dark:bg-[#262626] text-white text-xs font-semibold flex items-center gap-1 shrink-0 cursor-pointer"
+                    className="min-h-[38px] px-3 py-1.5 rounded-lg bg-[#161616] hover:bg-[#262626] dark:bg-[#262626] text-white text-xs font-semibold flex items-center gap-1 shrink-0 cursor-pointer transition"
                   >
                     <Play className="w-3 h-3 text-[#F59E0B] fill-[#F59E0B]" />
                     <span>Mulai</span>
@@ -562,10 +583,29 @@ export default function DashboardPage() {
 
             <div className="divide-y divide-[#EFEFEF] dark:divide-[#262626]">
               {runSessions.length === 0 && workouts.length === 0 && nutritionLogs.length === 0 && (
-                <div className="py-6 text-center">
-                  <p className="text-xs text-[#6B7280] dark:text-neutral-400">
-                    Belum ada riwayat lari, latihan, atau makanan yang tercatat.
+                <div className="py-6 px-3 text-center rounded-xl bg-[#F8F9FA] dark:bg-[#101014] border border-dashed border-[#E5E5E0] dark:border-[#27272E] my-1">
+                  <p className="text-xs font-semibold text-[#111111] dark:text-white">
+                    Hari ini masih bersih dari nol
                   </p>
+                  <p className="text-[11px] text-[#6B7280] dark:text-neutral-400 mt-1 mb-3">
+                    Rekam sesi lari GPS, latihan Studio 3D, atau pindai makanan pertama Anda.
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <Link
+                      href="/run"
+                      className="min-h-[36px] px-3 py-1.5 rounded-lg bg-[#161616] text-white text-[11px] font-semibold inline-flex items-center gap-1 hover:bg-[#262626] transition"
+                    >
+                      <MapPin className="w-3 h-3 text-[#F97316]" />
+                      <span>Mulai Lari</span>
+                    </Link>
+                    <Link
+                      href="/nutrisi"
+                      className="min-h-[36px] px-3 py-1.5 rounded-lg bg-[#F97316]/15 text-[#F97316] text-[11px] font-semibold inline-flex items-center gap-1 hover:bg-[#F97316]/25 transition"
+                    >
+                      <Utensils className="w-3 h-3" />
+                      <span>Pindai Nutrisi</span>
+                    </Link>
+                  </div>
                 </div>
               )}
 
@@ -677,7 +717,7 @@ export default function DashboardPage() {
                 </p>
               </div>
               <div className="text-right">
-                <span className="text-base font-extrabold text-[#F59E0B] tabular-nums block">
+                <span className="text-base font-extrabold text-[#F59E0B] font-telemetry block">
                   {nowDate ? `-${nextPrayer.formattedCountdown}` : '--:--:--'}
                 </span>
                 <Link href="/jadwal" className="text-[11px] text-neutral-400 hover:text-white underline">
@@ -687,19 +727,19 @@ export default function DashboardPage() {
             </div>
 
             {/* Quick Hydration +250ml Row */}
-            <div className="flex items-center justify-between mb-3 pb-3 border-b border-[#EFEFEF] dark:border-[#262626]">
-              <div>
+            <div className="flex items-center justify-between gap-2 mb-3 pb-3 border-b border-[#EFEFEF] dark:border-[#262626]">
+              <div className="min-w-0">
                 <p className="text-xs font-semibold text-[#111111] dark:text-white">
                   Hidrasi Cepat Harian
                 </p>
-                <p className="text-[11px] text-[#6B7280] dark:text-neutral-400 tabular-nums">
+                <p className="text-[11px] text-[#6B7280] dark:text-neutral-400 font-telemetry">
                   Tercatat: {waterMl} ml / {profile.dailyWaterTargetMl} ml
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => addWaterMl(250)}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-bold hover:opacity-95 transition cursor-pointer"
+                className="inline-flex items-center gap-1 min-h-[40px] px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-bold hover:opacity-95 transition cursor-pointer shrink-0"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>250ml</span>
@@ -719,9 +759,9 @@ export default function DashboardPage() {
                       key={rule.key}
                       type="button"
                       onClick={() => toggleGoldenRule(rule.key)}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] hover:bg-neutral-100 dark:hover:bg-[#1E1E1E] border border-[#EFEFEF] dark:border-[#262626] text-left transition cursor-pointer"
+                      className="w-full min-h-[42px] flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] hover:bg-neutral-100 dark:hover:bg-[#1E1E1E] border border-[#EFEFEF] dark:border-[#262626] text-left transition cursor-pointer"
                     >
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2.5 min-w-0">
                         <CheckCircle2
                           className={`w-4 h-4 shrink-0 ${
                             checked
@@ -730,7 +770,7 @@ export default function DashboardPage() {
                           }`}
                         />
                         <span
-                          className={`text-xs font-medium ${
+                          className={`text-xs font-medium truncate ${
                             checked
                               ? 'text-[#111111] dark:text-white font-semibold'
                               : 'text-[#6B7280] dark:text-neutral-400'
@@ -739,7 +779,7 @@ export default function DashboardPage() {
                           {rule.title}
                         </span>
                       </div>
-                      <span className="text-[11px] text-[#6B7280] dark:text-neutral-400 tabular-nums">
+                      <span className="text-[11px] text-[#6B7280] dark:text-neutral-400 font-telemetry shrink-0">
                         {rule.target}
                       </span>
                     </button>

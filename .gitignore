@@ -5,3 +5,7 @@ coverage/
 *.log
 .env*
 !.env.example
+.playwright-cli/
+.aistudio/
+tsconfig.tsbuildinfo
+

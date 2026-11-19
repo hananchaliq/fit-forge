@@ -1,74 +1,161 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ============================================================================
+   FITFORGE DESIGN TOKENS — EDITORIAL-ATHLETIC SYSTEM
+   Layered Obsidian Dark · Crisp Alabaster Light · Single Ember-Amber Accent
+   ============================================================================ */
 :root {
-  /* Obsidian (sidebar, topbar, kartu hero, mode gelap) */
-  --obsidian-950: #0A0A0A;
-  --obsidian-900: #0E0E0E;
-  --obsidian-800: #161616;
-  --obsidian-700: #1E1E1E;
-  --obsidian-600: #262626;
-  --obsidian-500: #333333;
+  /* Layered Obsidian (dark surfaces, never flat #000) */
+  --obsidian-950: #09090B;
+  --obsidian-900: #0E0E11;
+  --obsidian-800: #141418;
+  --obsidian-700: #1C1C22;
+  --obsidian-600: #27272F;
+  --obsidian-500: #3A3A44;
 
-  /* Alabaster (kanvas terang) */
-  --canvas: #F8F9FA;
+  /* Alabaster Light Canvas */
+  --canvas: #F7F7F5;
+  --surface-subtle: #EFEFED;
   --card: #FFFFFF;
-  --border-light: #EFEFEF;
-  --muted: #6B7280;
-  --ink: #111111;
+  --border-light: #E6E6E2;
+  --muted: #52525B;
+  --ink: #111114;
 
-  /* Aksen */
+  /* Single Signature Athletic Accent (Ember Orange -> Amber) */
+  --accent-primary: #F97316;
+  --accent-secondary: #F59E0B;
+  --accent-crimson: #DC2626;
   --amber-500: #F59E0B;
   --orange-500: #F97316;
   --red-500: #EF4444;
   --red-glow: #FF2D1A;
   --grad-accent: linear-gradient(135deg, #F97316 0%, #F59E0B 100%);
+  --grad-ember: linear-gradient(135deg, #EF4444 0%, #F97316 52%, #F59E0B 100%);
 
-  /* Semantik (pil status pastel) */
+  /* Semantic Status (WCAG AA compliant contrast) */
   --emerald-bg: #D1FAE5;
-  --emerald-fg: #047857;
+  --emerald-fg: #065F46;
   --sky-bg: #E0F2FE;
-  --sky-fg: #0369A1;
+  --sky-fg: #075985;
   --amber-bg: #FEF3C7;
-  --amber-fg: #B45309;
+  --amber-fg: #92400E;
   --rose-bg: #FFE4E6;
-  --rose-fg: #BE123C;
+  --rose-fg: #9F1239;
 
-  /* Warna hari (dari poster) */
-  --day-mon: #E11D2E;
+  /* 7-Day Split Poster Palette */
+  --day-mon: #DC2626;
   --day-tue: #16A34A;
-  --day-wed: #F97316;
+  --day-wed: #EA580C;
   --day-thu: #2563EB;
   --day-fri: #7C3AED;
-  --day-sat: #EAB308;
+  --day-sat: #CA8A04;
   --day-sun: #0D9488;
 
-  /* Bentuk */
-  --radius-card: 16px;
+  /* Typography Scale (Fluid Clamp) */
+  --text-display: clamp(2.125rem, 4.8vw, 4rem);
+  --text-page-title: clamp(1.375rem, 2.5vw, 1.875rem);
+  --text-metric-hero: clamp(2.25rem, 6vw, 3.75rem);
+  --text-metric-card: clamp(1.5rem, 3vw, 2rem);
+
+  /* Spacing & Shape Scale (4px rhythm) */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-card: 18px;
   --radius-canvas: 24px;
   --radius-pill: 9999px;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
-  --shadow-tooltip: 0 8px 24px rgba(0, 0, 0, 0.28);
+
+  /* Measured Elevation (Crisp borders + subtle depth, zero muddy shadows) */
+  --shadow-card: 0 1px 2px rgba(9, 9, 11, 0.04), 0 6px 20px rgba(9, 9, 11, 0.05);
+  --shadow-card-hover: 0 2px 6px rgba(9, 9, 11, 0.06), 0 14px 28px rgba(9, 9, 11, 0.09);
+  --shadow-tooltip: 0 10px 30px rgba(0, 0, 0, 0.34);
+
+  /* Motion Timing & Easing Tokens */
+  --ease-editorial: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 150ms;
+  --duration-base: 240ms;
+  --duration-slow: 420ms;
 }
 
 .dark {
-  --canvas: #0E0E0E;
-  --card: #161616;
-  --border-light: #262626;
-  --muted: #9CA3AF;
-  --ink: #F8F9FA;
+  --canvas: #0E0E11;
+  --surface-subtle: #141418;
+  --card: #141418;
+  --border-light: #27272F;
+  --muted: #A1A1AA;
+  --ink: #FAFAFA;
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px rgba(0, 0, 0, 0.32);
+  --shadow-card-hover: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 14px 34px rgba(0, 0, 0, 0.48);
 }
 
 @layer base {
-  body {
-    background-color: var(--obsidian-900);
-    color: var(--ink);
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  html {
+    overflow-x: clip;
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
   }
+
+  body {
+    background-color: var(--obsidian-950);
+    color: var(--ink);
+    overflow-x: clip;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Accessible visible focus rings for keyboard navigation */
+  :is(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+}
+
+/* Fluid Typography & Telemetry Helpers */
+.font-display {
+  font-family: var(--font-poster), var(--font-jakarta), sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.font-telemetry {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.text-fluid-display {
+  font-size: var(--text-display);
+  line-height: 1.04;
+  text-wrap: balance;
+}
+
+.text-fluid-title {
+  font-size: var(--text-page-title);
+  line-height: 1.18;
+  text-wrap: balance;
+}
+
+.text-fluid-metric {
+  font-size: var(--text-metric-hero);
+  line-height: 1.02;
+  font-variant-numeric: tabular-nums;
 }
 
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+/* Editorial Card Depth & Subtle Surface Grain */
+.surface-card {
+  background-color: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--duration-base) var(--ease-editorial),
+    border-color var(--duration-fast) ease,
+    box-shadow var(--duration-base) var(--ease-editorial);
+}
+
+.surface-card-interactive:hover {
+  box-shadow: var(--shadow-card-hover);
 }
 
 .shadow-card {
@@ -79,6 +166,38 @@
   box-shadow: var(--shadow-tooltip);
 }
 
+/* Subtle athletic micro-texture overlay (pointer-events none, zero perf cost) */
+.athletic-grain {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 0);
+  background-size: 16px 16px;
+}
+
+/* Safe-area & Mobile Ergonomics */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.bottom-dock-safe {
+  bottom: calc(0.625rem + env(safe-area-inset-bottom, 0px));
+}
+
+.bottom-sheet-safe {
+  bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
+}
+
+.main-mobile-safe {
+  padding-bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -86,6 +205,20 @@
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Respect prefers-reduced-motion globally */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 nextjs-portal {

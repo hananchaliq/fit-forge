@@ -44,9 +44,9 @@ export function OfflineIndicator() {
   if (isOnline) return null;
 
   return (
-    <div className="fixed bottom-20 md:bottom-4 left-4 z-50 flex items-center gap-2 rounded-xl bg-[#F59E0B] px-3.5 py-2 text-xs font-extrabold text-black shadow-xl border border-black/15">
+    <div className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom,0px))] md:bottom-4 left-3 right-3 sm:right-auto z-50 flex items-center gap-2 rounded-xl bg-[#F59E0B] px-3.5 py-2.5 text-xs font-extrabold text-black shadow-xl border border-black/15">
       <WifiOff className="w-4 h-4 shrink-0" />
-      <span>Mode Offline — Data Lari GPS &amp; Latihan Tersimpan di Perangkat</span>
+      <span className="min-w-0 truncate">Mode Offline — Data Lari GPS &amp; Latihan Tersimpan Lokal</span>
     </div>
   );
 }
@@ -132,16 +132,13 @@ export function PWAInstallButton({ fullWidthMobile = false }: { fullWidthMobile?
         onClick={handleInstallClick}
         className={
           fullWidthMobile
-            ? 'w-full py-2.5 px-3.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold flex items-center justify-center gap-2 shadow-md cursor-pointer'
-            : 'inline-flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl bg-[#1E1E1E] hover:bg-[#262626] border border-[#F59E0B]/40 text-xs font-bold text-[#F59E0B] transition-colors whitespace-nowrap shrink-0 cursor-pointer'
+            ? 'w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-transform cursor-pointer'
+            : 'hidden sm:inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3 rounded-xl bg-[#18181D] hover:bg-[#23232A] border border-[#F59E0B]/35 text-xs font-bold text-[#F59E0B] active:scale-[0.97] transition whitespace-nowrap shrink-0 cursor-pointer'
         }
         title="Install Aplikasi FitForge di HP / Perangkat Anda (PWA)"
       >
-        <Download className="w-3.5 h-3.5 shrink-0" />
-        <span className={fullWidthMobile ? 'inline' : 'hidden sm:inline'}>
-          {deferredPrompt ? 'Install App' : isIOS ? 'Install iOS' : 'Install App'}
-        </span>
-        {!fullWidthMobile && <span className="sm:hidden text-[11px]">App</span>}
+        <Download className="w-4 h-4 shrink-0" />
+        <span>{deferredPrompt ? 'Install App' : isIOS ? 'Install iOS' : 'Install App'}</span>
       </button>
 
       {showGuideModal && (

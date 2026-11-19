@@ -1,23 +1,36 @@
 import type { Metadata, Viewport } from 'next';
-import { Plus_Jakarta_Sans, Bebas_Neue } from 'next/font/google';
+import { Plus_Jakarta_Sans, Bebas_Neue, JetBrains_Mono } from 'next/font/google';
 import { FirebaseAuthProvider } from '@/components/auth/FirebaseAuthProvider';
 import { WelcomeGuideModal } from '@/components/guide/WelcomeGuideModal';
+import { MotionAndThemeProvider } from '@/components/providers/MotionAndThemeProvider';
 import './globals.css';
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700', '800'],
   variable: '--font-jakarta',
+  display: 'swap',
 });
 
 const bebasNeue = Bebas_Neue({
   subsets: ['latin'],
   weight: ['400'],
   variable: '--font-poster',
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['500', '600', '700'],
+  variable: '--font-mono',
+  display: 'swap',
 });
 
 export const viewport: Viewport = {
-  themeColor: '#0E0E0E',
+  themeColor: [
+    { media: '(prefers-color-scheme: dark)', color: '#09090B' },
+    { media: '(prefers-color-scheme: light)', color: '#09090B' },
+  ],
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
@@ -25,9 +38,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'FitForge — AI Fitness, 3D Workout & GPS Run Tracker',
+  title: 'FitForge — Studio Latihan 3D, Lari GPS & Nutrisi AI',
   description:
-    'Platform kebugaran terpadu dengan Studio Latihan 3D 1024-Bit HD, Pelacak Lari GPS (Kalman & Haversine), Analisis Nutrisi AI kuliner Indonesia, Poster Rencana Latihan Mingguan, serta Jadwal Sholat & Hidrasi.',
+    'Platform kebugaran terpadu dengan Studio Latihan 3D interaktif, Pelacak Lari GPS presisi (Kalman & Haversine), Pemindai Nutrisi AI kuliner Indonesia, Poster Rencana Latihan Mingguan, serta Jadwal Sholat & Hidrasi.',
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
@@ -43,31 +56,37 @@ export const metadata: Metadata = {
     apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
   },
   openGraph: {
-    title: 'FitForge — AI Fitness, 3D Workout & GPS Run Tracker',
+    title: 'FitForge — Studio Latihan 3D, Lari GPS & Nutrisi AI',
     description:
-      'Platform kebugaran terpadu dengan Studio Latihan 3D 1024-Bit HD, Pelacak Lari GPS (Kalman & Haversine), Analisis Nutrisi AI kuliner Indonesia, Poster Rencana Latihan Mingguan, serta Jadwal Sholat & Hidrasi.',
+      'Platform kebugaran terpadu dengan Studio Latihan 3D interaktif, Pelacak Lari GPS presisi, Analisis Nutrisi AI kuliner Indonesia, serta Jadwal Sholat & Hidrasi.',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'FitForge — AI Fitness, 3D Workout & GPS Run Tracker',
+    title: 'FitForge — Studio Latihan 3D, Lari GPS & Nutrisi AI',
     description:
-      'Platform kebugaran terpadu dengan Studio Latihan 3D 1024-Bit HD, Pelacak Lari GPS (Kalman & Haversine), Analisis Nutrisi AI kuliner Indonesia, Poster Rencana Latihan Mingguan, serta Jadwal Sholat & Hidrasi.',
+      'Platform kebugaran terpadu dengan Studio Latihan 3D interaktif, Pelacak Lari GPS presisi, Analisis Nutrisi AI kuliner Indonesia, serta Jadwal Sholat & Hidrasi.',
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="id" className={`${plusJakarta.variable} ${bebasNeue.variable}`}>
+    <html
+      lang="id"
+      className={`${plusJakarta.variable} ${bebasNeue.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
       <body
         suppressHydrationWarning
         className="font-sans antialiased selection:bg-[#F97316] selection:text-black"
         style={{ fontFamily: 'var(--font-jakarta), sans-serif' }}
       >
-        <FirebaseAuthProvider>
-          {children}
-          <WelcomeGuideModal />
-        </FirebaseAuthProvider>
+        <MotionAndThemeProvider>
+          <FirebaseAuthProvider>
+            {children}
+            <WelcomeGuideModal />
+          </FirebaseAuthProvider>
+        </MotionAndThemeProvider>
       </body>
     </html>
   );

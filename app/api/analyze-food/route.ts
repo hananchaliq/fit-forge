@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { z } from 'zod';
+
+import { analyzeFoodOfflineFallback } from '@/lib/nutritionFallback';
 
 const AnalyzeFoodSchema = z.object({
   imageBase64: z.string().optional(),
@@ -53,15 +55,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
-      return NextResponse.json(
-        {
-          error:
-            'Kunci API Gemini (GEMINI_API_KEY) belum dikonfigurasi di server. Periksa panel Settings > Secrets.',
-        },
-        { status: 500 }
-      );
+    const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+    const isPlaceholderKey =
+      !apiKey ||
+      apiKey.length < 20 ||
+      /^(MY_|your_|placeholder|changeme|example|test|xxx)/i.test(apiKey) ||
+      apiKey.includes('your_gemini');
+    if (isPlaceholderKey) {
+      const fallback = analyzeFoodOfflineFallback(trimmedHint, Boolean(imageBase64));
+      if (!fallback.is_food) {
+        return NextResponse.json(
+          {
+            error:
+              fallback.non_food_reason ||
+              'Input tidak terdeteksi sebagai makanan/minuman.',
+          },
+          { status: 422 }
+        );
+      }
+      return NextResponse.json({
+        result: fallback,
+        source: 'local-indonesian-fallback',
+        analyzedAt: new Date().toISOString(),
+      });
     }
 
     const ai = new GoogleGenAI({
@@ -194,25 +210,17 @@ INSTRUKSI WAJIB (JANGAN BERIKAN JAWABAN DEFAULT ATAU BASA-BASI):
       ],
     };
 
-    const candidateModels = ['gemini-4-hydrogen', 'gemini-2.5-flash', 'gemini-3-flash-preview'];
+    const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-3-flash-preview'];
     let jsonText = '';
     let usedModel = candidateModels[0];
     let lastModelError: unknown = null;
 
     for (const modelName of candidateModels) {
       try {
-        const isHydrogen = modelName.startsWith('gemini-4');
         const response = await ai.models.generateContent({
           model: modelName,
           contents: { parts },
           config: {
-            ...(isHydrogen
-              ? {
-                  thinkingConfig: {
-                    thinkingLevel: ThinkingLevel.LOW,
-                  },
-                }
-              : {}),
             responseMimeType: 'application/json',
             responseSchema,
           },
@@ -226,22 +234,33 @@ INSTRUKSI WAJIB (JANGAN BERIKAN JAWABAN DEFAULT ATAU BASA-BASI):
       } catch (err) {
         lastModelError = err;
         const msg = err instanceof Error ? err.message : String(err);
-        // If API key is invalid, do not retry other models
         if (msg.includes('API_KEY_INVALID') || msg.includes('PERMISSION_DENIED') || msg.includes('403')) {
-          throw err;
+          break;
         }
       }
     }
 
-    if (!jsonText && lastModelError) {
-      throw lastModelError;
-    }
-
     if (!jsonText) {
-      return NextResponse.json(
-        { error: 'Model Gemini AI tidak mengembalikan respons teks. Silakan coba lagi.' },
-        { status: 502 }
-      );
+      if (lastModelError) {
+        const rawMsg = lastModelError instanceof Error ? lastModelError.message : String(lastModelError);
+        console.warn('[analyze-food] Gemini API unavailable, using local Indonesian fallback:', rawMsg.slice(0, 140));
+      }
+      const fallback = analyzeFoodOfflineFallback(trimmedHint, Boolean(imageBase64));
+      if (!fallback.is_food) {
+        return NextResponse.json(
+          {
+            error:
+              fallback.non_food_reason ||
+              'Input tidak terdeteksi sebagai makanan/minuman.',
+          },
+          { status: 422 }
+        );
+      }
+      return NextResponse.json({
+        result: fallback,
+        source: 'local-indonesian-fallback',
+        analyzedAt: new Date().toISOString(),
+      });
     }
 
     const data = JSON.parse(jsonText);
@@ -263,30 +282,11 @@ INSTRUKSI WAJIB (JANGAN BERIKAN JAWABAN DEFAULT ATAU BASA-BASI):
     });
   } catch (err: unknown) {
     const rawMsg = err instanceof Error ? err.message : String(err);
-    console.error('[analyze-food] Gemini API error:', rawMsg);
-
-    if (rawMsg.includes('API_KEY_INVALID') || rawMsg.includes('PERMISSION_DENIED') || rawMsg.includes('403')) {
-      return NextResponse.json(
-        {
-          error:
-            'Kunci API Gemini tidak valid atau akses ditolak. Silakan periksa GEMINI_API_KEY di panel Settings > Secrets.',
-        },
-        { status: 403 }
-      );
-    }
-    if (rawMsg.includes('RESOURCE_EXHAUSTED') || rawMsg.includes('429')) {
-      return NextResponse.json(
-        {
-          error:
-            'Kuota Gemini API habis (429 Resource Exhausted). Silakan coba beberapa saat lagi atau perbarui kunci API di Settings > Secrets.',
-        },
-        { status: 429 }
-      );
-    }
+    console.error('[analyze-food] Unexpected error:', rawMsg);
 
     return NextResponse.json(
       {
-        error: `Gagal menganalisis makanan dengan Gemini AI: ${rawMsg.slice(0, 180)}`,
+        error: `Gagal menganalisis makanan: ${rawMsg.slice(0, 180)}`,
       },
       { status: 500 }
     );

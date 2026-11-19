@@ -106,7 +106,7 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white py-10 px-4 flex items-center justify-center relative overflow-hidden">
+    <div className="min-h-dvh pt-safe bg-[#09090B] text-white py-8 px-4 flex items-center justify-center relative overflow-hidden">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[680px] h-[400px] rounded-full opacity-20 blur-[120px]"
@@ -115,15 +115,18 @@ export default function OnboardingPage() {
         }}
       />
 
-      <div className="relative z-10 w-full max-w-2xl rounded-2xl bg-[#161616] border border-[#262626] p-6 sm:p-8 shadow-2xl">
-        <div className="flex items-center justify-between mb-6">
-          <div>
+      <div className="relative z-10 w-full max-w-2xl rounded-2xl bg-[#141418] border border-[#27272E] p-5 sm:p-8 shadow-2xl">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+          <div className="min-w-0">
             <span className="text-xs font-bold text-[#F97316]">KALIBRASI PERSONAL FITFORGE</span>
-            <h1 className="text-2xl font-bold text-white mt-0.5">
-               Konfigurasi Tubuh, Target & Jadwal Ibadah
+            <h1 className="text-xl sm:text-2xl font-bold text-white mt-0.5">
+              Konfigurasi Tubuh, Target &amp; Jadwal Ibadah
             </h1>
           </div>
-          <Link href="/dashboard" className="text-xs text-neutral-400 hover:text-white">
+          <Link
+            href="/dashboard"
+            className="min-h-[44px] inline-flex items-center text-xs text-neutral-400 hover:text-white shrink-0"
+          >
             Lewati ke Dashboard →
           </Link>
         </div>
@@ -289,9 +292,9 @@ export default function OnboardingPage() {
 
           <button
             type="submit"
-            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#EF4444] via-[#F97316] to-[#F59E0B] text-black font-bold text-sm hover:opacity-95 transition flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full min-h-[48px] py-3.5 rounded-xl bg-gradient-to-r from-[#EF4444] via-[#F97316] to-[#F59E0B] text-black font-bold text-sm hover:opacity-95 transition flex items-center justify-center gap-2 cursor-pointer"
           >
-            <span>Simpan Profil & Buka FitForge</span>
+            <span>Simpan Profil &amp; Buka FitForge</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>

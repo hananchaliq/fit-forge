@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Play,
   Pause,
@@ -9,14 +10,12 @@ import {
   Share2,
   Volume2,
   Award,
-  Activity,
-  Flame,
-  TrendingUp,
   RotateCcw,
   Trash2,
   X,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
+import { MOTION_SPRING } from '@/components/ui/MotionPrimitives';
 import { useFitForgeStore } from '@/store/useFitForgeStore';
 import { GpsKalmanPair, validateGpsFix, type RawGpsFix } from '@/lib/kalman';
 import {
@@ -493,129 +492,150 @@ export default function RunTrackerPage() {
       }
     >
       {/* Crash Recovery Banner from IndexedDB */}
-      {unfinishedRun && (
-        <div className="mb-5 p-4 rounded-2xl bg-[#FEF3C7] text-[#B45309] border border-[#F59E0B]/40 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 text-xs sm:text-sm font-bold">
-            <RotateCcw className="w-4 h-4 shrink-0" />
-            <span>
-              Ditemukan sesi lari yang belum selesai ({(unfinishedRun.distanceM / 1000).toFixed(2)} km). Lanjutkan sesi ini?
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleRecoverUnfinishedRun}
-              className="px-3 py-1.5 rounded-xl bg-[#161616] text-white text-xs font-bold cursor-pointer"
-            >
-              Lanjutkan Lari
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                clearActiveRunCheckpoint().catch(() => {});
-                setUnfinishedRun(null);
-              }}
-              className="px-3 py-1.5 rounded-xl bg-white/70 text-[#B45309] text-xs font-semibold cursor-pointer"
-            >
-              Abaikan
-            </button>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {unfinishedRun && (
+          <motion.div
+            initial={{ opacity: 0, y: -12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            transition={MOTION_SPRING}
+            className="mb-5 p-4 rounded-2xl bg-[#FEF3C7] text-[#B45309] border border-[#F59E0B]/40 flex flex-wrap items-center justify-between gap-3"
+          >
+            <div className="flex items-center gap-2.5 text-xs sm:text-sm font-bold">
+              <RotateCcw className="w-4 h-4 shrink-0" />
+              <span>
+                Ditemukan sesi lari yang belum selesai ({(unfinishedRun.distanceM / 1000).toFixed(2)} km). Lanjutkan sesi ini?
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.95 }}
+                transition={MOTION_SPRING}
+                onClick={handleRecoverUnfinishedRun}
+                className="px-3 py-1.5 rounded-xl bg-[#161616] text-white text-xs font-bold cursor-pointer"
+              >
+                Lanjutkan Lari
+              </motion.button>
+              <button
+                type="button"
+                onClick={() => {
+                  clearActiveRunCheckpoint().catch(() => {});
+                  setUnfinishedRun(null);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-white/70 text-[#B45309] text-xs font-semibold cursor-pointer"
+              >
+                Abaikan
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* TOP HUD TELEMETRY (56-72px Tabular Numerals + Controls) */}
-      <div className="rounded-3xl bg-[#161616] text-white border border-[#262626] p-5 sm:p-7 shadow-card mb-6">
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-6 items-center">
+      {/* TOP HUD TELEMETRY (Fluid Tabular Numerals + 44px Controls) */}
+      <div className="rounded-3xl bg-[#141418] athletic-grain text-white border border-[#27272F] p-4 sm:p-7 shadow-card mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6 items-center">
           {/* Primary Timer / Distance HUD */}
-          <div className="col-span-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[#F59E0B]">
+          <div className="col-span-2 min-w-0">
+            <span className="text-[11px] font-bold uppercase tracking-widest text-[#F59E0B] block truncate">
               {status === 'running'
                 ? isSimulating
                   ? 'SIMULASI RUTE AKTIF (KALMAN 1D)'
                   : 'PELACAKAN GPS PRESISI TINGGI'
                 : 'RINGKASAN SESI TERPILIH'}
             </span>
-            <div className="flex items-baseline gap-4 mt-1">
-              <span className="text-5xl sm:text-6xl font-extrabold tracking-tight tabular-nums text-white">
+            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-1.5">
+              <span className="text-fluid-metric font-extrabold tracking-tight font-telemetry text-white">
                 {displayDistKm}
-                <span className="text-xl font-bold text-[#F97316] ml-1">km</span>
+                <span className="text-lg sm:text-xl font-bold text-[#F97316] ml-1 font-sans">km</span>
               </span>
-              <span className="text-2xl sm:text-3xl font-bold tabular-nums text-neutral-300">
+              <span className="text-xl sm:text-3xl font-bold font-telemetry text-neutral-300">
                 {displayDur}
               </span>
             </div>
           </div>
 
-          <div>
-            <p className="text-xs text-neutral-400">Pace Rata-Rata</p>
-            <p className="text-2xl sm:text-3xl font-bold text-white tabular-nums mt-0.5">
+          <div className="min-w-0">
+            <p className="text-xs text-neutral-400 truncate">Pace Rata-Rata</p>
+            <p className="text-xl sm:text-3xl font-bold text-white font-telemetry mt-0.5">
               {displayAvgPace}
-              <span className="text-xs text-neutral-400 font-normal"> /km</span>
+              <span className="text-xs text-neutral-400 font-sans font-normal"> /km</span>
             </p>
           </div>
 
-          <div>
-            <p className="text-xs text-neutral-400">Kalori (MET × {profile.weightKg}kg)</p>
-            <p className="text-2xl sm:text-3xl font-bold text-[#F59E0B] tabular-nums mt-0.5">
+          <div className="min-w-0">
+            <p className="text-xs text-neutral-400 truncate">Kalori ({profile.weightKg}kg)</p>
+            <p className="text-xl sm:text-3xl font-bold text-[#F59E0B] font-telemetry mt-0.5">
               {displayKcal}
-              <span className="text-xs text-neutral-400 font-normal"> kkal</span>
+              <span className="text-xs text-neutral-400 font-sans font-normal"> kkal</span>
             </p>
           </div>
 
-          <div>
-            <p className="text-xs text-neutral-400">Elevasi & Filter GPS</p>
-            <p className="text-2xl sm:text-3xl font-bold text-emerald-400 tabular-nums mt-0.5">
+          <div className="col-span-2 lg:col-span-1 min-w-0">
+            <p className="text-xs text-neutral-400 truncate">Elevasi &amp; Filter GPS</p>
+            <p className="text-xl sm:text-3xl font-bold text-emerald-400 font-telemetry mt-0.5">
               +{status === 'idle' ? selectedHistoryRun.elevationGainM : elevationGainM}m
             </p>
-            <p className="text-[11px] text-neutral-400 tabular-nums">
+            <p className="text-[11px] text-neutral-400 font-telemetry">
               Spike ditolak: {rejectedFixesCount} fix
             </p>
           </div>
         </div>
 
-        {/* Action Control Bar */}
-        <div className="mt-6 pt-5 border-t border-[#262626] flex flex-wrap items-center justify-between gap-3">
+        {/* Action Control Bar (>= 44px touch targets) */}
+        <div className="mt-5 pt-5 border-t border-[#27272F] flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5">
             {status === 'idle' ? (
               <>
-                <button
+                <motion.button
                   type="button"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.96 }}
+                  transition={MOTION_SPRING}
                   onClick={() => handleStartGpsRun(false)}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black font-extrabold text-xs sm:text-sm flex items-center gap-2 hover:opacity-95 transition cursor-pointer"
+                  className="min-h-[44px] px-4 sm:px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black font-extrabold text-xs sm:text-sm flex items-center gap-2 hover:opacity-95 cursor-pointer"
                 >
-                  <Play className="w-4 h-4 fill-black" />
-                  <span>Mulai Lari GPS Nyata</span>
-                </button>
+                  <Play className="w-4 h-4 fill-black shrink-0" />
+                  <span>Mulai Lari GPS</span>
+                </motion.button>
 
-                <button
+                <motion.button
                   type="button"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.96 }}
+                  transition={MOTION_SPRING}
                   onClick={() => handleStartGpsRun(true)}
-                  className="px-4 py-2.5 rounded-xl bg-[#262626] hover:bg-[#333333] text-white font-semibold text-xs sm:text-sm flex items-center gap-2 transition cursor-pointer"
+                  className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#22222A] hover:bg-[#2C2C36] border border-[#32323D] text-white font-semibold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
                 >
-                  <Navigation className="w-4 h-4 text-[#F59E0B]" />
-                  <span>Simulasi Rute (Desktop Test)</span>
-                </button>
+                  <Navigation className="w-4 h-4 text-[#F59E0B] shrink-0" />
+                  <span>Simulasi Rute GBK</span>
+                </motion.button>
 
                 {selectedHistoryRun.id !== 'empty' && (
-                  <button
+                  <motion.button
                     type="button"
+                    whileTap={{ scale: 0.95 }}
+                    transition={MOTION_SPRING}
                     onClick={() => deleteRunSession(selectedHistoryRun.id)}
-                    className="px-3.5 py-2.5 rounded-xl bg-[#262626] hover:bg-[#EF4444]/20 border border-[#333333] hover:border-[#EF4444] text-neutral-300 hover:text-[#EF4444] font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition cursor-pointer"
+                    className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[#22222A] hover:bg-[#EF4444]/20 border border-[#32323D] hover:border-[#EF4444] text-neutral-300 hover:text-[#EF4444] font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition-colors cursor-pointer"
                     title="Hapus sesi lari yang sedang dipilih dari riwayat"
                   >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Hapus Sesi Terpilih</span>
-                  </button>
+                    <Trash2 className="w-4 h-4 shrink-0" />
+                    <span>Hapus Sesi</span>
+                  </motion.button>
                 )}
               </>
             ) : (
               <>
-                <button
+                <motion.button
                   type="button"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.96 }}
+                  transition={MOTION_SPRING}
                   onClick={() =>
                     setStatus((s) => (s === 'running' ? 'paused' : 'running'))
                   }
-                  className="px-4 py-2.5 rounded-xl bg-[#262626] hover:bg-[#333333] text-white font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
+                  className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#22222A] hover:bg-[#2C2C36] text-white font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
                 >
                   {status === 'running' ? (
                     <>
@@ -628,50 +648,55 @@ export default function RunTrackerPage() {
                       <span>Lanjutkan</span>
                     </>
                   )}
-                </button>
+                </motion.button>
 
-                <button
+                <motion.button
                   type="button"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.96 }}
+                  transition={MOTION_SPRING}
                   onClick={handleStopAndSaveRun}
-                  className="px-5 py-2.5 rounded-xl bg-[#EF4444] hover:opacity-95 text-white font-extrabold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
+                  className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#DC2626] hover:opacity-95 text-white font-extrabold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
                 >
                   <Square className="w-4 h-4 fill-white" />
-                  <span>Selesai & Simpan Lari</span>
-                </button>
+                  <span>Selesai &amp; Simpan</span>
+                </motion.button>
 
-                <button
+                <motion.button
                   type="button"
+                  whileTap={{ scale: 0.96 }}
+                  transition={MOTION_SPRING}
                   onClick={handleCancelRun}
-                  className="px-4 py-2.5 rounded-xl bg-[#262626] hover:bg-[#333333] border border-[#333333] text-neutral-300 hover:text-white font-semibold text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer"
+                  className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#22222A] hover:bg-[#2C2C36] border border-[#32323D] text-neutral-300 hover:text-white font-semibold text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer"
                 >
                   <X className="w-4 h-4 text-[#EF4444]" />
-                  <span>Batal / Jangan Simpan</span>
-                </button>
+                  <span>Batal</span>
+                </motion.button>
               </>
             )}
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setVoiceCoachEnabled((v) => !v)}
-              className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 cursor-pointer ${
+              className={`min-h-[44px] px-3.5 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition ${
                 voiceCoachEnabled
-                  ? 'bg-[#262626] border-[#F59E0B] text-white'
-                  : 'bg-[#0E0E0E] border-[#262626] text-neutral-400'
+                  ? 'bg-[#22222A] border-[#F59E0B] text-white'
+                  : 'bg-[#0E0E11] border-[#27272F] text-neutral-400'
               }`}
             >
-              <Volume2 className="w-4 h-4 text-[#F59E0B]" />
-              <span>Voice Coach ID: {voiceCoachEnabled ? 'Aktif' : 'Mati'}</span>
+              <Volume2 className="w-4 h-4 text-[#F59E0B] shrink-0" />
+              <span>Voice Coach: {voiceCoachEnabled ? 'Aktif' : 'Mati'}</span>
             </button>
 
             <button
               type="button"
               onClick={handleGenerateShareCard}
-              className="px-3.5 py-2 rounded-xl bg-[#262626] hover:bg-[#333333] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[#22222A] hover:bg-[#2C2C36] border border-[#32323D] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
             >
-              <Share2 className="w-4 h-4 text-[#F97316]" />
-              <span>Kartu Bagikan (PNG)</span>
+              <Share2 className="w-4 h-4 text-[#F97316] shrink-0" />
+              <span>Kartu PNG</span>
             </button>
           </div>
         </div>
@@ -680,23 +705,23 @@ export default function RunTrackerPage() {
       {/* MAP + SPLIT TABLE + RUN HISTORY */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left 7 Cols: Interactive Route Map Canvas */}
-        <div className="lg:col-span-7 rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h2 className="text-sm font-semibold text-[#111111] dark:text-white">
-                Peta Lintasan GPS & Polyline (#F97316)
+        <div className="lg:col-span-7 surface-card p-4 sm:p-5 min-w-0">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-[#111114] dark:text-white truncate">
+                Peta Lintasan GPS &amp; Polyline
               </h2>
-              <p className="text-xs text-[#6B7280] dark:text-neutral-400">
+              <p className="text-xs text-[#52525B] dark:text-neutral-400 truncate">
                 {status === 'idle' ? selectedHistoryRun.title : 'Pelacakan Langsung Aktif'}
               </p>
             </div>
             <button
               type="button"
               onClick={() => setAutoFollow((a) => !a)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
+              className={`min-h-[44px] px-3.5 rounded-xl text-xs font-semibold cursor-pointer shrink-0 ${
                 autoFollow
-                  ? 'bg-[#161616] text-[#F59E0B]'
-                  : 'bg-neutral-100 dark:bg-[#262626] text-neutral-500'
+                  ? 'bg-[#141418] text-[#F59E0B]'
+                  : 'bg-neutral-100 dark:bg-[#27272F] text-neutral-500'
               }`}
             >
               Auto-Follow: {autoFollow ? 'ON' : 'OFF'}
@@ -707,7 +732,7 @@ export default function RunTrackerPage() {
             ref={mapCanvasRef}
             width={680}
             height={380}
-            className="w-full h-[340px] rounded-xl border border-[#EFEFEF] dark:border-[#262626]"
+            className="w-full h-[240px] sm:h-[340px] rounded-xl border border-[#E6E6E2] dark:border-[#27272F]"
           />
         </div>
 
@@ -777,43 +802,52 @@ export default function RunTrackerPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {runSessions.map((session) => {
-                  const isSelected = session.id === selectedHistoryRun.id;
-                  return (
-                    <div
-                      key={session.id}
-                      className={`w-full p-3 rounded-xl border transition flex items-center justify-between gap-2 ${
-                        isSelected
-                          ? 'bg-[#161616] text-white border-[#F97316]'
-                          : 'bg-[#F8F9FA] dark:bg-[#0E0E0E] text-[#111111] dark:text-white border-[#EFEFEF] dark:border-[#262626]'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setSelectedHistoryRunId(session.id)}
-                        className="min-w-0 flex-1 text-left cursor-pointer"
+                <AnimatePresence initial={false}>
+                  {runSessions.map((session) => {
+                    const isSelected = session.id === selectedHistoryRun.id;
+                    return (
+                      <motion.div
+                        key={session.id}
+                        layout
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, x: -16 }}
+                        transition={MOTION_SPRING}
+                        className={`w-full p-3 rounded-xl border transition-colors flex items-center justify-between gap-2 ${
+                          isSelected
+                            ? 'bg-[#161616] text-white border-[#F97316]'
+                            : 'bg-[#F8F9FA] dark:bg-[#0E0E0E] text-[#111111] dark:text-white border-[#EFEFEF] dark:border-[#262626]'
+                        }`}
                       >
-                        <p className="text-xs font-bold truncate">{session.title}</p>
-                        <p className="text-[11px] opacity-75 tabular-nums mt-0.5">
-                          {(session.distanceM / 1000).toFixed(2)} km · Pace{' '}
-                          {formatPaceSecPerKm(session.avgPaceSecKm)} · {session.caloriesKcal} kkal
-                        </p>
-                      </button>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <Award className="w-4 h-4 text-[#F59E0B]" />
                         <button
                           type="button"
-                          onClick={() => deleteRunSession(session.id)}
-                          aria-label={`Hapus sesi lari ${session.title}`}
-                          title="Hapus riwayat lari ini"
-                          className="p-1.5 rounded-lg text-neutral-400 hover:text-[#EF4444] hover:bg-[#EF4444]/10 transition cursor-pointer"
+                          onClick={() => setSelectedHistoryRunId(session.id)}
+                          className="min-w-0 flex-1 text-left cursor-pointer"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <p className="text-xs font-bold truncate">{session.title}</p>
+                          <p className="text-[11px] opacity-75 tabular-nums mt-0.5">
+                            {(session.distanceM / 1000).toFixed(2)} km · Pace{' '}
+                            {formatPaceSecPerKm(session.avgPaceSecKm)} · {session.caloriesKcal} kkal
+                          </p>
                         </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Award className="w-4 h-4 text-[#F59E0B]" />
+                          <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.88 }}
+                            transition={MOTION_SPRING}
+                            onClick={() => deleteRunSession(session.id)}
+                            aria-label={`Hapus sesi lari ${session.title}`}
+                            title="Hapus riwayat lari ini"
+                            className="p-1.5 rounded-lg text-neutral-400 hover:text-[#EF4444] hover:bg-[#EF4444]/10 transition cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </motion.button>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
               </div>
             )}
           </div>
@@ -821,41 +855,52 @@ export default function RunTrackerPage() {
       </div>
 
       {/* Share Card Preview Modal */}
-      {shareCardUrl && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Kartu Bagikan Lari FitForge"
-        >
-          <div className="w-full max-w-md rounded-2xl bg-[#161616] border border-[#262626] p-5 text-white shadow-2xl">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold">Kartu Bagikan Lari (Obsidian + Amber)</h3>
-              <button
-                type="button"
-                onClick={() => setShareCardUrl(null)}
-                className="text-xs text-neutral-400 hover:text-white"
-              >
-                Tutup ✕
-              </button>
-            </div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={shareCardUrl}
-              alt="Kartu Bagikan Lari FitForge"
-              referrerPolicy="no-referrer"
-              className="w-full rounded-xl border border-[#262626] mb-4"
-            />
-            <a
-              href={shareCardUrl}
-              download="FitForge-Run-Card.png"
-              className="block w-full py-2.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-center text-xs font-extrabold"
+      <AnimatePresence>
+        {shareCardUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Kartu Bagikan Lari FitForge"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.93, y: 14 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={MOTION_SPRING}
+              className="w-full max-w-md rounded-2xl bg-[#161616] border border-[#262626] p-5 text-white shadow-2xl"
             >
-              Unduh Gambar PNG
-            </a>
-          </div>
-        </div>
-      )}
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold">Kartu Bagikan Lari (Obsidian + Amber)</h3>
+                <button
+                  type="button"
+                  onClick={() => setShareCardUrl(null)}
+                  className="text-xs text-neutral-400 hover:text-white cursor-pointer"
+                >
+                  Tutup ✕
+                </button>
+              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={shareCardUrl}
+                alt="Kartu Bagikan Lari FitForge"
+                referrerPolicy="no-referrer"
+                className="w-full rounded-xl border border-[#262626] mb-4"
+              />
+              <a
+                href={shareCardUrl}
+                download="FitForge-Run-Card.png"
+                className="block w-full py-2.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-center text-xs font-extrabold"
+              >
+                Unduh Gambar PNG
+              </a>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </AppShell>
   );
 }

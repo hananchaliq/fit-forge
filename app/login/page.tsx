@@ -126,7 +126,7 @@ function LoginContent() {
   const firebaseConsoleUrl = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/settings`;
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white flex flex-col justify-center items-center px-4 py-10 relative overflow-hidden">
+    <div className="min-h-dvh pt-safe bg-[#09090B] text-white flex flex-col justify-center items-center px-4 py-10 relative overflow-hidden">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute top-1/4 left-1/2 -translate-x-1/2 w-[560px] h-[360px] rounded-full opacity-20 blur-[110px]"
@@ -135,22 +135,22 @@ function LoginContent() {
         }}
       />
 
-      <div className="relative z-10 w-full max-w-xl rounded-3xl bg-[#161616] border border-[#262626] p-6 sm:p-8 shadow-2xl">
-        <div className="flex items-center justify-between mb-6">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#F97316] to-[#F59E0B] text-black font-black flex items-center justify-center text-lg">
+      <div className="relative z-10 w-full max-w-xl rounded-3xl bg-[#141418] border border-[#27272E] p-5 sm:p-8 shadow-2xl">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <Link href="/" className="flex items-center gap-2.5 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F97316] to-[#F59E0B] text-black font-black flex items-center justify-center text-lg shrink-0">
               F
             </div>
-            <div>
+            <div className="min-w-0">
               <span className="text-lg font-bold tracking-tight block leading-none">FitForge</span>
-              <span className="text-[11px] text-neutral-400">Cloud Database & Google Auth</span>
+              <span className="text-[11px] text-neutral-400 truncate block">Cloud Database &amp; Google Auth</span>
             </div>
           </Link>
 
           <button
             type="button"
             onClick={() => setGuideOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#262626] hover:bg-[#333333] text-xs font-semibold text-[#F59E0B] transition cursor-pointer"
+            className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 py-2 rounded-xl bg-[#262626] hover:bg-[#333333] text-xs font-semibold text-[#F59E0B] transition cursor-pointer"
           >
             <BookOpen className="w-3.5 h-3.5" />
             <span>Buka Panduan</span>
@@ -212,15 +212,15 @@ function LoginContent() {
               type="button"
               disabled={loading}
               onClick={handleGoogleLogin}
-              className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-[#EF4444] via-[#F97316] to-[#F59E0B] text-black font-extrabold text-sm hover:opacity-95 disabled:opacity-50 transition flex items-center justify-center gap-2.5 shadow-lg cursor-pointer mb-4"
+              className="w-full min-h-[48px] py-3.5 px-5 rounded-2xl bg-gradient-to-r from-[#EF4444] via-[#F97316] to-[#F59E0B] text-black font-extrabold text-sm hover:opacity-95 disabled:opacity-50 transition flex items-center justify-center gap-2.5 shadow-lg cursor-pointer mb-4"
             >
-              <LogIn className="w-4 h-4 stroke-[2.5]" />
+              <LogIn className="w-4 h-4 stroke-[2.5] shrink-0" />
               <span>
                 {loading
                   ? 'Menghubungkan ke Google...'
                   : 'Masuk dengan Popup Google (Cloud Firestore)'}
               </span>
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-4 h-4 shrink-0" />
             </button>
 
             {!isInstantFormOpen && (
@@ -228,7 +228,7 @@ function LoginContent() {
                 <button
                   type="button"
                   onClick={() => setShowInstantLoginForm(true)}
-                  className="text-xs font-semibold text-[#F59E0B] hover:underline cursor-pointer"
+                  className="min-h-[44px] px-3 py-2 text-xs font-semibold text-[#F59E0B] hover:underline cursor-pointer"
                 >
                   Deploy di Vercel / muncul error auth/unauthorized-domain? Klik untuk Masuk Instan →
                 </button>
@@ -382,7 +382,7 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#0A0A0A] text-white flex items-center justify-center text-sm">
+        <div className="min-h-dvh bg-[#09090B] text-white flex items-center justify-center text-sm">
           Memuat Halaman Login FitForge...
         </div>
       }

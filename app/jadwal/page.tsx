@@ -1,18 +1,22 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   BellRing,
   Volume2,
   Droplets,
   CheckCircle2,
   Clock,
-  Moon,
   AlertTriangle,
   Plus,
   Bell,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
+import {
+  MotionProgressBar,
+  MOTION_SPRING,
+} from '@/components/ui/MotionPrimitives';
 import { useFitForgeStore } from '@/store/useFitForgeStore';
 import {
   DEFAULT_PRAYER_SCHEDULE,
@@ -114,18 +118,26 @@ export default function JadwalPage() {
       ctaLabel="Tes Alarm Bangun (Mode A)"
       onCtaClick={handleTriggerWakeAlarmModal}
     >
-      {pushStatusMsg && (
-        <div className="mb-5 p-3.5 rounded-2xl bg-[#D1FAE5] text-[#047857] text-xs sm:text-sm font-bold flex items-center justify-between">
-          <span>✓ {pushStatusMsg}</span>
-          <button
-            type="button"
-            onClick={() => setPushStatusMsg('')}
-            className="text-xs underline"
+      <AnimatePresence>
+        {pushStatusMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: -10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            transition={MOTION_SPRING}
+            className="mb-5 p-3.5 rounded-2xl bg-[#D1FAE5] text-[#047857] text-xs sm:text-sm font-bold flex items-center justify-between gap-3"
           >
-            Tutup
-          </button>
-        </div>
-      )}
+            <span className="min-w-0 break-words">✓ {pushStatusMsg}</span>
+            <button
+              type="button"
+              onClick={() => setPushStatusMsg('')}
+              className="text-xs underline shrink-0 cursor-pointer"
+            >
+              Tutup
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* SECTION 1: ALADHAN PRAYER TIMES + COUNTDOWN + CHECK-IN */}
       <div className="rounded-3xl bg-[#161616] text-white border border-[#262626] p-6 shadow-card mb-6">
@@ -159,21 +171,25 @@ export default function JadwalPage() {
             const notifEnabled = scheduleConfig.prayerToggles[key];
 
             return (
-              <div
+              <motion.div
                 key={key}
-                className={`rounded-2xl p-4 border transition flex flex-col justify-between ${
+                whileHover={{ y: -3 }}
+                transition={MOTION_SPRING}
+                className={`rounded-2xl p-4 border transition-colors flex flex-col justify-between ${
                   isNext
                     ? 'bg-[#262626] border-[#F97316]'
                     : 'bg-[#0E0E0E] border-[#262626]'
                 }`}
               >
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-bold text-white">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-sm font-bold text-white truncate">
                       {PRAYER_LABELS[key]}
                     </span>
-                    <button
+                    <motion.button
                       type="button"
+                      whileTap={{ scale: 0.88 }}
+                      transition={MOTION_SPRING}
                       onClick={() =>
                         updateScheduleConfig({
                           prayerToggles: {
@@ -182,32 +198,43 @@ export default function JadwalPage() {
                           },
                         })
                       }
-                      className={`p-1.5 rounded-lg text-xs cursor-pointer ${
-                        notifEnabled ? 'bg-[#F97316]/20 text-[#F97316]' : 'bg-[#161616] text-neutral-500'
+                      className={`min-w-[44px] min-h-[44px] -mr-1 flex items-center justify-center rounded-xl text-xs cursor-pointer transition-colors ${
+                        notifEnabled ? 'bg-[#F97316]/20 text-[#F97316]' : 'bg-[#18181D] text-neutral-500'
                       }`}
                       aria-label={`Toggle pengingat sholat ${PRAYER_LABELS[key]}`}
                     >
-                      <Bell className="w-3.5 h-3.5" />
-                    </button>
+                      <Bell className="w-4 h-4" />
+                    </motion.button>
                   </div>
-                  <p className="text-2xl font-extrabold text-[#F59E0B] tabular-nums">
+                  <p className="text-2xl font-extrabold text-[#F59E0B] font-telemetry">
                     {prayerSchedule[key]}
                   </p>
                 </div>
 
-                <button
+                <motion.button
                   type="button"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.96 }}
+                  transition={MOTION_SPRING}
                   onClick={() => togglePrayerCompleted(key)}
-                  className={`mt-4 w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                  className={`mt-4 w-full min-h-[44px] py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
                     done
                       ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                      : 'bg-[#161616] hover:bg-[#262626] text-neutral-300 border border-[#333333]'
+                      : 'bg-[#18181D] hover:bg-[#24242C] text-neutral-200 border border-[#32323D]'
                   }`}
                 >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <motion.span
+                    key={done ? 'done' : 'pending'}
+                    initial={{ scale: 0.65, rotate: -20 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={MOTION_SPRING}
+                    className="inline-flex shrink-0"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                  </motion.span>
                   <span>{done ? 'Sudah Sholat' : 'Tandai Sholat'}</span>
-                </button>
-              </div>
+                </motion.button>
+              </motion.div>
             );
           })}
         </div>
@@ -355,16 +382,15 @@ export default function JadwalPage() {
                 </span>
               </div>
 
-              <div className="w-full h-2.5 bg-neutral-200 dark:bg-[#262626] rounded-full overflow-hidden mb-3">
-                <div
-                  className="h-full bg-gradient-to-r from-sky-500 to-emerald-400 transition-all"
-                  style={{
-                    width: `${Math.min(100, (waterMl / profile.dailyWaterTargetMl) * 100)}%`,
-                  }}
+              <div className="mb-3">
+                <MotionProgressBar
+                  percent={Math.min(100, (waterMl / profile.dailyWaterTargetMl) * 100)}
+                  className="h-2.5"
+                  barClassName="bg-gradient-to-r from-sky-500 to-emerald-400"
                 />
               </div>
 
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <select
                   aria-label="Interval pengingat hidrasi"
                   value={scheduleConfig.hydrationIntervalMin}
@@ -373,85 +399,113 @@ export default function JadwalPage() {
                       hydrationIntervalMin: Number(e.target.value),
                     })
                   }
-                  className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#161616] border border-[#EFEFEF] dark:border-[#262626] text-xs font-semibold"
+                  className="min-h-[40px] px-3 py-1.5 rounded-xl bg-white dark:bg-[#161616] border border-[#EFEFEF] dark:border-[#262626] text-xs font-semibold"
                 >
                   <option value={45}>Setiap 45 menit</option>
                   <option value={60}>Setiap 60 menit (1 jam)</option>
                   <option value={90}>Setiap 90 menit</option>
                 </select>
 
-                <button
+                <motion.button
                   type="button"
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.94 }}
+                  transition={MOTION_SPRING}
                   onClick={() => addWaterMl(250)}
-                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold flex items-center gap-1 cursor-pointer"
+                  className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold flex items-center gap-1 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Minum 250ml</span>
-                </button>
+                </motion.button>
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <button
+            <motion.button
               type="button"
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.97 }}
+              transition={MOTION_SPRING}
               onClick={() => handleTestSilentNotification('prayer')}
-              className="py-3 px-3 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] hover:bg-neutral-100 dark:hover:bg-[#262626] border border-[#EFEFEF] dark:border-[#262626] text-xs font-bold transition cursor-pointer"
+              className="min-h-[44px] py-3 px-3 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] hover:bg-neutral-100 dark:hover:bg-[#262626] border border-[#EFEFEF] dark:border-[#262626] text-xs font-bold transition-colors cursor-pointer"
             >
               Tes Notifikasi Sholat (Mode B)
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
               type="button"
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.97 }}
+              transition={MOTION_SPRING}
               onClick={() => handleTestSilentNotification('hydration')}
-              className="py-3 px-3 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold transition cursor-pointer"
+              className="min-h-[44px] py-3 px-3 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold cursor-pointer"
             >
               Tes Notifikasi Air +250ml (Mode B)
-            </button>
+            </motion.button>
           </div>
         </div>
       </div>
 
       {/* FULL-SCREEN WAKE ALARM MODAL (MODE A) */}
-      {alarmModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Alarm Bangun Pagi FitForge"
-        >
-          <div className="w-full max-w-md rounded-3xl bg-[#161616] border-2 border-[#EF4444] p-7 text-center text-white shadow-2xl">
-            <div className="w-16 h-16 rounded-2xl bg-[#EF4444]/20 border border-[#EF4444] flex items-center justify-center mx-auto mb-4">
-              <Volume2 className="w-8 h-8 text-[#EF4444]" />
-            </div>
-            <span className="text-xs font-extrabold tracking-widest uppercase text-[#F59E0B]">
-              MODE A · ALARM BANGUN AKTIF
-            </span>
-            <p className="text-5xl font-black tabular-nums mt-2 mb-2">
-              {scheduleConfig.wakeAlarmTime}
-            </p>
-            <p className="text-sm text-neutral-300 mb-6">
-              Waktunya bangun untuk persiapan Sholat Subuh, hidrasi 250ml pertama, dan sesi latihan pagi Anda!
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={handleSnoozeWakeAlarm}
-                className="py-3.5 rounded-2xl bg-[#262626] hover:bg-[#333333] text-white font-bold text-sm cursor-pointer"
+      <AnimatePresence>
+        {alarmModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Alarm Bangun Pagi FitForge"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 18 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 12 }}
+              transition={MOTION_SPRING}
+              className="w-full max-w-md rounded-3xl bg-[#161616] border-2 border-[#EF4444] p-7 text-center text-white shadow-2xl"
+            >
+              <motion.div
+                animate={{ scale: [1, 1.08, 1] }}
+                transition={{ repeat: Infinity, duration: 1.2, ease: 'easeInOut' }}
+                className="w-16 h-16 rounded-2xl bg-[#EF4444]/20 border border-[#EF4444] flex items-center justify-center mx-auto mb-4"
               >
-                Snooze (5 Menit)
-              </button>
-              <button
-                type="button"
-                onClick={handleStopWakeAlarm}
-                className="py-3.5 rounded-2xl bg-gradient-to-r from-[#EF4444] to-[#F97316] text-black font-extrabold text-sm cursor-pointer"
-              >
-                Matikan Alarm
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                <Volume2 className="w-8 h-8 text-[#EF4444]" />
+              </motion.div>
+              <span className="text-xs font-extrabold tracking-widest uppercase text-[#F59E0B]">
+                MODE A · ALARM BANGUN AKTIF
+              </span>
+              <p className="text-5xl font-black tabular-nums mt-2 mb-2">
+                {scheduleConfig.wakeAlarmTime}
+              </p>
+              <p className="text-sm text-neutral-300 mb-6">
+                Waktunya bangun untuk persiapan Sholat Subuh, hidrasi 250ml pertama, dan sesi latihan pagi Anda!
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.96 }}
+                  transition={MOTION_SPRING}
+                  onClick={handleSnoozeWakeAlarm}
+                  className="min-h-[48px] py-3.5 rounded-2xl bg-[#262626] hover:bg-[#333333] text-white font-bold text-sm cursor-pointer"
+                >
+                  Snooze (5 Menit)
+                </motion.button>
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.96 }}
+                  transition={MOTION_SPRING}
+                  onClick={handleStopWakeAlarm}
+                  className="min-h-[48px] py-3.5 rounded-2xl bg-gradient-to-r from-[#EF4444] to-[#F97316] text-black font-extrabold text-sm cursor-pointer"
+                >
+                  Matikan Alarm
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </AppShell>
   );
 }

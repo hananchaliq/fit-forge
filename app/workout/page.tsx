@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import Image from 'next/image';
 import {
   Play,
@@ -29,6 +29,8 @@ import {
 import { AppShell } from '@/components/layout/AppShell';
 import { BodyHighlighter2D } from '@/components/plan/BodyHighlighter2D';
 import { BiomechanicalLoader } from '@/components/ui/BiomechanicalLoader';
+import { Canvas3DErrorBoundary } from '@/components/ui/Canvas3DErrorBoundary';
+import { MOTION_SPRING } from '@/components/ui/MotionPrimitives';
 import { useFitForgeStore } from '@/store/useFitForgeStore';
 import { EXERCISES } from '@/data/exercises';
 import { WEEKLY_PLAN, getExercisesForDay } from '@/data/weeklyPlan';
@@ -226,14 +228,22 @@ function WorkoutStudioContent() {
       ctaLabel="Simpan Sesi Latihan"
       onCtaClick={handleFinishSession}
     >
-      {sessionSavedBanner && (
-        <div className="mb-4 p-3.5 rounded-2xl bg-[#D1FAE5] text-[#047857] text-xs sm:text-sm font-bold flex items-center justify-between">
-          <span>
-            ✓ Sesi latihan berhasil disimpan ke riwayat dan menambahkan volume mingguan Anda!
-          </span>
-          <span>+{Math.max(1250, sessionTotalVolumeKg)} kg</span>
-        </div>
-      )}
+      <AnimatePresence>
+        {sessionSavedBanner && (
+          <motion.div
+            initial={{ opacity: 0, y: -12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.98 }}
+            transition={MOTION_SPRING}
+            className="mb-4 p-3.5 rounded-2xl bg-[#D1FAE5] text-[#047857] text-xs sm:text-sm font-bold flex items-center justify-between shadow-sm"
+          >
+            <span>
+              ✓ Sesi latihan berhasil disimpan ke riwayat dan menambahkan volume mingguan Anda!
+            </span>
+            <span className="font-telemetry">+{Math.max(1250, sessionTotalVolumeKg)} kg</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Top Exercise & Blueprint Selector Bar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
@@ -247,7 +257,7 @@ function WorkoutStudioContent() {
               const list = getExercisesForDay(nextDay, planMode);
               if (list[0]) setSelectedExerciseId(list[0].id);
             }}
-            className="px-3.5 py-2 rounded-xl bg-white dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#262626] text-xs font-bold text-[#111111] dark:text-white shadow-xs"
+            className="min-h-[44px] w-full sm:w-auto max-w-full px-3.5 py-2 rounded-xl bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] text-xs font-bold text-[#111114] dark:text-white shadow-xs"
           >
             {WEEKLY_PLAN.map((d) => (
               <option key={d.key} value={d.key}>
@@ -266,7 +276,7 @@ function WorkoutStudioContent() {
               const bp = BLUEPRINT_EXERCISES.find((b) => b.fitforgeExerciseId === exId);
               if (bp) setActiveBlueprintId(bp.id);
             }}
-            className="px-3.5 py-2 rounded-xl bg-white dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#262626] text-xs font-bold text-[#111111] dark:text-white shadow-xs"
+            className="min-h-[44px] w-full sm:w-auto max-w-full px-3.5 py-2 rounded-xl bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] text-xs font-bold text-[#111114] dark:text-white shadow-xs"
           >
             {Object.values(EXERCISES).map((ex) => (
               <option key={ex.id} value={ex.id}>
@@ -275,129 +285,151 @@ function WorkoutStudioContent() {
             ))}
           </select>
 
-          <div className="inline-flex rounded-xl bg-white dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#262626] p-0.5 shadow-xs">
-            <button
-              type="button"
-              onClick={() => setPlanMode('gym')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition ${
-                planMode === 'gym'
-                  ? 'bg-[#161616] text-white dark:bg-[#F97316] dark:text-black'
-                  : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-white'
-              }`}
-            >
-              Gym
-            </button>
-            <button
-              type="button"
-              onClick={() => setPlanMode('home')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition ${
-                planMode === 'home'
-                  ? 'bg-[#161616] text-white dark:bg-[#F97316] dark:text-black'
-                  : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-white'
-              }`}
-            >
-              Rumah
-            </button>
+          <div className="inline-flex rounded-xl bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] p-1 shadow-xs">
+            {(
+              [
+                { key: 'gym', label: 'Gym' },
+                { key: 'home', label: 'Rumah' },
+              ] as const
+            ).map((mode) => (
+              <button
+                key={mode.key}
+                type="button"
+                onClick={() => setPlanMode(mode.key)}
+                className={`relative min-h-[38px] px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${
+                  planMode === mode.key
+                    ? 'text-white dark:text-black'
+                    : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-white'
+                }`}
+              >
+                {planMode === mode.key && (
+                  <motion.span
+                    layoutId="workout-plan-mode-pill"
+                    transition={MOTION_SPRING}
+                    className="absolute inset-0 rounded-lg bg-[#141418] dark:bg-[#F97316] shadow-xs"
+                  />
+                )}
+                <span className="relative z-10">{mode.label}</span>
+              </button>
+            ))}
           </div>
         </div>
 
         {/* Blueprint 3D Core Trio Quick-Switch (01. PUSH-UP · 02. SQUAT · 03. PULL-UP) */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-white dark:bg-[#161616] border border-[#E5E7EB] dark:border-[#262626] p-1 rounded-2xl shadow-xs">
-          <span className="px-2.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        <div className="flex flex-wrap items-center gap-1.5 bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] p-1.5 rounded-2xl shadow-xs w-full sm:w-auto">
+          <span className="px-2 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             Blueprint:
           </span>
           {BLUEPRINT_EXERCISES.map((bp) => {
             const isSelected = currentExercise.id === bp.fitforgeExerciseId;
             return (
-              <button
+              <motion.button
                 key={bp.id}
                 type="button"
+                whileTap={{ scale: 0.96 }}
                 onClick={() => {
                   setSelectedExerciseId(bp.fitforgeExerciseId);
                   setActiveBlueprintId(bp.id);
                   setCurrentSet(1);
                   setCameraPreset(bp.id === '03_pull_up' ? 'front' : 'side');
                 }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+                className={`relative min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-extrabold transition-colors cursor-pointer ${
                   isSelected
-                    ? 'bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black shadow-xs'
-                    : 'text-[#111111] dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-[#222226]'
+                    ? 'text-black'
+                    : 'text-[#111114] dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-[#22222A]'
                 }`}
               >
-                {bp.code}. {bp.exercise.replace('_', '-').toUpperCase()}
-              </button>
+                {isSelected && (
+                  <motion.span
+                    layoutId="workout-blueprint-trio-pill"
+                    transition={MOTION_SPRING}
+                    className="absolute inset-0 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] shadow-xs"
+                  />
+                )}
+                <span className="relative z-10">
+                  {bp.code}. {bp.exercise.replace('_', '-').toUpperCase()}
+                </span>
+              </motion.button>
             );
           })}
         </div>
       </div>
 
       {/* =====================================================================
-          UNIFIED APPLE-GRADE 3D BLUEPRINT STUDIO CARD (ZERO COLLISION / OVERLAP)
+          UNIFIED STUDIO 3D VIEWPORT CARD (ZERO COLLISION / ZERO LAYOUT SHIFT)
          ===================================================================== */}
-      <div className="w-full rounded-[28px] bg-[#070D19] border border-[#1E293B] overflow-hidden shadow-2xl mb-6">
-        {/* 1. Studio Top Bar (Docked cleanly above canvas) */}
-        <div className="px-4 sm:px-5 py-3 bg-[#0B1324] border-b border-[#1E293B] flex flex-wrap items-center justify-between gap-3">
+      <div className="w-full rounded-3xl bg-[#070B14] border border-[#1E293B] overflow-hidden shadow-2xl mb-6">
+        {/* 1. Studio Top Bar */}
+        <div className="px-3.5 sm:px-5 py-3 bg-[#0B1120] border-b border-[#1E293B] flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-2.5 h-2.5 rounded-full bg-[#EF4444] shrink-0 shadow-[0_0_10px_#EF4444]" />
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-xs sm:text-sm font-extrabold text-white truncate">
                   {currentExercise.name}
                 </h2>
-                <span className="px-2 py-0.5 rounded-md bg-sky-500/15 border border-sky-500/30 text-[10px] font-bold text-sky-300 tabular-nums">
+                <span className="px-2 py-0.5 rounded-md bg-sky-500/15 border border-sky-500/30 text-[10px] font-bold text-sky-300 font-telemetry">
                   Set {currentSet}/{currentExercise.sets} · {currentExercise.reps} rep
                 </span>
               </div>
               <div className="hidden sm:flex items-center gap-3 mt-0.5 text-[11px] text-slate-400">
                 <span className="inline-flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-[#DC2626]" />
-                  Muscle (Red)
+                  Otot Aktif
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-[#B8C1CC]" />
-                  Body (Gray)
+                  Anatomi PBR
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-[#161920] border border-slate-600" />
-                  Clothes (Black)
+                  Kompresi
                 </span>
               </div>
             </div>
           </div>
 
           {/* Right: Single Studio vs 4-Angle Quad View + Camera Angle Pills */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* View Mode Toggle: Single 3D vs 4-Angle Blueprint Split */}
-            <div className="inline-flex rounded-xl bg-[#070D19] p-1 border border-[#1E293B]">
+          <div className="flex flex-wrap items-center gap-2 max-w-full">
+            <div className="inline-flex rounded-xl bg-[#070B14] p-1 border border-[#1E293B]">
               <button
                 type="button"
                 onClick={() => setQuadView(false)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                  !quadView
-                    ? 'bg-sky-500 text-slate-950'
-                    : 'text-slate-400 hover:text-white'
+                className={`relative min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  !quadView ? 'text-slate-950' : 'text-slate-400 hover:text-white'
                 }`}
               >
-                <Box className="w-3.5 h-3.5" />
-                <span>Studio 3D</span>
+                {!quadView && (
+                  <motion.span
+                    layoutId="workout-viewmode-pill"
+                    transition={MOTION_SPRING}
+                    className="absolute inset-0 rounded-lg bg-sky-500"
+                  />
+                )}
+                <Box className="relative z-10 w-3.5 h-3.5 shrink-0" />
+                <span className="relative z-10">Studio 3D</span>
               </button>
               <button
                 type="button"
                 onClick={() => setQuadView(true)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                  quadView
-                    ? 'bg-sky-500 text-slate-950'
-                    : 'text-slate-400 hover:text-white'
+                className={`relative min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  quadView ? 'text-slate-950' : 'text-slate-400 hover:text-white'
                 }`}
               >
-                <Grid2X2 className="w-3.5 h-3.5" />
-                <span>4-Angle Blueprint</span>
+                {quadView && (
+                  <motion.span
+                    layoutId="workout-viewmode-pill"
+                    transition={MOTION_SPRING}
+                    className="absolute inset-0 rounded-lg bg-sky-500"
+                  />
+                )}
+                <Grid2X2 className="relative z-10 w-3.5 h-3.5 shrink-0" />
+                <span className="relative z-10">4-Sudut</span>
               </button>
             </div>
 
-            {/* Camera Angle Presets (Depan / Samping / Belakang / Atas) */}
             {!quadView && (
-              <div className="flex items-center gap-0.5 bg-[#070D19] p-1 rounded-xl border border-[#1E293B]">
+              <div className="flex items-center gap-0.5 bg-[#070B14] p-1 rounded-xl border border-[#1E293B] overflow-x-auto no-scrollbar max-w-full">
                 {(
                   [
                     { key: 'front', label: 'Depan' },
@@ -410,7 +442,7 @@ function WorkoutStudioContent() {
                     key={cam.key}
                     type="button"
                     onClick={() => setCameraPreset(cam.key)}
-                    className={`relative px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    className={`relative min-h-[38px] px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                       cameraPreset === cam.key
                         ? 'text-[#F59E0B]'
                         : 'text-slate-400 hover:text-white'
@@ -431,31 +463,37 @@ function WorkoutStudioContent() {
           </div>
         </div>
 
-        {/* 2. Center 3D Viewport (100% Unobstructed — Zero Floating Dock Covering Athlete) */}
-        <div className="relative w-full h-[440px] sm:h-[520px]">
-          <TrainerStudio3D
-            clip={currentExercise.clip}
-            biomechanicalVariant={currentExercise.biomechanicalVariant}
-            exerciseName={currentExercise.name}
-            primaryMuscles={currentExercise.primaryMuscles}
-            secondaryMuscles={currentExercise.secondaryMuscles}
-            timeScale={timeScale}
-            isPaused={isPaused}
-            cameraPreset={cameraPreset}
-            debugMuscleMask={debugMuscleMask}
-            quadView={quadView}
-            lockedFrame={lockedFrame}
-          />
+        {/* 2. Center 3D Viewport (Error Boundary + Fixed Aspect Height = Zero CLS) */}
+        <div className="relative w-full h-[360px] sm:h-[500px]">
+          <Canvas3DErrorBoundary
+            title="Studio 3D Dalam Mode Hemat Daya"
+            description="Perangkat atau konteks WebGL terhenti sementara. Gunakan peta otot 2D dan panduan langkah di bawah."
+            heightClass="h-full"
+          >
+            <TrainerStudio3D
+              clip={currentExercise.clip}
+              biomechanicalVariant={currentExercise.biomechanicalVariant}
+              exerciseName={currentExercise.name}
+              primaryMuscles={currentExercise.primaryMuscles}
+              secondaryMuscles={currentExercise.secondaryMuscles}
+              timeScale={timeScale}
+              isPaused={isPaused}
+              cameraPreset={cameraPreset}
+              debugMuscleMask={debugMuscleMask}
+              quadView={quadView}
+              lockedFrame={lockedFrame}
+            />
+          </Canvas3DErrorBoundary>
         </div>
 
-        {/* 3. Studio Bottom Control Dock (Cleanly below canvas, never colliding with 3D model) */}
-        <div className="bg-[#0B1324] border-t border-[#1E293B] p-3 sm:p-4 space-y-3">
-          {/* Row A: 3D Pose Sequence Scrubber (Matching Blueprint 1. Start -> 2. Lower/Squat/Pull -> 3. Return) */}
+        {/* 3. Studio Bottom Control Dock */}
+        <div className="bg-[#0B1120] border-t border-[#1E293B] p-3 sm:p-4 space-y-3">
+          {/* Row A: 3D Pose Sequence Scrubber */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#1E293B]/80">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-sky-400 shrink-0">
-              3D Pose Sequence:
+              Urutan Pose 3D:
             </span>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 w-full sm:w-auto flex-1 max-w-[780px]">
+            <div className="grid grid-cols-2 min-[420px]:grid-cols-3 sm:grid-cols-6 gap-1.5 w-full sm:w-auto flex-1 max-w-[780px]">
               {keyframeButtons.map((btn) => {
                 const isSelected = lockedFrame === btn.frame;
                 return (
@@ -466,10 +504,10 @@ function WorkoutStudioContent() {
                       setLockedFrame(btn.frame);
                       if (btn.frame === null) setIsPaused(false);
                     }}
-                    className={`px-2.5 py-1.5 rounded-xl border text-left transition cursor-pointer ${
+                    className={`min-h-[44px] px-2.5 py-1.5 rounded-xl border text-left transition cursor-pointer min-w-0 ${
                       isSelected
                         ? 'bg-sky-500/20 border-sky-400 text-white'
-                        : 'bg-[#070D19] border-[#1E293B] text-slate-400 hover:text-white hover:border-slate-700'
+                        : 'bg-[#070B14] border-[#1E293B] text-slate-400 hover:text-white hover:border-slate-700'
                     }`}
                   >
                     <p className="text-[11px] font-bold truncate">{btn.shortLabel}</p>
@@ -489,7 +527,7 @@ function WorkoutStudioContent() {
                   setLockedFrame(null);
                   setIsPaused((p) => !p);
                 }}
-                className="p-2.5 rounded-xl bg-[#162033] hover:bg-[#1E293B] border border-slate-700/60 text-white transition cursor-pointer"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-[#162033] hover:bg-[#1E293B] border border-slate-700/60 text-white transition cursor-pointer"
                 aria-label={isPaused ? 'Putar animasi 3D' : 'Jeda animasi 3D'}
               >
                 {isPaused || lockedFrame !== null ? (
@@ -502,19 +540,19 @@ function WorkoutStudioContent() {
               <button
                 type="button"
                 onClick={handleCompleteSet}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold hover:opacity-95 transition flex items-center gap-1.5 cursor-pointer shadow-md"
+                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold hover:opacity-95 active:scale-[0.98] transition flex items-center gap-1.5 cursor-pointer shadow-md"
               >
-                <CheckCircle2 className="w-4 h-4" />
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>Selesai Set {currentSet}</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleSkipNextExercise}
-                className="px-3 py-2.5 rounded-xl bg-[#162033] hover:bg-[#1E293B] border border-slate-700/60 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[#162033] hover:bg-[#1E293B] border border-slate-700/60 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
                 title="Gerakan Berikutnya"
               >
-                <SkipForward className="w-4 h-4" />
+                <SkipForward className="w-4 h-4 shrink-0" />
                 <span className="hidden sm:inline">Gerakan Berikutnya</span>
               </button>
 

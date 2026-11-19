@@ -184,7 +184,7 @@ export default function PengaturanPage() {
 
           <button
             type="submit"
-            className="px-5 py-3 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black font-extrabold text-xs sm:text-sm inline-flex items-center gap-2 hover:opacity-95 transition cursor-pointer"
+            className="min-h-[44px] px-5 py-3 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black font-extrabold text-xs sm:text-sm inline-flex items-center gap-2 hover:opacity-95 transition cursor-pointer"
           >
             <Save className="w-4 h-4" />
             <span>Simpan Perubahan ke Cloud</span>
@@ -245,7 +245,7 @@ export default function PengaturanPage() {
             <button
               type="button"
               onClick={toggleDarkMode}
-              className="w-full py-2.5 rounded-xl bg-[#161616] dark:bg-[#262626] text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#161616] dark:bg-[#262626] text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
             >
               {darkMode ? (
                 <>
@@ -263,11 +263,11 @@ export default function PengaturanPage() {
 
           {/* Zero Reset, Guide & Attribution */}
           <div className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card space-y-3">
-            <h3 className="text-sm font-bold">Panduan & Reset Data</h3>
+            <h3 className="text-sm font-bold">Panduan &amp; Reset Data</h3>
             <button
               type="button"
               onClick={() => setGuideOpen(true)}
-              className="w-full py-2.5 rounded-xl bg-[#161616] text-[#F59E0B] text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#161616] text-[#F59E0B] text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
             >
               <BookOpen className="w-4 h-4" />
               <span>Buka Panduan Penggunaan (5 Langkah)</span>
@@ -280,7 +280,7 @@ export default function PengaturanPage() {
                 setSavedBanner('Seluruh metrik harian telah direset kembali ke 0.');
                 setTimeout(() => setSavedBanner(''), 3000);
               }}
-              className="w-full py-2.5 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] hover:bg-neutral-100 dark:hover:bg-[#262626] border border-[#EFEFEF] dark:border-[#262626] text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] hover:bg-neutral-100 dark:hover:bg-[#262626] border border-[#EFEFEF] dark:border-[#262626] text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
             >
               <RotateCcw className="w-4 h-4 text-[#F97316]" />
               <span>Reset Semua Metrik ke Nol (0)</span>
@@ -288,10 +288,10 @@ export default function PengaturanPage() {
 
             <Link
               href="/about/credits"
-              className="w-full py-2.5 rounded-xl bg-[#161616] text-white text-xs font-bold flex items-center justify-center gap-2"
+              className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#161616] text-white text-xs font-bold flex items-center justify-center gap-2"
             >
               <Award className="w-4 h-4 text-[#F59E0B]" />
-              <span>Lihat Halaman Kredit & Lisensi 3D</span>
+              <span>Lihat Halaman Kredit &amp; Lisensi 3D</span>
             </Link>
           </div>
         </div>

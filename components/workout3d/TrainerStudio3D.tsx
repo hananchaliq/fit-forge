@@ -6,6 +6,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { AnimationClipName, MuscleGroup } from '@/data/exerciseClipMap';
 import { BLUEPRINT_EXERCISES } from '@/data/blueprintPack';
+import { createProceduralPBRTextures, disposeSceneResources } from '@/lib/pbrTextures';
 
 export type CameraPreset = 'front' | 'side' | 'back' | 'top';
 
@@ -706,10 +707,18 @@ export function TrainerStudio3D({
       }
     })();
 
+    let disposed = false;
+    let isVisible = true;
+    let isTabVisible = typeof document !== 'undefined' ? document.visibilityState === 'visible' : true;
+    let isContextLost = false;
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
     let renderer: THREE.WebGLRenderer;
     try {
       renderer = new THREE.WebGLRenderer({
-        antialias: true,
+        antialias: !isSoftwareGl,
         powerPreference: 'high-performance',
       });
     } catch {
@@ -720,15 +729,17 @@ export function TrainerStudio3D({
     const width = container.clientWidth || 800;
     const height = container.clientHeight || 520;
     renderer.setSize(width, height);
-    renderer.setPixelRatio(isSoftwareGl ? 1.25 : Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.shadowMap.enabled = !isSoftwareGl;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.06;
+    renderer.toneMappingExposure = 1.08;
 
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
+
+    const pbr = createProceduralPBRTextures(renderer.capabilities.getMaxAnisotropy());
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x060b16);
@@ -738,7 +749,7 @@ export function TrainerStudio3D({
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
     const envTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
     scene.environment = envTexture;
-    scene.environmentIntensity = 0.48;
+    scene.environmentIntensity = 0.52;
     pmremGenerator.dispose();
 
     const camera = new THREE.PerspectiveCamera(34, width / height, 0.1, 50);
@@ -750,15 +761,15 @@ export function TrainerStudio3D({
     controls.minDistance = 1.4;
     controls.maxDistance = 6.5;
 
-    // 4-Point Anatomical Studio Lighting — dramatic sculpted contrast matching reference_blueprint.png
-    const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.36);
+    // 4-Point Anatomical Studio Lighting — warm key + cool fill + rim for natural organic depth
+    const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.30);
     scene.add(ambientLight);
 
-    const hemiLight = new THREE.HemisphereLight(0xf1f5f9, 0x090d16, 0.52);
+    const hemiLight = new THREE.HemisphereLight(0xf1f5f9, 0x090d16, 0.56);
     hemiLight.position.set(0, 4.2, 0);
     scene.add(hemiLight);
 
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.55);
+    const keyLight = new THREE.DirectionalLight(0xfff3e0, 1.62);
     keyLight.position.set(2.2, 4.4, 2.9);
     keyLight.castShadow = !isSoftwareGl;
     keyLight.shadow.mapSize.width = 2048;
@@ -774,20 +785,22 @@ export function TrainerStudio3D({
     keyLight.shadow.normalBias = 0.02;
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.72);
+    const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.78);
     fillLight.position.set(-2.8, 2.5, 1.8);
     scene.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0x38bdf8, 1.05);
+    const rimLight = new THREE.DirectionalLight(0x38bdf8, 1.15);
     rimLight.position.set(0, 3.4, -3.2);
     scene.add(rimLight);
 
-    // Clean Blueprint Floor & Grid
+    // Studio Rubber Floor + Architectural Blueprint Grid + Soft Grounded Contact Shadow
     const floorGeo = new THREE.CircleGeometry(6.5, 64);
     const floorMat = new THREE.MeshStandardMaterial({
-      color: 0x080f1e,
-      roughness: 0.88,
-      metalness: 0.12,
+      color: 0xffffff,
+      map: pbr.floorAlbedoMap,
+      roughnessMap: pbr.floorRoughnessMap,
+      roughness: 0.9,
+      metalness: 0.08,
     });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
@@ -798,48 +811,72 @@ export function TrainerStudio3D({
     gridHelper.position.y = 0.002;
     scene.add(gridHelper);
 
-    // High-Definition Physical Materials (MeshPhysicalMaterial with athletic skin sheen & clearcoat)
+    const contactShadowGeo = new THREE.PlaneGeometry(1.45, 1.45);
+    const contactShadowMat = new THREE.MeshBasicMaterial({
+      map: pbr.contactShadowMap,
+      transparent: true,
+      opacity: 0.58,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    });
+    const contactShadow = new THREE.Mesh(contactShadowGeo, contactShadowMat);
+    contactShadow.rotation.x = -Math.PI / 2;
+    contactShadow.position.y = 0.005;
+    scene.add(contactShadow);
+
+    // High-Definition Physical Materials (Natural satin organic skin & micro-detail bump, not glossy plastic)
     const skinMat = new THREE.MeshPhysicalMaterial({
       color: 0xaab6c8,
-      roughness: 0.38,
-      metalness: 0.08,
-      clearcoat: 0.18,
-      clearcoatRoughness: 0.42,
-      sheen: 0.25,
-      sheenRoughness: 0.5,
-      sheenColor: new THREE.Color(0xe2e8f0),
+      roughness: 0.54,
+      metalness: 0.04,
+      clearcoat: 0.06,
+      clearcoatRoughness: 0.58,
+      sheen: 0.34,
+      sheenRoughness: 0.58,
+      sheenColor: new THREE.Color(0xf1f5f9),
+      bumpMap: pbr.skinBumpMap,
+      bumpScale: 0.004,
+      roughnessMap: pbr.skinRoughnessMap,
       vertexColors: true,
     });
 
     const shortsMat = new THREE.MeshPhysicalMaterial({
       color: 0x161a22,
-      roughness: 0.72,
-      metalness: 0.06,
-      sheen: 0.2,
+      roughness: 0.80,
+      metalness: 0.04,
+      sheen: 0.22,
+      sheenRoughness: 0.72,
       sheenColor: new THREE.Color(0x334155),
+      bumpMap: pbr.fabricBumpMap,
+      bumpScale: 0.005,
+      roughnessMap: pbr.fabricRoughnessMap,
       vertexColors: true,
     });
 
     const shortsTrimMat = new THREE.MeshStandardMaterial({
       color: 0x2d3748,
-      roughness: 0.58,
-      metalness: 0.12,
+      roughness: 0.62,
+      metalness: 0.10,
+      bumpMap: pbr.fabricBumpMap,
+      bumpScale: 0.003,
       vertexColors: true,
     });
 
     const trimWhiteMat = new THREE.MeshStandardMaterial({
       color: 0xf1f5f9,
-      roughness: 0.40,
-      metalness: 0.1,
+      roughness: 0.44,
+      metalness: 0.08,
       vertexColors: true,
     });
 
     const hairMat = new THREE.MeshPhysicalMaterial({
       color: 0x12161f,
-      roughness: 0.68,
-      metalness: 0.08,
-      clearcoat: 0.12,
-      clearcoatRoughness: 0.55,
+      roughness: 0.72,
+      metalness: 0.06,
+      clearcoat: 0.08,
+      clearcoatRoughness: 0.62,
       vertexColors: true,
     });
 
@@ -851,8 +888,8 @@ export function TrainerStudio3D({
 
     const equipMetalMat = new THREE.MeshStandardMaterial({
       color: 0x64748b,
-      roughness: 0.22,
-      metalness: 0.88,
+      roughness: 0.24,
+      metalness: 0.86,
     });
 
     const equipChromeMat = new THREE.MeshStandardMaterial({
@@ -903,22 +940,28 @@ export function TrainerStudio3D({
     muscleIds.forEach((id) => {
       muscleMaterials[id] = new THREE.MeshPhysicalMaterial({
         color: 0xaab6c8,
-        roughness: 0.38,
-        metalness: 0.08,
-        clearcoat: 0.18,
-        clearcoatRoughness: 0.42,
-        sheen: 0.25,
-        sheenRoughness: 0.5,
-        sheenColor: new THREE.Color(0xe2e8f0),
+        roughness: 0.52,
+        metalness: 0.05,
+        clearcoat: 0.07,
+        clearcoatRoughness: 0.54,
+        sheen: 0.34,
+        sheenRoughness: 0.56,
+        sheenColor: new THREE.Color(0xf1f5f9),
+        bumpMap: pbr.skinBumpMap,
+        bumpScale: 0.0045,
+        roughnessMap: pbr.skinRoughnessMap,
         vertexColors: true,
       });
     });
 
     const shortsGlutesMat = new THREE.MeshPhysicalMaterial({
       color: 0x161a22,
-      roughness: 0.72,
-      metalness: 0.06,
-      clearcoat: 0.10,
+      roughness: 0.78,
+      metalness: 0.05,
+      clearcoat: 0.05,
+      bumpMap: pbr.fabricBumpMap,
+      bumpScale: 0.0045,
+      roughnessMap: pbr.fabricRoughnessMap,
       vertexColors: true,
     });
 
@@ -1561,64 +1604,122 @@ export function TrainerStudio3D({
     const dumbbellR = makeDumbbell();
 
     // ============================================================================
-    // MUSCLE HIGHLIGHT UPDATER (Blueprint Crimson Red & Coral)
+    // SMOOTH MUSCLE HIGHLIGHT INTERPOLATION (Zero instant snap / zero flicker)
     // ============================================================================
-    const updateMuscleMaterials = () => {
+    interface MaterialTargetState {
+      color: THREE.Color;
+      emissive: THREE.Color;
+      emissiveIntensity: number;
+      roughness: number;
+    }
+
+    const muscleTargets: Record<MuscleGroup, MaterialTargetState> = {} as Record<
+      MuscleGroup,
+      MaterialTargetState
+    >;
+    muscleIds.forEach((id) => {
+      muscleTargets[id] = {
+        color: new THREE.Color(0xaab6c8),
+        emissive: new THREE.Color(0x000000),
+        emissiveIntensity: 0,
+        roughness: 0.52,
+      };
+    });
+
+    const shortsGlutesTarget: MaterialTargetState = {
+      color: new THREE.Color(0x161a22),
+      emissive: new THREE.Color(0x000000),
+      emissiveIntensity: 0,
+      roughness: 0.78,
+    };
+
+    const applyMuscleTargetImmediate = () => {
+      muscleIds.forEach((id) => {
+        const mat = muscleMaterials[id];
+        const tgt = muscleTargets[id];
+        if (!mat || !tgt) return;
+        mat.color.copy(tgt.color);
+        mat.emissive.copy(tgt.emissive);
+        mat.emissiveIntensity = tgt.emissiveIntensity;
+        mat.roughness = tgt.roughness;
+      });
+      shortsGlutesMat.color.copy(shortsGlutesTarget.color);
+      shortsGlutesMat.emissive.copy(shortsGlutesTarget.emissive);
+      shortsGlutesMat.emissiveIntensity = shortsGlutesTarget.emissiveIntensity;
+    };
+
+    const stepMuscleTransitions = (dt: number) => {
+      const alpha = dt <= 0 ? 1 : 1 - Math.exp(-9.0 * dt);
+      muscleIds.forEach((id) => {
+        const mat = muscleMaterials[id];
+        const tgt = muscleTargets[id];
+        if (!mat || !tgt) return;
+        mat.color.lerp(tgt.color, alpha);
+        mat.emissive.lerp(tgt.emissive, alpha);
+        mat.emissiveIntensity += (tgt.emissiveIntensity - mat.emissiveIntensity) * alpha;
+        mat.roughness += (tgt.roughness - mat.roughness) * alpha;
+      });
+      shortsGlutesMat.color.lerp(shortsGlutesTarget.color, alpha);
+      shortsGlutesMat.emissive.lerp(shortsGlutesTarget.emissive, alpha);
+      shortsGlutesMat.emissiveIntensity +=
+        (shortsGlutesTarget.emissiveIntensity - shortsGlutesMat.emissiveIntensity) * alpha;
+    };
+
+    const updateMuscleMaterials = (immediate = false) => {
       const { primaryMuscles: prim, secondaryMuscles: sec, showMaskDebug: debug } = stateRef.current;
 
       muscleIds.forEach((id) => {
-        const mat = muscleMaterials[id];
-        if (!mat) return;
+        const tgt = muscleTargets[id];
+        if (!tgt) return;
 
         if (debug) {
-          mat.color.setHex(debugColors[id]);
-          mat.emissive.setHex(debugColors[id]);
-          mat.emissiveIntensity = 0.28;
-          mat.roughness = 0.35;
+          tgt.color.setHex(debugColors[id]);
+          tgt.emissive.setHex(debugColors[id]);
+          tgt.emissiveIntensity = 0.28;
+          tgt.roughness = 0.45;
         } else if (prim.includes(id)) {
-          mat.color.setHex(0xdc2626);
-          mat.emissive.setHex(0x991b1b);
-          mat.emissiveIntensity = 0.34;
-          mat.roughness = 0.36;
-          mat.metalness = 0.10;
+          tgt.color.setHex(0xdc2626);
+          tgt.emissive.setHex(0x991b1b);
+          tgt.emissiveIntensity = 0.36;
+          tgt.roughness = 0.46;
         } else if (sec.includes(id)) {
-          mat.color.setHex(0xe11d48);
-          mat.emissive.setHex(0x881337);
-          mat.emissiveIntensity = 0.24;
-          mat.roughness = 0.38;
-          mat.metalness = 0.10;
+          tgt.color.setHex(0xea580c);
+          tgt.emissive.setHex(0x9a3412);
+          tgt.emissiveIntensity = 0.22;
+          tgt.roughness = 0.50;
         } else {
-          mat.color.setHex(0xaab6c8);
-          mat.emissive.setHex(0x000000);
-          mat.emissiveIntensity = 0.0;
-          mat.roughness = 0.38;
-          mat.metalness = 0.08;
+          tgt.color.setHex(0xaab6c8);
+          tgt.emissive.setHex(0x000000);
+          tgt.emissiveIntensity = 0.0;
+          tgt.roughness = 0.54;
         }
-        mat.needsUpdate = true;
       });
 
       if (debug) {
-        shortsGlutesMat.color.setHex(debugColors.glutes);
-        shortsGlutesMat.emissive.setHex(debugColors.glutes);
-        shortsGlutesMat.emissiveIntensity = 0.28;
+        shortsGlutesTarget.color.setHex(debugColors.glutes);
+        shortsGlutesTarget.emissive.setHex(debugColors.glutes);
+        shortsGlutesTarget.emissiveIntensity = 0.28;
       } else if (prim.includes('glutes')) {
-        shortsGlutesMat.color.setHex(0xdc2626);
-        shortsGlutesMat.emissive.setHex(0x991b1b);
-        shortsGlutesMat.emissiveIntensity = 0.34;
+        shortsGlutesTarget.color.setHex(0xdc2626);
+        shortsGlutesTarget.emissive.setHex(0x991b1b);
+        shortsGlutesTarget.emissiveIntensity = 0.34;
       } else if (sec.includes('glutes')) {
-        shortsGlutesMat.color.setHex(0xdc2626);
-        shortsGlutesMat.emissive.setHex(0x7f1d1d);
-        shortsGlutesMat.emissiveIntensity = 0.26;
+        shortsGlutesTarget.color.setHex(0xea580c);
+        shortsGlutesTarget.emissive.setHex(0x9a3412);
+        shortsGlutesTarget.emissiveIntensity = 0.24;
       } else {
-        shortsGlutesMat.color.setHex(0x161a22);
-        shortsGlutesMat.emissive.setHex(0x000000);
-        shortsGlutesMat.emissiveIntensity = 0.0;
+        shortsGlutesTarget.color.setHex(0x161a22);
+        shortsGlutesTarget.emissive.setHex(0x000000);
+        shortsGlutesTarget.emissiveIntensity = 0.0;
       }
-      shortsGlutesMat.needsUpdate = true;
+
+      if (immediate) {
+        applyMuscleTargetImmediate();
+      }
     };
 
     // ============================================================================
-    // CAMERA PRESETS (Full-body framing from shoes to overhead bar with zero clipping)
+    // CAMERA PRESETS (Smooth damped framing — cancels on manual user orbit)
     // ============================================================================
     const computeCameraView = (
       preset: CameraPreset,
@@ -1674,15 +1775,26 @@ export function TrainerStudio3D({
       }
     };
 
-    const applyCameraPreset = (preset: CameraPreset) => {
+    let cameraTransition: { pos: THREE.Vector3; target: THREE.Vector3 } | null = null;
+    const onControlsStart = () => {
+      cameraTransition = null; // Never fight manual orbit/zoom
+    };
+    controls.addEventListener('start', onControlsStart);
+
+    const applyCameraPreset = (preset: CameraPreset, immediate = false) => {
       const { pos, target } = computeCameraView(preset, stateRef.current.clipName);
-      camera.position.copy(pos);
-      controls.target.copy(target);
-      controls.update();
+      if (immediate || prefersReducedMotion) {
+        cameraTransition = null;
+        camera.position.copy(pos);
+        controls.target.copy(target);
+        controls.update();
+      } else {
+        cameraTransition = { pos, target };
+      }
     };
 
-    updateMuscleMaterials();
-    applyCameraPreset(stateRef.current.cameraPreset);
+    updateMuscleMaterials(true);
+    applyCameraPreset(stateRef.current.cameraPreset, true);
 
     // ============================================================================
     // BIOMECHANICAL IK & SKINNED DEFORMATION ENGINE (30 FPS / 60 Frames)
@@ -2730,14 +2842,51 @@ export function TrainerStudio3D({
     }
 
     // ============================================================================
-    // RENDER LOOP (Single View & 4-Angle Blueprint Split View)
+    // RENDER LOOP (Single View, 4-Angle Blueprint, Software-GL Pacing & Visibility Pause)
     // ============================================================================
     let rafId = 0;
     let lastTime: number | null = null;
     let accumSec = 0;
 
+    if (!isSoftwareGl) {
+      renderer.compile(scene, camera);
+    }
+
+    function afterDraw(cb: () => void) {
+      const gl = renderer.getContext() as WebGL2RenderingContext;
+      if (!gl || typeof gl.fenceSync !== 'function') {
+        rafId = window.setTimeout(cb, 80);
+        return;
+      }
+      const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+      gl.flush();
+      const poll = () => {
+        if (disposed || isContextLost) return;
+        const state = sync && gl.getSyncParameter(sync, gl.SYNC_STATUS);
+        if (state === gl.UNSIGNALED) {
+          rafId = window.setTimeout(poll, 5);
+        } else {
+          if (sync) gl.deleteSync(sync);
+          rafId = window.setTimeout(cb, 80);
+        }
+      };
+      rafId = window.setTimeout(poll, 5);
+    }
+
+    const scheduleNext = () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(rafId);
+      if (disposed || isContextLost || !isVisible || !isTabVisible) return;
+      if (isSoftwareGl) {
+        afterDraw(() => tick(performance.now()));
+      } else {
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+
     const tick = (now: number) => {
-      rafId = requestAnimationFrame(tick);
+      if (disposed || isContextLost || !isVisible || !isTabVisible) return;
+
       const dt = lastTime === null ? 0 : Math.max(0, Math.min((now - lastTime) / 1000, 0.1));
       lastTime = now;
 
@@ -2747,7 +2896,7 @@ export function TrainerStudio3D({
       if (st.activeKeyframe !== null && st.activeKeyframe !== undefined) {
         frameFloat = st.activeKeyframe;
       } else {
-        if (st.isPlaying) {
+        if (st.isPlaying && !prefersReducedMotion) {
           accumSec += dt * st.tempoScale;
         }
         frameFloat = (((accumSec * 30) % 60) + 60) % 60;
@@ -2758,7 +2907,36 @@ export function TrainerStudio3D({
         frameBadgeRef.current.textContent = `FRAME ${String(currentFrameInt).padStart(2, '0')} / 60 · 30 FPS`;
       }
 
+      // Smooth muscle highlight & camera preset damping
+      stepMuscleTransitions(dt);
+
+      if (cameraTransition) {
+        const camAlpha = dt <= 0 ? 1 : 1 - Math.exp(-8.5 * dt);
+        camera.position.lerp(cameraTransition.pos, camAlpha);
+        controls.target.lerp(cameraTransition.target, camAlpha);
+        if (
+          camera.position.distanceTo(cameraTransition.pos) < 0.01 &&
+          controls.target.distanceTo(cameraTransition.target) < 0.01
+        ) {
+          camera.position.copy(cameraTransition.pos);
+          controls.target.copy(cameraTransition.target);
+          cameraTransition = null;
+        }
+      }
+
       applyProceduralPose(st.clipName, st.biomechanicalVariant, st.exerciseName, frameFloat);
+
+      // Keep grounded contact shadow aligned under athlete footprint
+      const isGroundPose =
+        st.clipName === 'pushup' ||
+        st.clipName === 'diamond_pushup' ||
+        st.clipName === 'plank' ||
+        st.clipName === 'mountain_climber' ||
+        st.clipName === 'crunch' ||
+        st.clipName === 'glute_bridge';
+      contactShadow.scale.set(isGroundPose ? 1.15 : 0.82, isGroundPose ? 1.55 : 0.82, 1);
+      contactShadow.position.z = isGroundPose ? -0.14 : 0;
+
       controls.update();
 
       const w = container.clientWidth || 800;
@@ -2797,12 +2975,58 @@ export function TrainerStudio3D({
           renderer.render(scene, auxCamera);
         });
       }
+
+      scheduleNext();
     };
 
-    rafId = requestAnimationFrame(tick);
+    const observer =
+      typeof IntersectionObserver !== 'undefined'
+        ? new IntersectionObserver(
+            (entries) => {
+              const entry = entries[0];
+              const nextVis = Boolean(entry?.isIntersecting);
+              if (nextVis !== isVisible) {
+                isVisible = nextVis;
+                if (isVisible && isTabVisible && !disposed && !isContextLost) {
+                  lastTime = performance.now();
+                  scheduleNext();
+                }
+              }
+            },
+            { threshold: 0.05 }
+          )
+        : null;
+    observer?.observe(container);
+
+    const onVisibilityChange = () => {
+      isTabVisible = document.visibilityState === 'visible';
+      if (isTabVisible && isVisible && !disposed && !isContextLost) {
+        lastTime = performance.now();
+        scheduleNext();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    const onContextLost = (e: Event) => {
+      e.preventDefault();
+      isContextLost = true;
+      cancelAnimationFrame(rafId);
+      clearTimeout(rafId);
+    };
+    const onContextRestored = () => {
+      isContextLost = false;
+      if (!disposed) {
+        lastTime = performance.now();
+        scheduleNext();
+      }
+    };
+    renderer.domElement.addEventListener('webglcontextlost', onContextLost, false);
+    renderer.domElement.addEventListener('webglcontextrestored', onContextRestored, false);
+
+    tick(performance.now());
 
     const handleResize = () => {
-      if (!container) return;
+      if (!container || disposed) return;
       const w = container.clientWidth || 800;
       const h = container.clientHeight || 520;
       camera.aspect = w / h;
@@ -2812,9 +3036,19 @@ export function TrainerStudio3D({
     window.addEventListener('resize', handleResize);
 
     return () => {
+      disposed = true;
       cancelAnimationFrame(rafId);
+      clearTimeout(rafId);
+      observer?.disconnect();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('resize', handleResize);
+      controls.removeEventListener('start', onControlsStart);
+      renderer.domElement.removeEventListener('webglcontextlost', onContextLost);
+      renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
       controls.dispose();
+      disposeSceneResources(scene);
+      pbr.dispose();
+      envTexture.dispose();
       renderer.dispose();
     };
   }, []);

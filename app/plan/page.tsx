@@ -2,6 +2,7 @@
 
 import React, { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion } from 'motion/react';
 import { toPng } from 'html-to-image';
 import {
   Download,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
 import { BodyHighlighter2D } from '@/components/plan/BodyHighlighter2D';
+import { MotionSegmentedControl, MOTION_SPRING } from '@/components/ui/MotionPrimitives';
 import { useFitForgeStore } from '@/store/useFitForgeStore';
 import {
   WEEKLY_PLAN,
@@ -73,65 +75,52 @@ export default function PlanPosterPage() {
       ctaHref="/workout"
     >
       {/* Top Toolbar: Mode Gym | Mode Rumah + Ekspor Poster PNG */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <div className="inline-flex items-center gap-1 p-1.5 rounded-2xl bg-white dark:bg-[#161616] border border-[#EFEFEF] dark:border-[#262626] shadow-xs">
-          <button
-            type="button"
-            onClick={() => setPlanMode('gym')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
-              planMode === 'gym'
-                ? 'bg-[#161616] text-white dark:bg-[#F97316] dark:text-black'
-                : 'text-[#6B7280] hover:text-[#111111] dark:text-neutral-400 dark:hover:text-white'
-            }`}
-          >
-            <Dumbbell className="w-4 h-4" />
-            <span>Mode Gym (Alat Lengkap)</span>
-          </button>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <MotionSegmentedControl
+          layoutId="plan-poster-mode-pill"
+          ariaLabel="Pilih mode rencana latihan"
+          value={planMode}
+          onChange={setPlanMode}
+          className="p-1.5 rounded-2xl bg-white dark:bg-[#141418] shadow-xs"
+          options={[
+            { id: 'gym', label: 'Mode Gym', icon: <Dumbbell className="w-4 h-4 shrink-0" /> },
+            { id: 'home', label: 'Mode Rumah', icon: <Home className="w-4 h-4 shrink-0" /> },
+          ]}
+        />
 
-          <button
-            type="button"
-            onClick={() => setPlanMode('home')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
-              planMode === 'home'
-                ? 'bg-[#161616] text-white dark:bg-[#F97316] dark:text-black'
-                : 'text-[#6B7280] hover:text-[#111111] dark:text-neutral-400 dark:hover:text-white'
-            }`}
-          >
-            <Home className="w-4 h-4" />
-            <span>Mode Rumah (Tanpa Alat)</span>
-          </button>
-        </div>
-
-        <button
+        <motion.button
           type="button"
+          whileHover={{ y: -1 }}
+          whileTap={{ scale: 0.96 }}
+          transition={MOTION_SPRING}
           onClick={handleExportPng}
           disabled={exporting}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-[#161616] hover:bg-neutral-50 dark:hover:bg-[#262626] border border-[#EFEFEF] dark:border-[#262626] text-xs sm:text-sm font-semibold text-[#111111] dark:text-white shadow-xs transition cursor-pointer"
+          className="min-h-[44px] inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-[#141418] hover:bg-neutral-50 dark:hover:bg-[#1C1C22] border border-[#E6E6E2] dark:border-[#27272F] text-xs sm:text-sm font-semibold text-[#111114] dark:text-white shadow-xs transition cursor-pointer"
         >
-          <Download className="w-4 h-4 text-[#F97316]" />
+          <Download className="w-4 h-4 text-[#F97316] shrink-0" />
           <span>{exporting ? 'Mengekspor PNG...' : 'Ekspor Poster (PNG)'}</span>
-        </button>
+        </motion.button>
       </div>
 
-      {/* POSTER CONTAINER (Matches ref-3 "ULTIMATE WEEKLY WORKOUT PLAN") */}
+      {/* POSTER CONTAINER */}
       <div
         ref={posterRef}
-        className="rounded-3xl bg-white dark:bg-[#161616] border border-[#EFEFEF] dark:border-[#262626] shadow-card p-5 sm:p-8"
+        className="rounded-3xl bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] shadow-card p-4 sm:p-8 overflow-hidden"
       >
         {/* Poster Header */}
-        <div className="text-center border-b-2 border-[#111111] dark:border-[#262626] pb-5 mb-6">
+        <div className="text-center border-b-2 border-[#111114] dark:border-[#27272F] pb-5 mb-6">
           <h2
-            className="text-4xl sm:text-6xl font-black italic tracking-wider uppercase leading-none text-[#111111] dark:text-white"
-            style={{ fontFamily: 'var(--font-poster), sans-serif' }}
+            className="font-display font-black italic tracking-wider uppercase leading-none text-[#111114] dark:text-white text-balance"
+            style={{ fontSize: 'clamp(2rem, 6vw, 3.75rem)' }}
           >
             ULTIMATE{' '}
-            <span className="bg-gradient-to-r from-[#E11D2E] via-[#F97316] to-[#F59E0B] bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-[#DC2626] via-[#F97316] to-[#F59E0B] bg-clip-text text-transparent">
               WEEKLY WORKOUT
             </span>{' '}
             PLAN
           </h2>
-          <p className="text-xs sm:text-sm font-extrabold tracking-[0.22em] text-[#6B7280] dark:text-neutral-300 mt-2">
-            BUILD MUSCLE • BURN FAT • STAY STRONG ({planMode === 'gym' ? 'GYM EDITION' : 'HOME CALISTHENICS'})
+          <p className="text-[11px] sm:text-sm font-extrabold tracking-[0.16em] sm:tracking-[0.22em] text-[#52525B] dark:text-neutral-300 mt-2 break-words">
+            BUILD MUSCLE · BURN FAT · STAY STRONG ({planMode === 'gym' ? 'GYM EDITION' : 'HOME CALISTHENICS'})
           </p>
         </div>
 

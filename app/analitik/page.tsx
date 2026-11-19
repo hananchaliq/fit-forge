@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { TrendingUp, Award, Flame, Dumbbell } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
+import { CountUpMetric } from '@/components/ui/CountUpMetric';
 import { useFitForgeStore } from '@/store/useFitForgeStore';
 
 export default function AnalitikPage() {
@@ -47,52 +48,52 @@ export default function AnalitikPage() {
     >
       {/* 4 Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="rounded-2xl bg-[#161616] text-white p-5 border border-[#262626] shadow-card">
+        <div className="rounded-2xl bg-[#141418] text-white p-5 border border-[#27272E] shadow-card">
           <div className="flex items-center justify-between text-xs text-neutral-400">
             <span>Total Jarak Lari Tercatat</span>
             <TrendingUp className="w-4 h-4 text-[#F59E0B]" />
           </div>
-          <p className="text-3xl font-extrabold text-white tabular-nums mt-2">
-            {totalRunKm.toFixed(1)} km
+          <p className="text-3xl font-extrabold text-white font-telemetry mt-2">
+            <CountUpMetric value={totalRunKm} decimals={1} suffix=" km" />
           </p>
           <p className="text-xs text-emerald-400 font-semibold mt-1">
             {runSessions.length} sesi lari di database
           </p>
         </div>
 
-        <div className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card">
+        <div className="rounded-2xl bg-white dark:bg-[#141418] p-5 border border-[#E5E5E0] dark:border-[#27272E] shadow-card">
           <div className="flex items-center justify-between text-xs text-[#6B7280] dark:text-neutral-400">
             <span>Volume Beban Tercatat</span>
             <Dumbbell className="w-4 h-4 text-[#F97316]" />
           </div>
-          <p className="text-3xl font-extrabold text-[#111111] dark:text-white tabular-nums mt-2">
-            {totalVolumeTon.toFixed(1)} ton
+          <p className="text-3xl font-extrabold text-[#111111] dark:text-white font-telemetry mt-2">
+            <CountUpMetric value={totalVolumeTon} decimals={1} suffix=" ton" />
           </p>
           <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
             {totalVolumeKg.toLocaleString('id-ID')} kg total beban
           </p>
         </div>
 
-        <div className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card">
+        <div className="rounded-2xl bg-white dark:bg-[#141418] p-5 border border-[#E5E5E0] dark:border-[#27272E] shadow-card">
           <div className="flex items-center justify-between text-xs text-[#6B7280] dark:text-neutral-400">
             <span>Asupan Protein Hari Ini</span>
             <Flame className="w-4 h-4 text-[#EF4444]" />
           </div>
-          <p className="text-3xl font-extrabold text-[#111111] dark:text-white tabular-nums mt-2">
-            {totalProteinToday}g
+          <p className="text-3xl font-extrabold text-[#111111] dark:text-white font-telemetry mt-2">
+            <CountUpMetric value={totalProteinToday} suffix="g" />
           </p>
           <p className="text-xs text-[#6B7280] dark:text-neutral-400 mt-1">
             Dari {nutritionLogs.length} makanan tercatat
           </p>
         </div>
 
-        <div className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card">
+        <div className="rounded-2xl bg-white dark:bg-[#141418] p-5 border border-[#E5E5E0] dark:border-[#27272E] shadow-card">
           <div className="flex items-center justify-between text-xs text-[#6B7280] dark:text-neutral-400">
             <span>Streak Golden Rules</span>
             <Award className="w-4 h-4 text-[#F59E0B]" />
           </div>
-          <p className="text-3xl font-extrabold text-[#F97316] tabular-nums mt-2">
-            {streakDays} Hari
+          <p className="text-3xl font-extrabold text-[#F97316] font-telemetry mt-2">
+            <CountUpMetric value={streakDays} suffix=" Hari" />
           </p>
           <p className="text-xs text-[#6B7280] dark:text-neutral-400 mt-1">
             {runSessions.length} lari · {workouts.length} sesi 3D minggu ini
@@ -171,8 +172,8 @@ export default function AnalitikPage() {
         <h2 className="text-sm font-semibold text-[#111111] dark:text-white mb-3">
           Rekapitulasi Mingguan (Data Nyata Akun Anda)
         </h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+        <div className="overflow-x-auto -mx-2 px-2">
+          <table className="w-full min-w-[460px] text-xs">
             <thead>
               <tr className="border-b border-[#EFEFEF] dark:border-[#262626] text-[#6B7280] dark:text-neutral-400">
                 <th className="py-2.5 text-left">Periode Minggu</th>
