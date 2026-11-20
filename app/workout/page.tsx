@@ -311,7 +311,7 @@ function WorkoutStudioContent() {
                     <motion.span
                       layoutId="workout-plan-mode-pill"
                       transition={MOTION_SPRING}
-                      className="absolute inset-0 rounded-lg bg-[#141418] dark:bg-[#F97316] shadow-xs"
+                      className="absolute inset-0 rounded-lg bg-[#0D0F10] dark:bg-[#84E818] shadow-xs"
                     />
                   )}
                   <span className="relative z-10">{mode.label}</span>
@@ -320,7 +320,7 @@ function WorkoutStudioContent() {
             </div>
 
             {/* Mobile horizontal swipeable Blueprint trio */}
-            <div className="lg:hidden flex items-center gap-1 overflow-x-auto no-scrollbar snap-x snap-mandatory bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] p-1 rounded-xl shadow-xs min-w-0 flex-1">
+            <div className="lg:hidden flex items-center gap-1 overflow-x-auto no-scrollbar snap-x snap-mandatory bg-white dark:bg-[#131618] border border-[#E6E8E4] dark:border-[#23272A] p-1 rounded-xl shadow-xs min-w-0 flex-1">
               {BLUEPRINT_EXERCISES.map((bp) => {
                 const isSelected = currentExercise.id === bp.fitforgeExerciseId;
                 return (
@@ -335,8 +335,8 @@ function WorkoutStudioContent() {
                     }}
                     className={`snap-start shrink-0 min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-colors cursor-pointer ${
                       isSelected
-                        ? 'bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black'
-                        : 'text-[#111114] dark:text-neutral-300'
+                        ? 'bg-[#84E818] text-[#0D0F10]'
+                        : 'text-[#0D0F10] dark:text-neutral-300'
                     }`}
                   >
                     {bp.code}. {bp.exercise.replace('_', '-').toUpperCase()}
@@ -348,8 +348,8 @@ function WorkoutStudioContent() {
         </div>
 
         {/* Desktop Blueprint 3D Core Trio Quick-Switch (01. PUSH-UP · 02. SQUAT · 03. PULL-UP) */}
-        <div className="hidden lg:flex items-center gap-1.5 bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] p-1.5 rounded-2xl shadow-xs">
-          <span className="px-2 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        <div className="hidden lg:flex items-center gap-1.5 bg-white dark:bg-[#131618] border border-[#E6E8E4] dark:border-[#23272A] p-1.5 rounded-2xl shadow-xs">
+          <span className="px-2 text-[11px] font-extrabold uppercase tracking-wider text-[#646A6E] dark:text-neutral-400">
             Blueprint:
           </span>
           {BLUEPRINT_EXERCISES.map((bp) => {
@@ -367,15 +367,15 @@ function WorkoutStudioContent() {
                 }}
                 className={`relative min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-extrabold transition-colors cursor-pointer ${
                   isSelected
-                    ? 'text-black'
-                    : 'text-[#111114] dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-[#22222A]'
+                    ? 'text-[#0D0F10]'
+                    : 'text-[#0D0F10] dark:text-neutral-300 hover:bg-[#F7F8F6] dark:hover:bg-[#1E2225]'
                 }`}
               >
                 {isSelected && (
                   <motion.span
                     layoutId="workout-blueprint-trio-pill"
                     transition={MOTION_SPRING}
-                    className="absolute inset-0 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] shadow-xs"
+                    className="absolute inset-0 rounded-xl bg-[#84E818] shadow-xs"
                   />
                 )}
                 <span className="relative z-10">
@@ -390,19 +390,19 @@ function WorkoutStudioContent() {
       {/* =====================================================================
           UNIFIED STUDIO 3D VIEWPORT CARD (ZERO COLLISION / ZERO LAYOUT SHIFT)
          ===================================================================== */}
-      <div className="w-full rounded-3xl bg-[#070B14] border border-[#1E293B] overflow-hidden shadow-2xl mb-6">
+      <div className="w-full rounded-3xl bg-[#0B0D0E] border border-[#23272A] overflow-hidden shadow-2xl mb-6">
         {/* 1. Studio Top Bar */}
-        <div className="px-3.5 sm:px-5 py-3 bg-[#0B1120] border-b border-[#1E293B] flex flex-wrap items-center justify-between gap-3">
+        <div className="px-3.5 sm:px-5 py-3 bg-[#0D0F10] border-b border-[#23272A] flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
               <h2 className="text-xs sm:text-sm font-extrabold text-white truncate">
                 {currentExercise.name}
               </h2>
-              <span className="text-[11px] font-semibold text-amber-400 font-telemetry">
+              <span className="text-[11px] font-semibold text-[#84E818] font-telemetry">
                 Set {currentSet}/{currentExercise.sets} · {currentExercise.reps} rep
               </span>
             </div>
-            <div className="hidden sm:flex items-center gap-3 mt-1 text-[11px] text-slate-400">
+            <div className="hidden sm:flex items-center gap-3 mt-1 text-[11px] text-neutral-400">
               <span className="inline-flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-[#E53935]" />
                 Otot Aktif
@@ -422,7 +422,7 @@ function WorkoutStudioContent() {
           <div className="flex flex-wrap items-center gap-2 max-w-full">
             {/* Mannequin Display Mode Switcher */}
             <div
-              className="inline-flex rounded-xl bg-[#070B14] p-1 border border-[#1E293B] overflow-x-auto no-scrollbar max-w-full"
+              className="inline-flex rounded-xl bg-[#131618] p-1 border border-[#23272A] overflow-x-auto no-scrollbar max-w-full"
               role="group"
               aria-label="Mode tampilan anatomi 3D"
             >
@@ -439,15 +439,15 @@ function WorkoutStudioContent() {
                   onClick={() => setDisplayMode(m.key)}
                   className={`relative min-h-[38px] px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
                     displayMode === m.key
-                      ? 'text-black'
-                      : 'text-slate-400 hover:text-white'
+                      ? 'text-[#0D0F10]'
+                      : 'text-neutral-400 hover:text-white'
                   }`}
                 >
                   {displayMode === m.key && (
                     <motion.span
                       layoutId="workout-displaymode-pill"
                       transition={MOTION_SPRING}
-                      className="absolute inset-0 rounded-lg bg-gradient-to-r from-[#F97316] to-[#F59E0B]"
+                      className="absolute inset-0 rounded-lg bg-[#84E818]"
                     />
                   )}
                   {m.key === 'skeleton' && (
@@ -458,19 +458,19 @@ function WorkoutStudioContent() {
               ))}
             </div>
 
-            <div className="inline-flex rounded-xl bg-[#070B14] p-1 border border-[#1E293B]">
+            <div className="inline-flex rounded-xl bg-[#131618] p-1 border border-[#23272A]">
               <button
                 type="button"
                 onClick={() => setQuadView(false)}
                 className={`relative min-h-[38px] px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                  !quadView ? 'text-slate-950' : 'text-slate-400 hover:text-white'
+                  !quadView ? 'text-[#0D0F10]' : 'text-neutral-400 hover:text-white'
                 }`}
               >
                 {!quadView && (
                   <motion.span
                     layoutId="workout-viewmode-pill"
                     transition={MOTION_SPRING}
-                    className="absolute inset-0 rounded-lg bg-sky-500"
+                    className="absolute inset-0 rounded-lg bg-white"
                   />
                 )}
                 <Box className="relative z-10 w-3.5 h-3.5 shrink-0" />
@@ -480,14 +480,14 @@ function WorkoutStudioContent() {
                 type="button"
                 onClick={() => setQuadView(true)}
                 className={`relative min-h-[38px] px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                  quadView ? 'text-slate-950' : 'text-slate-400 hover:text-white'
+                  quadView ? 'text-[#0D0F10]' : 'text-neutral-400 hover:text-white'
                 }`}
               >
                 {quadView && (
                   <motion.span
                     layoutId="workout-viewmode-pill"
                     transition={MOTION_SPRING}
-                    className="absolute inset-0 rounded-lg bg-sky-500"
+                    className="absolute inset-0 rounded-lg bg-white"
                   />
                 )}
                 <Grid2X2 className="relative z-10 w-3.5 h-3.5 shrink-0" />
@@ -496,7 +496,7 @@ function WorkoutStudioContent() {
             </div>
 
             {!quadView && (
-              <div className="flex items-center gap-0.5 bg-[#070B14] p-1 rounded-xl border border-[#1E293B] overflow-x-auto no-scrollbar max-w-full">
+              <div className="flex items-center gap-0.5 bg-[#131618] p-1 rounded-xl border border-[#23272A] overflow-x-auto no-scrollbar max-w-full">
                 {(
                   [
                     { key: 'front', label: 'Depan' },
@@ -511,14 +511,14 @@ function WorkoutStudioContent() {
                     onClick={() => setCameraPreset(cam.key)}
                     className={`relative min-h-[38px] px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                       cameraPreset === cam.key
-                        ? 'text-[#F59E0B]'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'text-[#84E818]'
+                        : 'text-neutral-400 hover:text-white'
                     }`}
                   >
                     {cameraPreset === cam.key && (
                       <motion.span
                         layoutId="workout-cam-preset-pill"
-                        className="absolute inset-0 rounded-lg bg-[#162033] border border-amber-500/30"
+                        className="absolute inset-0 rounded-lg bg-[#1E2225] border border-[#84E818]/35"
                         transition={{ type: 'spring', stiffness: 420, damping: 32 }}
                       />
                     )}
@@ -556,10 +556,10 @@ function WorkoutStudioContent() {
         </div>
 
         {/* 3. Studio Bottom Control Dock */}
-        <div className="bg-[#0B1120] border-t border-[#1E293B] p-3 sm:p-4 space-y-3">
+        <div className="bg-[#0D0F10] border-t border-[#23272A] p-3 sm:p-4 space-y-3">
           {/* Row A: 3D Pose Sequence Scrubber (Horizontal snap scroll on mobile, 6-col grid on sm+) */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#1E293B]/80">
-            <span className="text-xs font-bold text-amber-400 shrink-0">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#23272A]">
+            <span className="text-xs font-bold text-[#84E818] shrink-0">
               Urutan Pose 3D
             </span>
             <div className="flex sm:grid sm:grid-cols-6 gap-1.5 w-full sm:w-auto flex-1 max-w-[780px] overflow-x-auto sm:overflow-visible snap-x snap-mandatory pb-1 sm:pb-0">
@@ -575,12 +575,12 @@ function WorkoutStudioContent() {
                     }}
                     className={`min-w-[118px] sm:min-w-0 snap-start min-h-[44px] px-2.5 py-1.5 rounded-xl border text-left transition cursor-pointer shrink-0 sm:shrink ${
                       isSelected
-                        ? 'bg-amber-500/20 border-amber-400 text-white'
-                        : 'bg-[#070B14] border-[#1E293B] text-slate-400 hover:text-white hover:border-slate-700'
+                        ? 'bg-[#84E818]/15 border-[#84E818] text-white'
+                        : 'bg-[#131618] border-[#23272A] text-neutral-400 hover:text-white hover:border-[#3A4046]'
                     }`}
                   >
                     <p className="text-[11px] font-bold truncate">{btn.shortLabel}</p>
-                    <p className="text-[9px] text-slate-400 font-mono truncate">{btn.sub}</p>
+                    <p className="text-[9px] text-neutral-400 font-mono truncate">{btn.sub}</p>
                   </button>
                 );
               })}
@@ -596,11 +596,11 @@ function WorkoutStudioContent() {
                   setLockedFrame(null);
                   setIsPaused((p) => !p);
                 }}
-                className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-[#162033] hover:bg-[#1E293B] border border-slate-700/60 text-white transition cursor-pointer"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-[#1A1D20] hover:bg-[#23272A] border border-[#2C3135] text-white transition cursor-pointer"
                 aria-label={isPaused ? 'Putar animasi 3D' : 'Jeda animasi 3D'}
               >
                 {isPaused || lockedFrame !== null ? (
-                  <Play className="w-4 h-4 text-[#F59E0B] fill-[#F59E0B]" />
+                  <Play className="w-4 h-4 text-[#84E818] fill-[#84E818]" />
                 ) : (
                   <Pause className="w-4 h-4 text-white" />
                 )}
@@ -609,7 +609,7 @@ function WorkoutStudioContent() {
               <button
                 type="button"
                 onClick={handleCompleteSet}
-                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold hover:opacity-95 active:scale-[0.98] transition flex items-center gap-1.5 cursor-pointer shadow-md"
+                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#84E818] hover:bg-[#76D610] text-[#0D0F10] text-xs font-extrabold active:scale-[0.98] transition flex items-center gap-1.5 cursor-pointer shadow-md"
               >
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>Selesai Set {currentSet}</span>
@@ -618,7 +618,7 @@ function WorkoutStudioContent() {
               <button
                 type="button"
                 onClick={handleSkipNextExercise}
-                className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[#162033] hover:bg-[#1E293B] border border-slate-700/60 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[#1A1D20] hover:bg-[#23272A] border border-[#2C3135] text-neutral-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
                 title="Gerakan Berikutnya"
               >
                 <SkipForward className="w-4 h-4 shrink-0" />
@@ -634,8 +634,8 @@ function WorkoutStudioContent() {
             </div>
 
             <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-              <div className="flex items-center gap-2 bg-[#070D19] px-3 py-1.5 rounded-xl border border-[#1E293B]">
-                <label htmlFor="speed-slider" className="text-[11px] font-semibold text-slate-300 tabular-nums">
+              <div className="flex items-center gap-2 bg-[#131618] px-3 py-1.5 rounded-xl border border-[#23272A]">
+                <label htmlFor="speed-slider" className="text-[11px] font-semibold text-neutral-300 tabular-nums">
                   Tempo: {timeScale.toFixed(1)}×
                 </label>
                 <input
@@ -646,7 +646,7 @@ function WorkoutStudioContent() {
                   step="0.1"
                   value={timeScale}
                   onChange={(e) => setTimeScale(parseFloat(e.target.value))}
-                  className="w-20 accent-[#F97316]"
+                  className="w-20 accent-[#84E818]"
                 />
               </div>
 
@@ -658,11 +658,11 @@ function WorkoutStudioContent() {
                       `${currentExercise.name}. ${currentExercise.formTips[0]}`
                     )
                   }
-                  className="p-2.5 rounded-xl bg-[#162033] hover:bg-[#1E293B] border border-slate-700/60 text-slate-200 cursor-pointer"
+                  className="p-2.5 rounded-xl bg-[#1A1D20] hover:bg-[#23272A] border border-[#2C3135] text-neutral-200 cursor-pointer"
                   aria-label="Dengarkan panduan suara Bahasa Indonesia"
                   title="Panduan Suara (ID)"
                 >
-                  <Volume2 className="w-4 h-4 text-[#F59E0B]" />
+                  <Volume2 className="w-4 h-4 text-[#84E818]" />
                 </button>
 
                 <button
@@ -670,8 +670,8 @@ function WorkoutStudioContent() {
                   onClick={() => setDebugMuscleMask((d) => !d)}
                   className={`p-2.5 rounded-xl border text-xs font-semibold cursor-pointer ${
                     debugMuscleMask
-                      ? 'bg-[#F97316] text-black border-[#F97316]'
-                      : 'bg-[#070D19] text-slate-400 border-[#1E293B] hover:text-white'
+                      ? 'bg-[#84E818] text-[#0D0F10] border-[#84E818]'
+                      : 'bg-[#131618] text-neutral-400 border-[#23272A] hover:text-white'
                   }`}
                   aria-label="Tampilkan warna wilayah mask otot"
                   title="Toggle Mask Region Otot"
@@ -773,8 +773,8 @@ function WorkoutStudioContent() {
                     }}
                     className={`p-3 rounded-xl border text-left transition flex items-center justify-between cursor-pointer ${
                       active
-                        ? 'bg-[#161616] text-white border-[#F97316]'
-                        : 'bg-[#F8F9FA] dark:bg-[#0E0E0E] text-[#111111] dark:text-white border-[#EFEFEF] dark:border-[#262626]'
+                        ? 'bg-[#0D0F10] text-white border-[#84E818]'
+                        : 'bg-[#F7F8F6] dark:bg-[#0B0D0E] text-[#0D0F10] dark:text-white border-[#E6E8E4] dark:border-[#23272A]'
                     }`}
                   >
                     <div className="min-w-0">
@@ -785,7 +785,7 @@ function WorkoutStudioContent() {
                         {ex.sets} × {ex.reps}
                       </p>
                     </div>
-                    <Dumbbell className={`w-4 h-4 shrink-0 ${active ? 'text-[#F59E0B]' : 'opacity-40'}`} />
+                    <Dumbbell className={`w-4 h-4 shrink-0 ${active ? 'text-[#84E818]' : 'opacity-40'}`} />
                   </button>
                 );
               })}
@@ -842,17 +842,17 @@ function WorkoutStudioContent() {
       </div>
 
       {/* 3D MODEL BLUEPRINT PACK & MASTER AI_BUILD_PROMPT.MD STUDIO */}
-      <div className="mt-6 rounded-3xl bg-[#070D19] text-white border border-[#1E293B] p-5 sm:p-6 shadow-card">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-[#1E293B]">
+      <div className="mt-6 rounded-3xl bg-[#0D0F10] text-white border border-[#23272A] p-5 sm:p-6 shadow-card">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-[#23272A]">
           <div>
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-[#F97316]/15 border border-[#F97316]/40 text-[#F59E0B] text-[11px] font-extrabold uppercase tracking-wider mb-2">
+            <div className="inline-flex items-center gap-2 text-[#84E818] text-[11px] font-extrabold uppercase tracking-wider mb-2">
               <FileCode2 className="w-3.5 h-3.5" />
               <span>Fitness 3D Blueprint Pack · Master Prompt</span>
             </div>
             <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-white">
               AI_BUILD_PROMPT.md & Spesifikasi Rigging 3D (Push-Up · Squat · Pull-Up)
             </h2>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-neutral-400 mt-1">
               Spesifikasi lengkap karakter manusia atletis 180 cm / 70 kg, 22 tulang wajib, 5 keyframe @ 30 FPS, dan highlight otot merah sesuai blueprint.
             </p>
           </div>
@@ -861,7 +861,7 @@ function WorkoutStudioContent() {
             <button
               type="button"
               onClick={() => handleCopyPrompt(AI_BUILD_PROMPT_MD)}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold flex items-center gap-1.5 hover:opacity-95 transition cursor-pointer"
+              className="px-3.5 py-2 rounded-xl bg-[#84E818] hover:bg-[#76D610] text-[#0D0F10] text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer"
             >
               {copiedPrompt ? (
                 <>
@@ -879,9 +879,9 @@ function WorkoutStudioContent() {
             <button
               type="button"
               onClick={handleDownloadPrompt}
-              className="px-3.5 py-2 rounded-xl bg-[#111A2E] hover:bg-[#1E293B] border border-[#2A3B5C] text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+              className="px-3.5 py-2 rounded-xl bg-[#1A1D20] hover:bg-[#23272A] border border-[#2C3135] text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
             >
-              <Download className="w-4 h-4 text-[#F59E0B]" />
+              <Download className="w-4 h-4 text-[#84E818]" />
               <span>Unduh AI_BUILD_PROMPT.md</span>
             </button>
           </div>
@@ -889,7 +889,7 @@ function WorkoutStudioContent() {
 
         {/* Navigation Tabs: Prompt vs JSON Keyframe Specs vs Reference Blueprint Image */}
         <div className="flex flex-wrap items-center justify-between gap-3 my-4">
-          <div className="inline-flex rounded-xl bg-[#0B1324] border border-[#1E293B] p-1">
+          <div className="inline-flex rounded-xl bg-[#131618] border border-[#23272A] p-1">
             {(
               [
                 { id: 'specs', label: '5-Keyframe & Rigging JSON', icon: Sliders },
@@ -905,7 +905,7 @@ function WorkoutStudioContent() {
                   type="button"
                   onClick={() => setBlueprintViewTab(tab.id)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                    active ? 'bg-[#F97316] text-black' : 'text-slate-300 hover:text-white'
+                    active ? 'bg-[#84E818] text-[#0D0F10]' : 'text-neutral-300 hover:text-white'
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
@@ -929,8 +929,8 @@ function WorkoutStudioContent() {
                   }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
                     active
-                      ? 'bg-[#162033] text-[#F59E0B] border-[#F59E0B]'
-                      : 'bg-[#0B1324] text-slate-400 border-[#1E293B] hover:text-white'
+                      ? 'bg-[#1A1D20] text-[#84E818] border-[#84E818]'
+                      : 'bg-[#131618] text-neutral-400 border-[#23272A] hover:text-white'
                   }`}
                 >
                   {bp.titleLabel}
@@ -945,14 +945,14 @@ function WorkoutStudioContent() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
             <div className="lg:col-span-7 space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#F59E0B]">
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#84E818]">
                   Urutan Pose 3D ({activeBlueprint.animation.fps} FPS ·{' '}
                   {activeBlueprint.animation.duration_seconds}s Loop) — Klik untuk Pratinjau di 3D
                 </h3>
                 <a
                   href={activeBlueprint.jsonFileUrl}
                   download={`${activeBlueprint.id}.json`}
-                  className="text-xs font-bold text-[#F97316] hover:underline"
+                  className="text-xs font-bold text-[#84E818] hover:underline"
                 >
                   Unduh {activeBlueprint.id}.json
                 </a>
@@ -968,16 +968,16 @@ function WorkoutStudioContent() {
                       onClick={() => setLockedFrame(isLocked ? null : kf.frame)}
                       className={`w-full text-left p-3 rounded-xl border flex items-start gap-3 transition cursor-pointer ${
                         isLocked
-                          ? 'bg-sky-500/15 border-sky-400'
-                          : 'bg-[#0B1324] border-[#1E293B] hover:border-slate-600'
+                          ? 'bg-[#84E818]/15 border-[#84E818]'
+                          : 'bg-[#131618] border-[#23272A] hover:border-[#3A4046]'
                       }`}
                     >
-                      <span className="px-2.5 py-1 rounded-lg bg-[#F97316]/20 border border-[#F97316]/40 text-[#F59E0B] text-xs font-extrabold tabular-nums shrink-0">
+                      <span className="px-2.5 py-1 rounded-lg bg-[#84E818]/15 border border-[#84E818]/35 text-[#84E818] text-xs font-extrabold tabular-nums shrink-0">
                         Frame {kf.frame}
                       </span>
                       <div>
                         <p className="text-xs font-bold text-white font-mono">{kf.pose}</p>
-                        <p className="text-xs text-slate-300 mt-0.5">{kf.description}</p>
+                        <p className="text-xs text-neutral-300 mt-0.5">{kf.description}</p>
                       </div>
                     </button>
                   );
@@ -986,15 +986,15 @@ function WorkoutStudioContent() {
             </div>
 
             <div className="lg:col-span-5 space-y-4">
-              <div className="rounded-2xl bg-[#0B1324] border border-[#1E293B] p-4">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#F59E0B] mb-2">
+              <div className="rounded-2xl bg-[#131618] border border-[#23272A] p-4">
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#84E818] mb-2">
                   Kontrol IK / FK ({activeBlueprint.rigging.controls.length} Kontrol)
                 </h3>
                 <div className="flex flex-wrap gap-1.5">
                   {activeBlueprint.rigging.controls.map((ctrl) => (
                     <span
                       key={ctrl}
-                      className="px-2.5 py-1 rounded-lg bg-[#070D19] border border-[#2A3B5C] text-[11px] font-mono text-amber-300"
+                      className="px-2.5 py-1 rounded-lg bg-[#0D0F10] border border-[#2C3135] text-[11px] font-mono text-[#A3F746]"
                     >
                       {ctrl}
                     </span>
@@ -1002,8 +1002,8 @@ function WorkoutStudioContent() {
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-[#0B1324] border border-[#1E293B] p-4">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-300 mb-2">
+              <div className="rounded-2xl bg-[#131618] border border-[#23272A] p-4">
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-neutral-300 mb-2">
                   Hierarki Tulang Wajib ({activeBlueprint.rigging.required_bones.length} Bones)
                 </h3>
                 <div className="flex flex-wrap gap-1.5">

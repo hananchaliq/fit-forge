@@ -140,10 +140,10 @@ export default function JadwalPage() {
       </AnimatePresence>
 
       {/* SECTION 1: ALADHAN PRAYER TIMES + COUNTDOWN + CHECK-IN */}
-      <div className="rounded-3xl bg-[#161616] text-white border border-[#262626] p-6 shadow-card mb-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-[#262626]">
+      <div className="rounded-3xl bg-[#0D0F10] text-white border border-[#23272A] p-6 shadow-card mb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-[#23272A]">
           <div>
-            <div className="flex items-center gap-2 text-xs font-bold text-[#F59E0B]">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#84E818]">
               <Clock className="w-4 h-4" />
               <span>JADWAL SHOLAT KEMENAG RI · {prayerSchedule.city.toUpperCase()}</span>
             </div>
@@ -155,9 +155,9 @@ export default function JadwalPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl bg-[#0E0E0E] border border-[#262626] px-5 py-3 text-right">
+          <div className="rounded-2xl bg-[#131618] border border-[#23272A] px-5 py-3 text-right">
             <span className="text-[11px] text-neutral-400 block">Hitung Mundur Adzan</span>
-            <span className="text-3xl sm:text-4xl font-extrabold text-[#F59E0B] tabular-nums">
+            <span className="text-3xl sm:text-4xl font-extrabold text-[#84E818] tabular-nums">
               {nowDate ? `-${nextPrayer.formattedCountdown}` : '--:--:--'}
             </span>
           </div>
@@ -177,8 +177,8 @@ export default function JadwalPage() {
                 transition={MOTION_SPRING}
                 className={`rounded-2xl p-4 border transition-colors flex flex-col justify-between ${
                   isNext
-                    ? 'bg-[#262626] border-[#F97316]'
-                    : 'bg-[#0E0E0E] border-[#262626]'
+                    ? 'bg-[#1A1D20] border-[#84E818]'
+                    : 'bg-[#131618] border-[#23272A]'
                 }`}
               >
                 <div>
@@ -199,14 +199,14 @@ export default function JadwalPage() {
                         })
                       }
                       className={`min-w-[44px] min-h-[44px] -mr-1 flex items-center justify-center rounded-xl text-xs cursor-pointer transition-colors ${
-                        notifEnabled ? 'bg-[#F97316]/20 text-[#F97316]' : 'bg-[#18181D] text-neutral-500'
+                        notifEnabled ? 'bg-[#84E818]/15 text-[#84E818]' : 'bg-[#1A1D20] text-neutral-500'
                       }`}
                       aria-label={`Toggle pengingat sholat ${PRAYER_LABELS[key]}`}
                     >
                       <Bell className="w-4 h-4" />
                     </motion.button>
                   </div>
-                  <p className="text-2xl font-extrabold text-[#F59E0B] font-telemetry">
+                  <p className="text-2xl font-extrabold text-[#84E818] font-telemetry">
                     {prayerSchedule[key]}
                   </p>
                 </div>
@@ -267,7 +267,7 @@ export default function JadwalPage() {
                 onChange={(e) =>
                   updateScheduleConfig({ wakeAlarmEnabled: e.target.checked })
                 }
-                className="w-5 h-5 accent-[#F97316] cursor-pointer"
+                className="w-5 h-5 accent-[#84E818] cursor-pointer"
               />
             </div>
 
@@ -319,8 +319,8 @@ export default function JadwalPage() {
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-[#FEF3C7]/60 dark:bg-[#0E0E0E] border border-[#F59E0B]/30 text-[11px] text-[#B45309] dark:text-neutral-300 flex items-start gap-2 mb-4">
-              <AlertTriangle className="w-4 h-4 text-[#F59E0B] shrink-0 mt-0.5" />
+            <div className="p-3 rounded-xl bg-[#EEFCD8]/70 dark:bg-[#19240E]/60 border border-[#84E818]/35 text-[11px] text-[#2F6100] dark:text-neutral-300 flex items-start gap-2 mb-4">
+              <AlertTriangle className="w-4 h-4 text-[#3D7A00] dark:text-[#84E818] shrink-0 mt-0.5" />
               <span>
                 <strong>Catatan Batas Browser:</strong> Browser mobile dapat membatasi pemutaran audio otomatis jika layar terkunci lama. Biarkan PWA terbuka atau pasang alarm cadangan di HP Anda.
               </span>
@@ -362,22 +362,22 @@ export default function JadwalPage() {
                 onChange={(e) =>
                   updateScheduleConfig({ hydrationEnabled: e.target.checked })
                 }
-                className="w-5 h-5 accent-[#F97316] cursor-pointer"
+                className="w-5 h-5 accent-[#84E818] cursor-pointer"
               />
             </div>
 
-            <p className="text-xs text-[#6B7280] dark:text-neutral-400 leading-relaxed mb-4">
+            <p className="text-xs text-[#646A6E] dark:text-neutral-400 leading-relaxed mb-4">
               Terpisah tegas dari alarm bangun: hanya mengirimkan notifikasi standar sistem tanpa suara looping, lengkap dengan tombol aksi cepat <strong>&ldquo;Sudah Sholat&rdquo;</strong> dan <strong>&ldquo;Minum 250ml&rdquo;</strong>.
             </p>
 
             {/* Hydration Progress + Interval */}
-            <div className="p-4 rounded-2xl bg-[#F8F9FA] dark:bg-[#0E0E0E] border border-[#EFEFEF] dark:border-[#262626] mb-4">
+            <div className="p-4 rounded-2xl bg-[#F7F8F6] dark:bg-[#0B0D0E] border border-[#E6E8E4] dark:border-[#23272A] mb-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <Droplets className="w-4 h-4 text-sky-500" />
+                  <Droplets className="w-4 h-4 text-[#3D7A00] dark:text-[#84E818]" />
                   <span className="text-xs font-bold">Progres Hidrasi Hari Ini</span>
                 </div>
-                <span className="text-xs font-extrabold text-[#F97316] tabular-nums">
+                <span className="text-xs font-extrabold text-[#3D7A00] dark:text-[#84E818] tabular-nums">
                   {waterMl} / {profile.dailyWaterTargetMl} ml
                 </span>
               </div>
@@ -386,7 +386,7 @@ export default function JadwalPage() {
                 <MotionProgressBar
                   percent={Math.min(100, (waterMl / profile.dailyWaterTargetMl) * 100)}
                   className="h-2.5"
-                  barClassName="bg-gradient-to-r from-sky-500 to-emerald-400"
+                  barClassName="bg-[#84E818]"
                 />
               </div>
 
@@ -399,7 +399,7 @@ export default function JadwalPage() {
                       hydrationIntervalMin: Number(e.target.value),
                     })
                   }
-                  className="min-h-[40px] px-3 py-1.5 rounded-xl bg-white dark:bg-[#161616] border border-[#EFEFEF] dark:border-[#262626] text-xs font-semibold"
+                  className="min-h-[40px] px-3 py-1.5 rounded-xl bg-white dark:bg-[#131618] border border-[#E6E8E4] dark:border-[#23272A] text-xs font-semibold"
                 >
                   <option value={45}>Setiap 45 menit</option>
                   <option value={60}>Setiap 60 menit (1 jam)</option>
@@ -412,7 +412,7 @@ export default function JadwalPage() {
                   whileTap={{ scale: 0.94 }}
                   transition={MOTION_SPRING}
                   onClick={() => addWaterMl(250)}
-                  className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold flex items-center gap-1 cursor-pointer"
+                  className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[#84E818] hover:bg-[#76D610] text-[#0D0F10] text-xs font-extrabold flex items-center gap-1 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Minum 250ml</span>
@@ -428,7 +428,7 @@ export default function JadwalPage() {
               whileTap={{ scale: 0.97 }}
               transition={MOTION_SPRING}
               onClick={() => handleTestSilentNotification('prayer')}
-              className="min-h-[44px] py-3 px-3 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] hover:bg-neutral-100 dark:hover:bg-[#262626] border border-[#EFEFEF] dark:border-[#262626] text-xs font-bold transition-colors cursor-pointer"
+              className="min-h-[44px] py-3 px-3 rounded-xl bg-[#F7F8F6] dark:bg-[#0B0D0E] hover:bg-[#EEF0EC] dark:hover:bg-[#1E2225] border border-[#E6E8E4] dark:border-[#23272A] text-xs font-bold transition-colors cursor-pointer"
             >
               Tes Notifikasi Sholat (Mode B)
             </motion.button>
@@ -439,7 +439,7 @@ export default function JadwalPage() {
               whileTap={{ scale: 0.97 }}
               transition={MOTION_SPRING}
               onClick={() => handleTestSilentNotification('hydration')}
-              className="min-h-[44px] py-3 px-3 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold cursor-pointer"
+              className="min-h-[44px] py-3 px-3 rounded-xl bg-[#0D0F10] hover:bg-[#1E2225] dark:bg-[#84E818] dark:hover:bg-[#76D610] text-white dark:text-[#0D0F10] text-xs font-extrabold cursor-pointer"
             >
               Tes Notifikasi Air +250ml (Mode B)
             </motion.button>
@@ -473,7 +473,7 @@ export default function JadwalPage() {
               >
                 <Volume2 className="w-8 h-8 text-[#EF4444]" />
               </motion.div>
-              <span className="text-xs font-extrabold tracking-widest uppercase text-[#F59E0B]">
+              <span className="text-xs font-extrabold tracking-widest uppercase text-[#84E818]">
                 MODE A · ALARM BANGUN AKTIF
               </span>
               <p className="text-5xl font-black tabular-nums mt-2 mb-2">
@@ -488,7 +488,7 @@ export default function JadwalPage() {
                   whileTap={{ scale: 0.96 }}
                   transition={MOTION_SPRING}
                   onClick={handleSnoozeWakeAlarm}
-                  className="min-h-[48px] py-3.5 rounded-2xl bg-[#262626] hover:bg-[#333333] text-white font-bold text-sm cursor-pointer"
+                  className="min-h-[48px] py-3.5 rounded-2xl bg-[#1A1D20] hover:bg-[#23272A] text-white font-bold text-sm cursor-pointer"
                 >
                   Snooze (5 Menit)
                 </motion.button>
@@ -497,7 +497,7 @@ export default function JadwalPage() {
                   whileTap={{ scale: 0.96 }}
                   transition={MOTION_SPRING}
                   onClick={handleStopWakeAlarm}
-                  className="min-h-[48px] py-3.5 rounded-2xl bg-gradient-to-r from-[#EF4444] to-[#F97316] text-black font-extrabold text-sm cursor-pointer"
+                  className="min-h-[48px] py-3.5 rounded-2xl bg-[#84E818] hover:bg-[#76D610] text-[#0D0F10] font-extrabold text-sm cursor-pointer"
                 >
                   Matikan Alarm
                 </motion.button>

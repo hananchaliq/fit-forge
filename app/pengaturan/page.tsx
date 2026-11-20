@@ -184,17 +184,17 @@ export default function PengaturanPage() {
 
           <button
             type="submit"
-            className="min-h-[44px] px-5 py-3 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black font-extrabold text-xs sm:text-sm inline-flex items-center gap-2 hover:opacity-95 transition cursor-pointer"
+            className="min-h-[44px] px-5 py-3 rounded-xl bg-[#0D0F10] hover:bg-[#1E2225] dark:bg-[#84E818] dark:hover:bg-[#76D610] text-white dark:text-[#0D0F10] font-extrabold text-xs sm:text-sm inline-flex items-center gap-2 transition cursor-pointer"
           >
-            <Save className="w-4 h-4" />
+            <Save className="w-4 h-4 text-[#84E818] dark:text-[#0D0F10]" />
             <span>Simpan Perubahan ke Cloud</span>
           </button>
         </form>
 
         <div className="lg:col-span-4 space-y-5">
           {/* Google Account & Firestore Status Card */}
-          <div className="rounded-2xl bg-[#161616] text-white p-5 border border-[#262626] shadow-card space-y-3">
-            <div className="flex items-center gap-2 text-xs font-bold text-[#F59E0B]">
+          <div className="rounded-2xl bg-[#0D0F10] text-white p-5 border border-[#23272A] shadow-card space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#84E818]">
               <ShieldCheck className="w-4 h-4" />
               <span>Status Akun Google & Database</span>
             </div>
@@ -203,7 +203,7 @@ export default function PengaturanPage() {
               <div className="space-y-2 text-xs">
                 <p className="font-bold text-white">{profile.displayName}</p>
                 <p className="text-neutral-400">{profile.email}</p>
-                <p className="text-[11px] text-emerald-400 font-semibold">
+                <p className="text-[11px] text-[#84E818] font-semibold">
                   {firebaseUid
                     ? `✓ Terhubung ke Cloud Firestore (UID: ${firebaseUid.slice(0, 10)}...)`
                     : isLocalVercelAuth
@@ -213,7 +213,7 @@ export default function PengaturanPage() {
                 <button
                   type="button"
                   onClick={handleGoogleLogout}
-                  className="w-full mt-2 py-2.5 rounded-xl bg-[#262626] hover:bg-[#333333] text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full mt-2 py-2.5 rounded-xl bg-[#1A1D20] hover:bg-[#23272A] text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <LogOut className="w-4 h-4 text-[#EF4444]" />
                   <span>Keluar dari Akun</span>
@@ -227,7 +227,7 @@ export default function PengaturanPage() {
                 <button
                   type="button"
                   onClick={handleGoogleLogin}
-                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#EF4444] via-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-2.5 rounded-xl bg-[#84E818] hover:bg-[#76D610] text-[#0D0F10] text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <LogIn className="w-4 h-4" />
                   <span>Masuk dengan Google</span>
@@ -237,24 +237,24 @@ export default function PengaturanPage() {
           </div>
 
           {/* Theme Switch Card */}
-          <div className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card">
+          <div className="rounded-2xl bg-white dark:bg-[#131618] p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
             <h3 className="text-sm font-bold mb-2">Tema Tampilan Kanvas</h3>
-            <p className="text-xs text-[#6B7280] dark:text-neutral-400 mb-4">
-              Beralih antara Alabaster Light (#F8F9FA) dan Obsidian Dark (#0E0E0E).
+            <p className="text-xs text-[#646A6E] dark:text-neutral-400 mb-4">
+              Beralih antara Gallery-White (#F7F8F6) dan Obsidian Dark (#0B0D0E).
             </p>
             <button
               type="button"
               onClick={toggleDarkMode}
-              className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#161616] dark:bg-[#262626] text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#0D0F10] dark:bg-[#1E2225] text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
             >
               {darkMode ? (
                 <>
-                  <Sun className="w-4 h-4 text-[#F59E0B]" />
-                  <span>Gunakan Mode Terang (Alabaster)</span>
+                  <Sun className="w-4 h-4 text-[#84E818]" />
+                  <span>Gunakan Mode Terang (Gallery-White)</span>
                 </>
               ) : (
                 <>
-                  <Moon className="w-4 h-4 text-[#F59E0B]" />
+                  <Moon className="w-4 h-4 text-[#84E818]" />
                   <span>Gunakan Mode Gelap (Obsidian)</span>
                 </>
               )}
@@ -262,12 +262,12 @@ export default function PengaturanPage() {
           </div>
 
           {/* Zero Reset, Guide & Attribution */}
-          <div className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card space-y-3">
+          <div className="rounded-2xl bg-white dark:bg-[#131618] p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card space-y-3">
             <h3 className="text-sm font-bold">Panduan &amp; Reset Data</h3>
             <button
               type="button"
               onClick={() => setGuideOpen(true)}
-              className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#161616] text-[#F59E0B] text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#0D0F10] text-[#84E818] text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
             >
               <BookOpen className="w-4 h-4" />
               <span>Buka Panduan Penggunaan (5 Langkah)</span>
@@ -280,17 +280,17 @@ export default function PengaturanPage() {
                 setSavedBanner('Seluruh metrik harian telah direset kembali ke 0.');
                 setTimeout(() => setSavedBanner(''), 3000);
               }}
-              className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] hover:bg-neutral-100 dark:hover:bg-[#262626] border border-[#EFEFEF] dark:border-[#262626] text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#F7F8F6] dark:bg-[#0B0D0E] hover:bg-[#EEF0EC] dark:hover:bg-[#1E2225] border border-[#E6E8E4] dark:border-[#23272A] text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
             >
-              <RotateCcw className="w-4 h-4 text-[#F97316]" />
+              <RotateCcw className="w-4 h-4 text-[#3D7A00] dark:text-[#84E818]" />
               <span>Reset Semua Metrik ke Nol (0)</span>
             </button>
 
             <Link
               href="/about/credits"
-              className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#161616] text-white text-xs font-bold flex items-center justify-center gap-2"
+              className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#0D0F10] text-white text-xs font-bold flex items-center justify-center gap-2"
             >
-              <Award className="w-4 h-4 text-[#F59E0B]" />
+              <Award className="w-4 h-4 text-[#84E818]" />
               <span>Lihat Halaman Kredit &amp; Lisensi 3D</span>
             </Link>
           </div>

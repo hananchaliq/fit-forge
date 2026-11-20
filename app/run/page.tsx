@@ -254,9 +254,9 @@ export default function RunTrackerPage() {
       return { x, y };
     };
 
-    // Outer glow for polyline (#F97316)
+    // Outer glow for polyline (Electric Volt-Lime)
     ctx.save();
-    ctx.strokeStyle = 'rgba(249, 115, 22, 0.32)';
+    ctx.strokeStyle = 'rgba(132, 232, 24, 0.34)';
     ctx.lineWidth = 12;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -269,8 +269,8 @@ export default function RunTrackerPage() {
     ctx.stroke();
     ctx.restore();
 
-    // Core polyline (#F97316)
-    ctx.strokeStyle = '#F97316';
+    // Core polyline (Electric Volt-Lime / deeper lime on light map)
+    ctx.strokeStyle = darkMode ? '#84E818' : '#5AB806';
     ctx.lineWidth = 4.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -284,7 +284,7 @@ export default function RunTrackerPage() {
 
     // Start Marker
     const startPt = project(activePolyline[0].lat, activePolyline[0].lng);
-    ctx.fillStyle = '#10B981';
+    ctx.fillStyle = '#0D0F10';
     ctx.beginPath();
     ctx.arc(startPt.x, startPt.y, 6, 0, Math.PI * 2);
     ctx.fill();
@@ -292,16 +292,16 @@ export default function RunTrackerPage() {
     // Current Runner Marker
     const lastCoord = activePolyline[activePolyline.length - 1];
     const currPt = project(lastCoord.lat, lastCoord.lng);
-    ctx.fillStyle = 'rgba(245, 158, 11, 0.35)';
+    ctx.fillStyle = 'rgba(132, 232, 24, 0.38)';
     ctx.beginPath();
     ctx.arc(currPt.x, currPt.y, 14, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = '#F59E0B';
+    ctx.fillStyle = '#84E818';
     ctx.beginPath();
     ctx.arc(currPt.x, currPt.y, 7, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#161616';
+    ctx.strokeStyle = '#0D0F10';
     ctx.lineWidth = 2;
     ctx.stroke();
   }, [routePoints, status, selectedHistoryRun, darkMode]);
@@ -417,15 +417,15 @@ export default function RunTrackerPage() {
     const ctx = offscreen.getContext('2d');
     if (!ctx) return;
 
-    // Obsidian background + Amber gradient accents
-    ctx.fillStyle = '#0E0E0E';
+    // Obsidian background + Electric Lime accents
+    ctx.fillStyle = '#0D0F10';
     ctx.fillRect(0, 0, 720, 900);
 
-    ctx.strokeStyle = '#262626';
+    ctx.strokeStyle = '#23272A';
     ctx.lineWidth = 4;
     ctx.strokeRect(24, 24, 672, 852);
 
-    ctx.fillStyle = '#F97316';
+    ctx.fillStyle = '#84E818';
     ctx.font = 'bold 28px sans-serif';
     ctx.fillText('FITFORGE · GPS RUN TRACKER', 56, 84);
 
@@ -434,7 +434,7 @@ export default function RunTrackerPage() {
     ctx.fillText(selectedHistoryRun.title.slice(0, 32), 56, 140);
 
     // Draw polyline in center box
-    ctx.strokeStyle = '#F97316';
+    ctx.strokeStyle = '#84E818';
     ctx.lineWidth = 8;
     ctx.beginPath();
     ctx.arc(360, 380, 140, 0, Math.PI * 2);
@@ -447,7 +447,7 @@ export default function RunTrackerPage() {
     ctx.fillText('PACE RATA-RATA', 300, 640);
     ctx.fillText('KALORI', 540, 640);
 
-    ctx.fillStyle = '#F59E0B';
+    ctx.fillStyle = '#84E818';
     ctx.font = 'bold 52px sans-serif';
     ctx.fillText(`${(selectedHistoryRun.distanceM / 1000).toFixed(2)} km`, 56, 704);
     ctx.fillStyle = '#FFFFFF';
@@ -499,7 +499,7 @@ export default function RunTrackerPage() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.98 }}
             transition={MOTION_SPRING}
-            className="mb-5 p-4 rounded-2xl bg-[#FEF3C7] text-[#B45309] border border-[#F59E0B]/40 flex flex-wrap items-center justify-between gap-3"
+            className="mb-5 p-4 rounded-2xl bg-[#EEFCD8] dark:bg-[#19240E] text-[#2F6100] dark:text-[#A3F746] border border-[#84E818]/45 flex flex-wrap items-center justify-between gap-3"
           >
             <div className="flex items-center gap-2.5 text-xs sm:text-sm font-bold">
               <RotateCcw className="w-4 h-4 shrink-0" />
@@ -513,7 +513,7 @@ export default function RunTrackerPage() {
                 whileTap={{ scale: 0.95 }}
                 transition={MOTION_SPRING}
                 onClick={handleRecoverUnfinishedRun}
-                className="px-3 py-1.5 rounded-xl bg-[#161616] text-white text-xs font-bold cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-[#0D0F10] text-white text-xs font-bold cursor-pointer"
               >
                 Lanjutkan Lari
               </motion.button>
@@ -523,7 +523,7 @@ export default function RunTrackerPage() {
                   clearActiveRunCheckpoint().catch(() => {});
                   setUnfinishedRun(null);
                 }}
-                className="px-3 py-1.5 rounded-xl bg-white/70 text-[#B45309] text-xs font-semibold cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-white/80 text-[#2F6100] text-xs font-semibold cursor-pointer"
               >
                 Abaikan
               </button>
@@ -533,11 +533,11 @@ export default function RunTrackerPage() {
       </AnimatePresence>
 
       {/* TOP HUD TELEMETRY (Fluid Tabular Numerals + 44px Controls) */}
-      <div className="rounded-3xl bg-[#141418] athletic-grain text-white border border-[#27272F] p-4 sm:p-7 shadow-card mb-6">
+      <div className="rounded-3xl bg-[#0D0F10] text-white border border-[#23272A] p-4 sm:p-7 shadow-card mb-6">
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6 items-center">
           {/* Primary Timer / Distance HUD */}
           <div className="col-span-2 min-w-0">
-            <span className="text-[11px] font-bold uppercase tracking-widest text-[#F59E0B] block truncate">
+            <span className="text-[11px] font-bold uppercase tracking-widest text-[#84E818] block truncate">
               {status === 'running'
                 ? isSimulating
                   ? 'SIMULASI RUTE AKTIF (KALMAN 1D)'
@@ -547,7 +547,7 @@ export default function RunTrackerPage() {
             <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-1.5">
               <span className="text-fluid-metric font-extrabold tracking-tight font-telemetry text-white">
                 {displayDistKm}
-                <span className="text-lg sm:text-xl font-bold text-[#F97316] ml-1 font-sans">km</span>
+                <span className="text-lg sm:text-xl font-bold text-[#84E818] ml-1 font-sans">km</span>
               </span>
               <span className="text-xl sm:text-3xl font-bold font-telemetry text-neutral-300">
                 {displayDur}
@@ -565,7 +565,7 @@ export default function RunTrackerPage() {
 
           <div className="min-w-0">
             <p className="text-xs text-neutral-400 truncate">Kalori ({profile.weightKg}kg)</p>
-            <p className="text-xl sm:text-3xl font-bold text-[#F59E0B] font-telemetry mt-0.5">
+            <p className="text-xl sm:text-3xl font-bold text-[#84E818] font-telemetry mt-0.5">
               {displayKcal}
               <span className="text-xs text-neutral-400 font-sans font-normal"> kkal</span>
             </p>
@@ -583,7 +583,7 @@ export default function RunTrackerPage() {
         </div>
 
         {/* Action Control Bar (>= 44px touch targets) */}
-        <div className="mt-5 pt-5 border-t border-[#27272F] flex flex-wrap items-center justify-between gap-3">
+        <div className="mt-5 pt-5 border-t border-[#23272A] flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5">
             {status === 'idle' ? (
               <>
@@ -593,9 +593,9 @@ export default function RunTrackerPage() {
                   whileTap={{ scale: 0.96 }}
                   transition={MOTION_SPRING}
                   onClick={() => handleStartGpsRun(false)}
-                  className="min-h-[44px] px-4 sm:px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black font-extrabold text-xs sm:text-sm flex items-center gap-2 hover:opacity-95 cursor-pointer"
+                  className="min-h-[44px] px-4 sm:px-5 py-2.5 rounded-xl bg-[#84E818] hover:bg-[#76D610] text-[#0D0F10] font-extrabold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
                 >
-                  <Play className="w-4 h-4 fill-black shrink-0" />
+                  <Play className="w-4 h-4 fill-[#0D0F10] shrink-0" />
                   <span>Mulai Lari GPS</span>
                 </motion.button>
 
@@ -605,9 +605,9 @@ export default function RunTrackerPage() {
                   whileTap={{ scale: 0.96 }}
                   transition={MOTION_SPRING}
                   onClick={() => handleStartGpsRun(true)}
-                  className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#22222A] hover:bg-[#2C2C36] border border-[#32323D] text-white font-semibold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
+                  className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#1A1D20] hover:bg-[#23272A] border border-[#2C3135] text-white font-semibold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
                 >
-                  <Navigation className="w-4 h-4 text-[#F59E0B] shrink-0" />
+                  <Navigation className="w-4 h-4 text-[#84E818] shrink-0" />
                   <span>Simulasi Rute GBK</span>
                 </motion.button>
 
@@ -617,7 +617,7 @@ export default function RunTrackerPage() {
                     whileTap={{ scale: 0.95 }}
                     transition={MOTION_SPRING}
                     onClick={() => deleteRunSession(selectedHistoryRun.id)}
-                    className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[#22222A] hover:bg-[#EF4444]/20 border border-[#32323D] hover:border-[#EF4444] text-neutral-300 hover:text-[#EF4444] font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[#1A1D20] hover:bg-[#EF4444]/20 border border-[#2C3135] hover:border-[#EF4444] text-neutral-300 hover:text-[#EF4444] font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition-colors cursor-pointer"
                     title="Hapus sesi lari yang sedang dipilih dari riwayat"
                   >
                     <Trash2 className="w-4 h-4 shrink-0" />
@@ -635,16 +635,16 @@ export default function RunTrackerPage() {
                   onClick={() =>
                     setStatus((s) => (s === 'running' ? 'paused' : 'running'))
                   }
-                  className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#22222A] hover:bg-[#2C2C36] text-white font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
+                  className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#1A1D20] hover:bg-[#23272A] text-white font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
                 >
                   {status === 'running' ? (
                     <>
-                      <Pause className="w-4 h-4 text-[#F59E0B]" />
+                      <Pause className="w-4 h-4 text-[#84E818]" />
                       <span>Jeda</span>
                     </>
                   ) : (
                     <>
-                      <Play className="w-4 h-4 text-emerald-400" />
+                      <Play className="w-4 h-4 text-[#84E818]" />
                       <span>Lanjutkan</span>
                     </>
                   )}
@@ -667,7 +667,7 @@ export default function RunTrackerPage() {
                   whileTap={{ scale: 0.96 }}
                   transition={MOTION_SPRING}
                   onClick={handleCancelRun}
-                  className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#22222A] hover:bg-[#2C2C36] border border-[#32323D] text-neutral-300 hover:text-white font-semibold text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer"
+                  className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#1A1D20] hover:bg-[#23272A] border border-[#2C3135] text-neutral-300 hover:text-white font-semibold text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer"
                 >
                   <X className="w-4 h-4 text-[#EF4444]" />
                   <span>Batal</span>
@@ -682,20 +682,20 @@ export default function RunTrackerPage() {
               onClick={() => setVoiceCoachEnabled((v) => !v)}
               className={`min-h-[44px] px-3.5 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition ${
                 voiceCoachEnabled
-                  ? 'bg-[#22222A] border-[#F59E0B] text-white'
-                  : 'bg-[#0E0E11] border-[#27272F] text-neutral-400'
+                  ? 'bg-[#1A1D20] border-[#84E818] text-white'
+                  : 'bg-[#131618] border-[#23272A] text-neutral-400'
               }`}
             >
-              <Volume2 className="w-4 h-4 text-[#F59E0B] shrink-0" />
+              <Volume2 className="w-4 h-4 text-[#84E818] shrink-0" />
               <span>Voice Coach: {voiceCoachEnabled ? 'Aktif' : 'Mati'}</span>
             </button>
 
             <button
               type="button"
               onClick={handleGenerateShareCard}
-              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[#22222A] hover:bg-[#2C2C36] border border-[#32323D] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[#1A1D20] hover:bg-[#23272A] border border-[#2C3135] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
             >
-              <Share2 className="w-4 h-4 text-[#F97316] shrink-0" />
+              <Share2 className="w-4 h-4 text-[#84E818] shrink-0" />
               <span>Kartu PNG</span>
             </button>
           </div>
@@ -708,10 +708,10 @@ export default function RunTrackerPage() {
         <div className="lg:col-span-7 surface-card p-4 sm:p-5 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <div className="min-w-0">
-              <h2 className="text-sm font-semibold text-[#111114] dark:text-white truncate">
+              <h2 className="text-sm font-semibold text-[#0D0F10] dark:text-white truncate">
                 Peta Lintasan GPS &amp; Polyline
               </h2>
-              <p className="text-xs text-[#52525B] dark:text-neutral-400 truncate">
+              <p className="text-xs text-[#646A6E] dark:text-neutral-400 truncate">
                 {status === 'idle' ? selectedHistoryRun.title : 'Pelacakan Langsung Aktif'}
               </p>
             </div>
@@ -720,8 +720,8 @@ export default function RunTrackerPage() {
               onClick={() => setAutoFollow((a) => !a)}
               className={`min-h-[44px] px-3.5 rounded-xl text-xs font-semibold cursor-pointer shrink-0 ${
                 autoFollow
-                  ? 'bg-[#141418] text-[#F59E0B]'
-                  : 'bg-neutral-100 dark:bg-[#27272F] text-neutral-500'
+                  ? 'bg-[#0D0F10] text-[#84E818]'
+                  : 'bg-[#F7F8F6] dark:bg-[#1E2225] text-neutral-500'
               }`}
             >
               Auto-Follow: {autoFollow ? 'ON' : 'OFF'}
@@ -815,8 +815,8 @@ export default function RunTrackerPage() {
                         transition={MOTION_SPRING}
                         className={`w-full p-3 rounded-xl border transition-colors flex items-center justify-between gap-2 ${
                           isSelected
-                            ? 'bg-[#161616] text-white border-[#F97316]'
-                            : 'bg-[#F8F9FA] dark:bg-[#0E0E0E] text-[#111111] dark:text-white border-[#EFEFEF] dark:border-[#262626]'
+                            ? 'bg-[#0D0F10] text-white border-[#84E818]'
+                            : 'bg-[#F7F8F6] dark:bg-[#0B0D0E] text-[#0D0F10] dark:text-white border-[#E6E8E4] dark:border-[#23272A]'
                         }`}
                       >
                         <button
@@ -831,7 +831,7 @@ export default function RunTrackerPage() {
                           </p>
                         </button>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <Award className="w-4 h-4 text-[#F59E0B]" />
+                          <Award className={`w-4 h-4 ${isSelected ? 'text-[#84E818]' : 'text-[#3D7A00] dark:text-[#84E818]'}`} />
                           <motion.button
                             type="button"
                             whileTap={{ scale: 0.88 }}
@@ -871,10 +871,10 @@ export default function RunTrackerPage() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
               transition={MOTION_SPRING}
-              className="w-full max-w-md rounded-2xl bg-[#161616] border border-[#262626] p-5 text-white shadow-2xl"
+              className="w-full max-w-md rounded-2xl bg-[#0D0F10] border border-[#23272A] p-5 text-white shadow-2xl"
             >
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-bold">Kartu Bagikan Lari (Obsidian + Amber)</h3>
+                <h3 className="text-sm font-bold">Kartu Bagikan Lari (Obsidian + Volt Lime)</h3>
                 <button
                   type="button"
                   onClick={() => setShareCardUrl(null)}
@@ -888,12 +888,12 @@ export default function RunTrackerPage() {
                 src={shareCardUrl}
                 alt="Kartu Bagikan Lari FitForge"
                 referrerPolicy="no-referrer"
-                className="w-full rounded-xl border border-[#262626] mb-4"
+                className="w-full rounded-xl border border-[#23272A] mb-4"
               />
               <a
                 href={shareCardUrl}
                 download="FitForge-Run-Card.png"
-                className="block w-full py-2.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-center text-xs font-extrabold"
+                className="block w-full py-2.5 rounded-xl bg-[#84E818] hover:bg-[#76D610] text-[#0D0F10] text-center text-xs font-extrabold"
               >
                 Unduh Gambar PNG
               </a>

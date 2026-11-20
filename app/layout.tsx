@@ -28,8 +28,8 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: dark)', color: '#09090B' },
-    { media: '(prefers-color-scheme: light)', color: '#09090B' },
+    { media: '(prefers-color-scheme: dark)', color: '#0B0D0E' },
+    { media: '(prefers-color-scheme: light)', color: '#F7F8F6' },
   ],
   width: 'device-width',
   initialScale: 1,
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'black-translucent',
+    statusBarStyle: 'default',
     title: 'FitForge',
   },
   icons: {
@@ -78,7 +78,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body
         suppressHydrationWarning
-        className="font-sans antialiased selection:bg-[#F97316] selection:text-black"
+        className="font-sans antialiased selection:bg-[#84E818] selection:text-[#0D0F10]"
         style={{ fontFamily: 'var(--font-jakarta), sans-serif' }}
       >
         <MotionAndThemeProvider>

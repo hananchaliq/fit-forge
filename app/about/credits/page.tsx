@@ -58,16 +58,16 @@ export default function CreditsPage() {
       ctaLabel="Kembali ke Dashboard"
       ctaHref="/dashboard"
     >
-      <div className="rounded-2xl bg-white dark:bg-[#161616] p-6 border border-[#EFEFEF] dark:border-[#262626] shadow-card mb-6">
+      <div className="rounded-2xl bg-white dark:bg-[#131618] p-6 border border-[#E6E8E4] dark:border-[#23272A] shadow-card mb-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-[#FEF3C7] dark:bg-[#262626] flex items-center justify-center">
-            <Award className="w-5 h-5 text-[#B45309] dark:text-[#F59E0B]" />
+          <div className="w-10 h-10 rounded-xl bg-[#EEFCD8] dark:bg-[#19240E] flex items-center justify-center">
+            <Award className="w-5 h-5 text-[#3D7A00] dark:text-[#84E818]" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-[#111111] dark:text-white">
+            <h2 className="text-base font-bold text-[#0D0F10] dark:text-white">
               Atribusi Pustaka Terbuka & Pipeline Aset 3D
             </h2>
-            <p className="text-xs text-[#6B7280] dark:text-neutral-400">
+            <p className="text-xs text-[#646A6E] dark:text-neutral-400">
               Seluruh komponen mematuhi lisensi masing-masing tanpa menggunakan aset copyleft yang membatasi distribusi.
             </p>
           </div>
@@ -77,11 +77,11 @@ export default function CreditsPage() {
           {CREDITS_LIST.map((item) => (
             <div
               key={item.name}
-              className="p-4 rounded-2xl bg-[#F8F9FA] dark:bg-[#0E0E0E] border border-[#EFEFEF] dark:border-[#262626] space-y-1.5"
+              className="p-4 rounded-2xl bg-[#F7F8F6] dark:bg-[#0B0D0E] border border-[#E6E8E4] dark:border-[#23272A] space-y-1.5"
             >
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-[#111111] dark:text-white flex items-center gap-2">
-                  <Box className="w-4 h-4 text-[#F97316]" />
+                <h3 className="text-sm font-bold text-[#0D0F10] dark:text-white flex items-center gap-2">
+                  <Box className="w-4 h-4 text-[#3D7A00] dark:text-[#84E818]" />
                   <span>{item.name}</span>
                 </h3>
                 <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
@@ -89,8 +89,8 @@ export default function CreditsPage() {
                   <span>{item.license}</span>
                 </span>
               </div>
-              <p className="text-xs font-semibold text-[#F97316]">{item.role}</p>
-              <p className="text-xs text-[#6B7280] dark:text-neutral-400 leading-relaxed">
+              <p className="text-xs font-semibold text-[#3D7A00] dark:text-[#84E818]">{item.role}</p>
+              <p className="text-xs text-[#646A6E] dark:text-neutral-400 leading-relaxed">
                 {item.notes}
               </p>
             </div>

@@ -106,26 +106,28 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="min-h-dvh pt-safe bg-[#09090B] text-white py-8 px-4 flex items-center justify-center relative overflow-hidden">
+    <div className="min-h-dvh pt-safe bg-[#F7F8F6] dark:bg-[#0B0D0E] text-[#0D0F10] dark:text-white py-8 px-4 flex items-center justify-center relative overflow-hidden">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[680px] h-[400px] rounded-full opacity-20 blur-[120px]"
+        className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[680px] h-[400px] rounded-full opacity-35 dark:opacity-20 blur-[120px]"
         style={{
-          background: 'radial-gradient(circle, #FF2D1A 0%, #F97316 55%, transparent 75%)',
+          background: 'radial-gradient(circle, #84E818 0%, #72D60C 45%, transparent 75%)',
         }}
       />
 
-      <div className="relative z-10 w-full max-w-2xl rounded-2xl bg-[#141418] border border-[#27272E] p-5 sm:p-8 shadow-2xl">
+      <div className="relative z-10 w-full max-w-2xl rounded-3xl bg-white dark:bg-[#131618] border border-[#E6E8E4] dark:border-[#23272A] p-5 sm:p-8 shadow-2xl">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
           <div className="min-w-0">
-            <span className="text-xs font-bold text-[#F97316]">KALIBRASI PERSONAL FITFORGE</span>
-            <h1 className="text-xl sm:text-2xl font-bold text-white mt-0.5">
+            <span className="text-xs font-extrabold tracking-widest uppercase text-[#3D7A00] dark:text-[#84E818]">
+              KALIBRASI PERSONAL FITFORGE
+            </span>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-[#0D0F10] dark:text-white mt-0.5 tracking-tight">
               Konfigurasi Tubuh, Target &amp; Jadwal Ibadah
             </h1>
           </div>
           <Link
             href="/dashboard"
-            className="min-h-[44px] inline-flex items-center text-xs text-neutral-400 hover:text-white shrink-0"
+            className="min-h-[44px] inline-flex items-center text-xs font-semibold text-[#646A6E] dark:text-neutral-400 hover:text-[#0D0F10] dark:hover:text-white shrink-0"
           >
             Lewati ke Dashboard →
           </Link>
@@ -140,7 +142,7 @@ export default function OnboardingPage() {
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="sm:col-span-1">
-              <label htmlFor="onb-name" className="block text-xs font-medium text-neutral-300 mb-1.5">
+              <label htmlFor="onb-name" className="block text-xs font-semibold text-[#646A6E] dark:text-neutral-300 mb-1.5">
                 Nama Panggilan
               </label>
               <input
@@ -148,12 +150,12 @@ export default function OnboardingPage() {
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#0E0E0E] border border-[#262626] text-sm text-white"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#F7F8F6] dark:bg-[#0B0D0E] border border-[#E6E8E4] dark:border-[#23272A] text-sm text-[#0D0F10] dark:text-white"
               />
             </div>
 
             <div>
-              <label htmlFor="onb-weight" className="block text-xs font-medium text-neutral-300 mb-1.5">
+              <label htmlFor="onb-weight" className="block text-xs font-semibold text-[#646A6E] dark:text-neutral-300 mb-1.5">
                 Berat Badan (kg)
               </label>
               <input
@@ -161,12 +163,12 @@ export default function OnboardingPage() {
                 type="number"
                 value={weightKg}
                 onChange={(e) => setWeightKg(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#0E0E0E] border border-[#262626] text-sm text-white tabular-nums"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#F7F8F6] dark:bg-[#0B0D0E] border border-[#E6E8E4] dark:border-[#23272A] text-sm text-[#0D0F10] dark:text-white tabular-nums"
               />
             </div>
 
             <div>
-              <label htmlFor="onb-height" className="block text-xs font-medium text-neutral-300 mb-1.5">
+              <label htmlFor="onb-height" className="block text-xs font-semibold text-[#646A6E] dark:text-neutral-300 mb-1.5">
                 Tinggi Badan (cm)
               </label>
               <input
@@ -174,14 +176,14 @@ export default function OnboardingPage() {
                 type="number"
                 value={heightCm}
                 onChange={(e) => setHeightCm(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#0E0E0E] border border-[#262626] text-sm text-white tabular-nums"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#F7F8F6] dark:bg-[#0B0D0E] border border-[#E6E8E4] dark:border-[#23272A] text-sm text-[#0D0F10] dark:text-white tabular-nums"
               />
             </div>
           </div>
 
           {/* Goal Selection */}
           <div>
-            <label className="block text-xs font-medium text-neutral-300 mb-2">
+            <label className="block text-xs font-semibold text-[#646A6E] dark:text-neutral-300 mb-2">
               Tujuan Utama Latihan
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -198,13 +200,15 @@ export default function OnboardingPage() {
                   onClick={() => setGoal(item)}
                   className={`p-3 rounded-xl border text-left text-xs font-semibold transition cursor-pointer ${
                     goal === item
-                      ? 'bg-[#262626] border-[#F97316] text-white'
-                      : 'bg-[#0E0E0E] border-[#262626] text-neutral-400 hover:text-white'
+                      ? 'bg-[#0D0F10] border-[#84E818] text-white'
+                      : 'bg-[#F7F8F6] dark:bg-[#0B0D0E] border-[#E6E8E4] dark:border-[#23272A] text-[#646A6E] dark:text-neutral-400 hover:text-[#0D0F10] dark:hover:text-white'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[#F59E0B]">Target</span>
-                    {goal === item && <CheckCircle2 className="w-4 h-4 text-[#F97316]" />}
+                    <span className={goal === item ? 'text-[#84E818]' : 'text-[#3D7A00] dark:text-[#84E818]'}>
+                      Target
+                    </span>
+                    {goal === item && <CheckCircle2 className="w-4 h-4 text-[#84E818]" />}
                   </div>
                   <p>{item}</p>
                 </button>
@@ -215,7 +219,7 @@ export default function OnboardingPage() {
           {/* Wake Time & Sleep Time */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="onb-wake" className="block text-xs font-medium text-neutral-300 mb-1.5">
+              <label htmlFor="onb-wake" className="block text-xs font-semibold text-[#646A6E] dark:text-neutral-300 mb-1.5">
                 Jam Bangun Target (Alarm & Hidrasi Mulai)
               </label>
               <input
@@ -223,12 +227,12 @@ export default function OnboardingPage() {
                 type="time"
                 value={wakeTime}
                 onChange={(e) => setWakeTime(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#0E0E0E] border border-[#262626] text-sm text-white tabular-nums"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#F7F8F6] dark:bg-[#0B0D0E] border border-[#E6E8E4] dark:border-[#23272A] text-sm text-[#0D0F10] dark:text-white tabular-nums"
               />
             </div>
 
             <div>
-              <label htmlFor="onb-sleep" className="block text-xs font-medium text-neutral-300 mb-1.5">
+              <label htmlFor="onb-sleep" className="block text-xs font-semibold text-[#646A6E] dark:text-neutral-300 mb-1.5">
                 Jam Tidur Target (Golden Rule 7–9 Jam)
               </label>
               <input
@@ -236,7 +240,7 @@ export default function OnboardingPage() {
                 type="time"
                 value={sleepTime}
                 onChange={(e) => setSleepTime(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#0E0E0E] border border-[#262626] text-sm text-white tabular-nums"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#F7F8F6] dark:bg-[#0B0D0E] border border-[#E6E8E4] dark:border-[#23272A] text-sm text-[#0D0F10] dark:text-white tabular-nums"
               />
             </div>
           </div>
@@ -244,7 +248,7 @@ export default function OnboardingPage() {
           {/* City & Prayer Calculation Method */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="onb-city" className="block text-xs font-medium text-neutral-300 mb-1.5">
+              <label htmlFor="onb-city" className="block text-xs font-semibold text-[#646A6E] dark:text-neutral-300 mb-1.5">
                 Kota & Koordinat Sholat
               </label>
               <div className="flex gap-2">
@@ -252,7 +256,7 @@ export default function OnboardingPage() {
                   id="onb-city"
                   value={city}
                   onChange={(e) => handleCitySelect(e.target.value)}
-                  className="flex-1 px-3 py-2.5 rounded-xl bg-[#0E0E0E] border border-[#262626] text-sm text-white"
+                  className="flex-1 px-3 py-2.5 rounded-xl bg-[#F7F8F6] dark:bg-[#0B0D0E] border border-[#E6E8E4] dark:border-[#23272A] text-sm text-[#0D0F10] dark:text-white"
                 >
                   {INDONESIAN_CITIES.map((c) => (
                     <option key={c.name} value={c.name}>
@@ -263,24 +267,24 @@ export default function OnboardingPage() {
                 <button
                   type="button"
                   onClick={handleDetectGps}
-                  className="px-3 py-2.5 rounded-xl bg-[#1E1E1E] hover:bg-[#262626] border border-[#333333] text-xs font-semibold text-[#F59E0B] flex items-center gap-1 shrink-0 cursor-pointer"
+                  className="px-3 py-2.5 rounded-xl bg-[#0D0F10] hover:bg-[#1E2225] border border-[#23272A] text-xs font-semibold text-[#84E818] flex items-center gap-1 shrink-0 cursor-pointer"
                 >
                   <MapPin className="w-3.5 h-3.5" />
                   <span>GPS</span>
                 </button>
               </div>
-              {gpsStatus && <p className="text-[11px] text-neutral-400 mt-1">{gpsStatus}</p>}
+              {gpsStatus && <p className="text-[11px] text-[#646A6E] dark:text-neutral-400 mt-1">{gpsStatus}</p>}
             </div>
 
             <div>
-              <label htmlFor="onb-method" className="block text-xs font-medium text-neutral-300 mb-1.5">
+              <label htmlFor="onb-method" className="block text-xs font-semibold text-[#646A6E] dark:text-neutral-300 mb-1.5">
                 Metode Hitung Waktu Sholat
               </label>
               <select
                 id="onb-method"
                 value={prayerMethod}
                 onChange={(e) => setPrayerMethod(Number(e.target.value))}
-                className="w-full px-3 py-2.5 rounded-xl bg-[#0E0E0E] border border-[#262626] text-sm text-white"
+                className="w-full px-3 py-2.5 rounded-xl bg-[#F7F8F6] dark:bg-[#0B0D0E] border border-[#E6E8E4] dark:border-[#23272A] text-sm text-[#0D0F10] dark:text-white"
               >
                 <option value={20}>Kemenag RI (Method 20 — Standar Indonesia)</option>
                 <option value={3}>Muslim World League (MWL)</option>
@@ -292,10 +296,10 @@ export default function OnboardingPage() {
 
           <button
             type="submit"
-            className="w-full min-h-[48px] py-3.5 rounded-xl bg-gradient-to-r from-[#EF4444] via-[#F97316] to-[#F59E0B] text-black font-bold text-sm hover:opacity-95 transition flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full min-h-[48px] py-3.5 rounded-full bg-[#0D0F10] hover:bg-[#1E2225] dark:bg-[#84E818] dark:hover:bg-[#76D610] text-white dark:text-[#0D0F10] font-bold text-sm transition flex items-center justify-center gap-2 cursor-pointer"
           >
             <span>Simpan Profil &amp; Buka FitForge</span>
-            <ArrowRight className="w-4 h-4" />
+            <ArrowRight className="w-4 h-4 text-[#84E818] dark:text-[#0D0F10]" />
           </button>
         </form>
       </div>

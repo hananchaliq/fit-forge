@@ -317,15 +317,15 @@ export function HeroRunner3D({ displayMode = 'muscle' }: HeroRunner3DProps) {
     });
 
     const jointBeaconMat = new THREE.MeshPhysicalMaterial({
-      color: 0xf97316,
-      emissive: new THREE.Color(0xea580c),
-      emissiveIntensity: 0.68,
+      color: 0x84e818,
+      emissive: new THREE.Color(0x5bb808),
+      emissiveIntensity: 0.65,
       roughness: 0.24,
-      metalness: 0.34,
+      metalness: 0.30,
       clearcoat: 0.42,
     });
 
-    // Material array for organic lofts: [0: golden skin, 1: charcoal fabric, 2: active muscle warm amber]
+    // Material array for organic lofts: [0: anatomical clay skin, 1: charcoal fabric, 2: active muscle red]
     const loftMats = [skinMat, charcoalFabricMat, activeAccentMat];
 
     // Ground Contact Shadow & Subtle Telemetry Floor Rings
@@ -334,7 +334,7 @@ export function HeroRunner3D({ displayMode = 'muscle' }: HeroRunner3DProps) {
       new THREE.MeshBasicMaterial({
         map: pbr.contactShadowMap,
         transparent: true,
-        opacity: 0.68,
+        opacity: 0.56,
         depthWrite: false,
       })
     );
@@ -345,10 +345,10 @@ export function HeroRunner3D({ displayMode = 'muscle' }: HeroRunner3DProps) {
     const floorRing = new THREE.Mesh(
       new THREE.RingGeometry(0.66, 0.685, 64),
       new THREE.MeshBasicMaterial({
-        color: 0xf59e0b,
+        color: 0x84e818,
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.34,
+        opacity: 0.46,
       })
     );
     floorRing.rotation.x = -Math.PI / 2;

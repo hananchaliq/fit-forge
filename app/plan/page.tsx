@@ -97,7 +97,7 @@ export default function PlanPosterPage() {
           disabled={exporting}
           className="min-h-[44px] inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-[#141418] hover:bg-neutral-50 dark:hover:bg-[#1C1C22] border border-[#E6E6E2] dark:border-[#27272F] text-xs sm:text-sm font-semibold text-[#111114] dark:text-white shadow-xs transition cursor-pointer"
         >
-          <Download className="w-4 h-4 text-[#F97316] shrink-0" />
+          <Download className="w-4 h-4 text-[#3D7A00] dark:text-[#84E818] shrink-0" />
           <span>{exporting ? 'Mengekspor PNG...' : 'Ekspor Poster (PNG)'}</span>
         </motion.button>
       </div>
@@ -105,21 +105,21 @@ export default function PlanPosterPage() {
       {/* POSTER CONTAINER */}
       <div
         ref={posterRef}
-        className="rounded-3xl bg-white dark:bg-[#141418] border border-[#E6E6E2] dark:border-[#27272F] shadow-card p-4 sm:p-8 overflow-hidden"
+        className="rounded-3xl bg-white dark:bg-[#131618] border border-[#E6E8E4] dark:border-[#23272A] shadow-card p-4 sm:p-8 overflow-hidden"
       >
         {/* Poster Header */}
-        <div className="text-center border-b-2 border-[#111114] dark:border-[#27272F] pb-5 mb-6">
+        <div className="text-center border-b-2 border-[#0D0F10] dark:border-[#23272A] pb-5 mb-6">
           <h2
-            className="font-display font-black italic tracking-wider uppercase leading-none text-[#111114] dark:text-white text-balance"
+            className="font-display font-black italic tracking-wider uppercase leading-none text-[#0D0F10] dark:text-white text-balance"
             style={{ fontSize: 'clamp(2rem, 6vw, 3.75rem)' }}
           >
             ULTIMATE{' '}
-            <span className="bg-gradient-to-r from-[#DC2626] via-[#F97316] to-[#F59E0B] bg-clip-text text-transparent">
+            <span className="text-[#6ED40E] dark:text-[#84E818]">
               WEEKLY WORKOUT
             </span>{' '}
             PLAN
           </h2>
-          <p className="text-[11px] sm:text-sm font-extrabold tracking-[0.16em] sm:tracking-[0.22em] text-[#52525B] dark:text-neutral-300 mt-2 break-words">
+          <p className="text-[11px] sm:text-sm font-extrabold tracking-[0.16em] sm:tracking-[0.22em] text-[#646A6E] dark:text-neutral-300 mt-2 break-words">
             BUILD MUSCLE · BURN FAT · STAY STRONG ({planMode === 'gym' ? 'GYM EDITION' : 'HOME CALISTHENICS'})
           </p>
         </div>
@@ -207,16 +207,16 @@ export default function PlanPosterPage() {
                               {idx + 1}
                             </span>
                             <div className="min-w-0">
-                              <p className="text-xs sm:text-sm font-bold text-[#111111] dark:text-white group-hover:text-[#F97316] transition truncate">
+                              <p className="text-xs sm:text-sm font-bold text-[#0D0F10] dark:text-white group-hover:text-[#3D7A00] dark:group-hover:text-[#84E818] transition truncate">
                                 {ex.name}
                               </p>
-                              <p className="text-[11px] font-semibold text-[#6B7280] dark:text-neutral-400 mt-1 tabular-nums">
+                              <p className="text-[11px] font-semibold text-[#646A6E] dark:text-neutral-400 mt-1 tabular-nums">
                                 {ex.sets} SETS · {ex.reps} REPS
                               </p>
                             </div>
                           </div>
 
-                          <span className="p-1.5 rounded-lg bg-[#F8F9FA] dark:bg-[#262626] text-neutral-500 group-hover:text-[#F97316] transition shrink-0">
+                          <span className="p-1.5 rounded-lg bg-[#F7F8F6] dark:bg-[#1E2225] text-neutral-500 group-hover:text-[#3D7A00] dark:group-hover:text-[#84E818] transition shrink-0">
                             <Play className="w-3.5 h-3.5" />
                           </span>
                         </button>
@@ -230,16 +230,16 @@ export default function PlanPosterPage() {
         </div>
 
         {/* FOOTER: GOLDEN RULES (5 Interactive Columns + Quote) */}
-        <div className="mt-8 pt-6 border-t-2 border-[#111111] dark:border-[#262626]">
+        <div className="mt-8 pt-6 border-t-2 border-[#0D0F10] dark:border-[#23272A]">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
             <h3
-              className="text-2xl sm:text-3xl font-black tracking-wide uppercase text-[#111111] dark:text-white"
+              className="text-2xl sm:text-3xl font-black tracking-wide uppercase text-[#0D0F10] dark:text-white"
               style={{ fontFamily: 'var(--font-poster), sans-serif' }}
             >
               5 GOLDEN RULES FOR MAXIMUM RESULTS
             </h3>
-            <div className="flex items-center gap-1.5 text-xs font-bold text-[#F97316] tabular-nums">
-              <Flame className="w-4 h-4 fill-[#F97316]" />
+            <div className="flex items-center gap-1.5 text-xs font-bold text-[#3D7A00] dark:text-[#84E818] tabular-nums">
+              <Flame className="w-4 h-4 fill-[#84E818] text-[#3D7A00] dark:text-[#84E818]" />
               <span>Streak Disiplin: {streakDays} Hari Beruntun</span>
             </div>
           </div>
@@ -254,17 +254,17 @@ export default function PlanPosterPage() {
                   onClick={() => toggleGoldenRule(rule.key)}
                   className={`p-3.5 rounded-2xl border text-left transition cursor-pointer ${
                     checked
-                      ? 'bg-[#161616] text-white border-[#161616] dark:bg-[#262626] dark:border-[#F59E0B]'
-                      : 'bg-[#F8F9FA] dark:bg-[#0E0E0E] text-[#111111] dark:text-white border-[#EFEFEF] dark:border-[#262626]'
+                      ? 'bg-[#0D0F10] text-white border-[#0D0F10] dark:bg-[#1A1D20] dark:border-[#84E818]'
+                      : 'bg-[#F7F8F6] dark:bg-[#0B0D0E] text-[#0D0F10] dark:text-white border-[#E6E8E4] dark:border-[#23272A]'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-extrabold text-[#F59E0B] tabular-nums">
+                    <span className={`text-xs font-extrabold tabular-nums ${checked ? 'text-[#84E818]' : 'text-[#3D7A00] dark:text-[#84E818]'}`}>
                       {rule.target}
                     </span>
                     <CheckCircle2
                       className={`w-4 h-4 ${
-                        checked ? 'text-emerald-400' : 'text-neutral-400'
+                        checked ? 'text-[#84E818]' : 'text-neutral-400'
                       }`}
                     />
                   </div>

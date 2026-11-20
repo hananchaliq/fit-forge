@@ -2,44 +2,46 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ============================================================================
-   FITFORGE DESIGN TOKENS — EDITORIAL-ATHLETIC SYSTEM
-   Layered Obsidian Dark · Crisp Alabaster Light · Single Ember-Amber Accent
+   FITFORGE DESIGN TOKENS — ARCHITECTURAL GALLERY + ELECTRIC LIME SYSTEM
+   Crisp Gallery White · Deep Obsidian Ink · Electric Volt-Lime Accent
    ============================================================================ */
 :root {
-  /* Layered Obsidian (dark surfaces, never flat #000) */
-  --obsidian-950: #09090B;
-  --obsidian-900: #0E0E11;
-  --obsidian-800: #141418;
-  --obsidian-700: #1C1C22;
-  --obsidian-600: #27272F;
-  --obsidian-500: #3A3A44;
+  /* Deep Obsidian Surfaces */
+  --obsidian-950: #0B0D0E;
+  --obsidian-900: #0D0F10;
+  --obsidian-800: #131618;
+  --obsidian-700: #1B1F23;
+  --obsidian-600: #262B30;
+  --obsidian-500: #3A4149;
 
-  /* Alabaster Light Canvas */
-  --canvas: #F7F7F5;
-  --surface-subtle: #EFEFED;
+  /* Crisp Architectural Gallery Light Canvas (60% Dominant) */
+  --canvas: #F7F8F6;
+  --surface-subtle: #EFF1EE;
   --card: #FFFFFF;
-  --border-light: #E6E6E2;
-  --muted: #52525B;
-  --ink: #111114;
+  --border-light: #E6E8E4;
+  --muted: #5A6068;
+  --ink: #0D0F10;
 
-  /* Single Signature Athletic Accent (Ember Orange -> Amber) */
-  --accent-primary: #F97316;
-  --accent-secondary: #F59E0B;
+  /* Signature Electric Volt-Lime Accent (10% High-Intent Budget) */
+  --accent-primary: #84E818;
+  --accent-secondary: #6ED40E;
+  --accent-text: #448500;
+  --accent-soft: #ECFCD8;
   --accent-crimson: #DC2626;
-  --amber-500: #F59E0B;
-  --orange-500: #F97316;
+  --amber-500: #84E818;
+  --orange-500: #6ED40E;
   --red-500: #EF4444;
-  --red-glow: #FF2D1A;
-  --grad-accent: linear-gradient(135deg, #F97316 0%, #F59E0B 100%);
-  --grad-ember: linear-gradient(135deg, #EF4444 0%, #F97316 52%, #F59E0B 100%);
+  --red-glow: #84E818;
+  --grad-accent: linear-gradient(135deg, #84E818 0%, #65C80B 100%);
+  --grad-ember: linear-gradient(135deg, #9AF532 0%, #84E818 52%, #5BB808 100%);
 
   /* Semantic Status (WCAG AA compliant contrast) */
-  --emerald-bg: #D1FAE5;
-  --emerald-fg: #065F46;
+  --emerald-bg: #E8FAD5;
+  --emerald-fg: #2D6200;
   --sky-bg: #E0F2FE;
   --sky-fg: #075985;
-  --amber-bg: #FEF3C7;
-  --amber-fg: #92400E;
+  --amber-bg: #F3FCE6;
+  --amber-fg: #3B7300;
   --rose-bg: #FFE4E6;
   --rose-fg: #9F1239;
 
@@ -53,9 +55,9 @@
   --day-sun: #0D9488;
 
   /* Typography Scale (Fluid Clamp) */
-  --text-display: clamp(2.125rem, 4.8vw, 4rem);
-  --text-page-title: clamp(1.375rem, 2.5vw, 1.875rem);
-  --text-metric-hero: clamp(2.25rem, 6vw, 3.75rem);
+  --text-display: clamp(2.35rem, 4.7vw, 4.1rem);
+  --text-page-title: clamp(1.375rem, 2.5vw, 1.95rem);
+  --text-metric-hero: clamp(2.25rem, 5.5vw, 3.6rem);
   --text-metric-card: clamp(1.5rem, 3vw, 2rem);
 
   /* Spacing & Shape Scale (4px rhythm) */
@@ -65,27 +67,29 @@
   --radius-canvas: 24px;
   --radius-pill: 9999px;
 
-  /* Measured Elevation (Crisp borders + subtle depth, zero muddy shadows) */
-  --shadow-card: 0 1px 2px rgba(9, 9, 11, 0.04), 0 6px 20px rgba(9, 9, 11, 0.05);
-  --shadow-card-hover: 0 2px 6px rgba(9, 9, 11, 0.06), 0 14px 28px rgba(9, 9, 11, 0.09);
-  --shadow-tooltip: 0 10px 30px rgba(0, 0, 0, 0.34);
+  /* Architectural Elevation (Ultra-clean hairlines + whispered lift) */
+  --shadow-card: 0 1px 2px rgba(13, 15, 16, 0.03), 0 8px 24px rgba(13, 15, 16, 0.04);
+  --shadow-card-hover: 0 4px 12px rgba(13, 15, 16, 0.05), 0 18px 36px rgba(13, 15, 16, 0.08);
+  --shadow-tooltip: 0 12px 32px rgba(13, 15, 16, 0.24);
 
   /* Motion Timing & Easing Tokens */
   --ease-editorial: cubic-bezier(0.22, 1, 0.36, 1);
   --duration-fast: 150ms;
   --duration-base: 240ms;
-  --duration-slow: 420ms;
+  --duration-slow: 460ms;
 }
 
 .dark {
-  --canvas: #0E0E11;
-  --surface-subtle: #141418;
-  --card: #141418;
-  --border-light: #27272F;
-  --muted: #A1A1AA;
-  --ink: #FAFAFA;
-  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px rgba(0, 0, 0, 0.32);
-  --shadow-card-hover: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 14px 34px rgba(0, 0, 0, 0.48);
+  --canvas: #0B0D0E;
+  --surface-subtle: #131618;
+  --card: #131618;
+  --border-light: #23282D;
+  --muted: #9AA2AC;
+  --ink: #F5F7F5;
+  --accent-text: #8CE619;
+  --accent-soft: rgba(132, 232, 24, 0.14);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px rgba(0, 0, 0, 0.38);
+  --shadow-card-hover: 0 1px 0 rgba(132, 232, 24, 0.08) inset, 0 14px 34px rgba(0, 0, 0, 0.52);
 }
 
 @layer base {
@@ -96,7 +100,7 @@
   }
 
   body {
-    background-color: var(--obsidian-950);
+    background-color: var(--canvas);
     color: var(--ink);
     overflow-x: clip;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
@@ -123,13 +127,15 @@
 
 .text-fluid-display {
   font-size: var(--text-display);
-  line-height: 1.04;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
   text-wrap: balance;
 }
 
 .text-fluid-title {
   font-size: var(--text-page-title);
-  line-height: 1.18;
+  line-height: 1.16;
+  letter-spacing: -0.02em;
   text-wrap: balance;
 }
 
@@ -143,7 +149,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Editorial Card Depth & Subtle Surface Grain */
+/* Architectural Surface Card */
 .surface-card {
   background-color: var(--card);
   border: 1px solid var(--border-light);
@@ -156,6 +162,7 @@
 
 .surface-card-interactive:hover {
   box-shadow: var(--shadow-card-hover);
+  border-color: rgba(132, 232, 24, 0.45);
 }
 
 .shadow-card {
@@ -166,10 +173,21 @@
   box-shadow: var(--shadow-tooltip);
 }
 
-/* Subtle athletic micro-texture overlay (pointer-events none, zero perf cost) */
+/* Subtle architectural grid / micro-texture */
 .athletic-grain {
-  background-image: radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 0);
-  background-size: 16px 16px;
+  background-image: radial-gradient(rgba(132, 232, 24, 0.055) 1px, transparent 0);
+  background-size: 18px 18px;
+}
+
+.gallery-grid {
+  background-image: linear-gradient(to right, rgba(13, 15, 16, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(13, 15, 16, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.dark .gallery-grid {
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
 }
 
 /* Safe-area & Mobile Ergonomics */

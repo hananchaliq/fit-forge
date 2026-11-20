@@ -105,23 +105,23 @@ export function WelcomeGuideModal() {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="fitforge-guide-title"
     >
-      <div className="w-full max-w-2xl rounded-3xl bg-[#141414] border border-[#262626] text-white shadow-2xl overflow-hidden">
+      <div className="w-full max-w-2xl rounded-3xl bg-white dark:bg-[#131618] border border-[#E6E8E4] dark:border-[#262B30] text-[#0D0F10] dark:text-white shadow-2xl overflow-hidden">
         {/* Top Header */}
-        <div className="px-6 py-4 bg-[#0E0E0E] border-b border-[#262626] flex items-center justify-between">
+        <div className="px-6 py-4 bg-[#F7F8F6] dark:bg-[#0B0D0E] border-b border-[#E6E8E4] dark:border-[#23282D] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#F97316] to-[#F59E0B] text-black flex items-center justify-center font-black">
+            <div className="w-8 h-8 rounded-xl bg-[#0D0F10] dark:bg-[#84E818] text-[#84E818] dark:text-[#0D0F10] flex items-center justify-center font-black">
               <BookOpen className="w-4 h-4 stroke-[2.5]" />
             </div>
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-[#F59E0B] block">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#3D7A00] dark:text-[#84E818] block">
                 Panduan Pengguna FitForge
               </span>
-              <span className="text-[11px] text-neutral-400">
+              <span className="text-[11px] text-[#5A6068] dark:text-neutral-400">
                 {isAuthenticated
                   ? `Terhubung sebagai ${profile.displayName} (${profile.email || 'Akun Google'})`
                   : 'Mode Pratinjau · Login dengan Google untuk menyimpan ke Cloud'}
@@ -132,14 +132,14 @@ export function WelcomeGuideModal() {
           <button
             type="button"
             onClick={dismissGuide}
-            className="p-1.5 rounded-xl bg-[#1E1E1E] hover:bg-[#2A2A2A] text-neutral-400 hover:text-white transition cursor-pointer"
+            className="p-1.5 rounded-xl bg-white dark:bg-[#1B1F23] hover:bg-[#EFF1EE] dark:hover:bg-[#23282D] border border-[#E3E6E0] dark:border-[#2C3238] text-[#5A6068] dark:text-neutral-400 hover:text-[#0D0F10] dark:hover:text-white transition cursor-pointer"
             aria-label="Tutup panduan"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Step Progress Dots */}
+        {/* Step Progress Bars */}
         <div className="px-6 pt-5 flex items-center gap-2">
           {GUIDE_STEPS.map((_, idx) => (
             <button
@@ -148,10 +148,10 @@ export function WelcomeGuideModal() {
               onClick={() => setStepIdx(idx)}
               className={`h-1.5 rounded-full transition-all cursor-pointer ${
                 idx === stepIdx
-                  ? 'w-10 bg-gradient-to-r from-[#EF4444] via-[#F97316] to-[#F59E0B]'
+                  ? 'w-10 bg-[#84E818]'
                   : idx < stepIdx
-                  ? 'w-5 bg-[#F59E0B]/50'
-                  : 'w-5 bg-[#262626]'
+                  ? 'w-5 bg-[#65C80B]/50'
+                  : 'w-5 bg-[#E6E8E4] dark:bg-[#23282D]'
               }`}
               aria-label={`Langkah panduan ${idx + 1}`}
             />
@@ -160,34 +160,34 @@ export function WelcomeGuideModal() {
 
         {/* Step Body */}
         <div className="p-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-[#1F1F1F] border border-[#2E2E2E] text-[#F59E0B] text-xs font-semibold mb-3">
+          <div className="inline-flex items-center gap-2 text-[#3D7A00] dark:text-[#84E818] text-xs font-semibold mb-3">
             <StepIcon className="w-3.5 h-3.5" />
             <span>{currentStep.badge}</span>
           </div>
 
-          <h2 id="fitforge-guide-title" className="text-xl sm:text-2xl font-extrabold text-white mb-2">
+          <h2 id="fitforge-guide-title" className="text-xl sm:text-2xl font-extrabold text-[#0D0F10] dark:text-white mb-2">
             {currentStep.title}
           </h2>
-          <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed mb-5">
+          <p className="text-xs sm:text-sm text-[#525860] dark:text-neutral-300 leading-relaxed mb-5">
             {currentStep.description}
           </p>
 
-          <div className="rounded-2xl bg-[#0E0E0E] border border-[#262626] p-4 space-y-2.5 mb-5">
+          <div className="rounded-2xl bg-[#F7F8F6] dark:bg-[#0B0D0E] border border-[#E6E8E4] dark:border-[#23282D] p-4 space-y-2.5 mb-5">
             {currentStep.bullets.map((b, i) => (
-              <div key={i} className="flex items-start gap-2.5 text-xs sm:text-sm text-neutral-200">
-                <CheckCircle2 className="w-4 h-4 text-[#10B981] shrink-0 mt-0.5" />
+              <div key={i} className="flex items-start gap-2.5 text-xs sm:text-sm text-[#2A3036] dark:text-neutral-200">
+                <CheckCircle2 className="w-4 h-4 text-[#448500] dark:text-[#84E818] shrink-0 mt-0.5" />
                 <span>{b}</span>
               </div>
             ))}
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#262626]">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#E6E8E4] dark:border-[#23282D]">
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 disabled={stepIdx === 0}
                 onClick={() => setStepIdx((i) => Math.max(0, i - 1))}
-                className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl bg-[#1E1E1E] hover:bg-[#2A2A2A] disabled:opacity-40 text-xs font-semibold text-white transition cursor-pointer"
+                className="inline-flex items-center gap-1 px-3.5 py-2 rounded-full bg-[#F5F7F4] dark:bg-[#1B1F23] hover:bg-[#EAECE8] dark:hover:bg-[#23282D] disabled:opacity-40 text-xs font-semibold text-[#0D0F10] dark:text-white transition cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
                 <span>Sebelumnya</span>
@@ -197,7 +197,7 @@ export function WelcomeGuideModal() {
                 <button
                   type="button"
                   onClick={() => setStepIdx((i) => Math.min(GUIDE_STEPS.length - 1, i + 1))}
-                  className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-[#262626] hover:bg-[#333333] text-xs font-bold text-white transition cursor-pointer"
+                  className="inline-flex items-center gap-1 px-4 py-2 rounded-full bg-[#EFF1EE] dark:bg-[#23282D] hover:bg-[#E2E6DF] dark:hover:bg-[#2E343B] text-xs font-bold text-[#0D0F10] dark:text-white transition cursor-pointer"
                 >
                   <span>Langkah Berikutnya</span>
                   <ChevronRight className="w-4 h-4" />
@@ -209,7 +209,7 @@ export function WelcomeGuideModal() {
               <Link
                 href={currentStep.ctaHref}
                 onClick={dismissGuide}
-                className="px-3.5 py-2 rounded-xl border border-[#333333] hover:border-[#F97316] text-xs font-semibold text-neutral-200 hover:text-white transition"
+                className="px-3.5 py-2 rounded-full border border-[#DFE2DC] dark:border-[#2C3238] hover:border-[#84E818] text-xs font-semibold text-[#0D0F10] dark:text-neutral-200 transition"
               >
                 {currentStep.ctaLabel} →
               </Link>
@@ -217,9 +217,9 @@ export function WelcomeGuideModal() {
               <button
                 type="button"
                 onClick={dismissGuide}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#EF4444] via-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold hover:opacity-95 transition cursor-pointer"
+                className="px-4 py-2 rounded-full bg-[#0D0F10] dark:bg-[#84E818] text-white dark:text-[#0D0F10] text-xs font-extrabold hover:opacity-92 transition cursor-pointer"
               >
-                Mengerti & Mulai Gunakan
+                Mengerti &amp; Mulai Gunakan
               </button>
             </div>
           </div>

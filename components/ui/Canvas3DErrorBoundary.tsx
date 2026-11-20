@@ -37,12 +37,12 @@ export class Canvas3DErrorBoundary extends React.Component<
         <div
           className={`w-full ${
             this.props.heightClass || 'h-[360px]'
-          } rounded-2xl bg-[#0D1017] border border-[#242836] flex flex-col items-center justify-center p-6 text-center`}
+          } rounded-2xl bg-[#0D0F10] border border-[#23272A] flex flex-col items-center justify-center p-6 text-center`}
           role="region"
           aria-label="Fallback Visualisasi 3D"
         >
-          <div className="w-12 h-12 rounded-2xl bg-[#F97316]/15 border border-[#F97316]/35 flex items-center justify-center mb-3">
-            <Box className="w-6 h-6 text-[#F97316]" />
+          <div className="w-12 h-12 rounded-2xl bg-[#84E818]/15 border border-[#84E818]/35 flex items-center justify-center mb-3">
+            <Box className="w-6 h-6 text-[#84E818]" />
           </div>
           <p className="text-sm font-bold text-white">
             {this.props.title || 'Mode Pratinjau Hemat Daya Aktif'}
@@ -54,9 +54,9 @@ export class Canvas3DErrorBoundary extends React.Component<
           <button
             type="button"
             onClick={() => this.setState({ hasError: false })}
-            className="mt-4 min-h-[44px] px-4 rounded-xl bg-[#1C1C24] hover:bg-[#272732] border border-[#323240] text-xs font-bold text-white inline-flex items-center gap-2 cursor-pointer"
+            className="mt-4 min-h-[44px] px-4 rounded-xl bg-[#1A1D20] hover:bg-[#23272A] border border-[#2C3135] text-xs font-bold text-white inline-flex items-center gap-2 cursor-pointer"
           >
-            <RefreshCw className="w-3.5 h-3.5 text-[#F59E0B]" />
+            <RefreshCw className="w-3.5 h-3.5 text-[#84E818]" />
             <span>Muat Ulang Canvas 3D</span>
           </button>
         </div>

@@ -2860,7 +2860,7 @@ export function TrainerStudio3D({
       : null;
 
   return (
-    <div className="relative w-full h-full select-none overflow-hidden bg-[#060B16]">
+    <div className="relative w-full h-full select-none overflow-hidden bg-[#0B0D0E]">
       <div
         ref={containerRef}
         data-testid="trainer-studio-3d-canvas"
@@ -2868,19 +2868,19 @@ export function TrainerStudio3D({
       />
 
       {/* Minimal Top-Left Frame Telemetry */}
-      <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-3 text-[10px] font-mono font-bold text-amber-200/90 bg-[#0B1120]/80 px-2.5 py-1 rounded-lg border border-white/10">
+      <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-3 text-[10px] font-mono font-bold text-[#84E818] bg-[#0D0F10]/85 px-2.5 py-1 rounded-lg border border-white/10">
         <span ref={frameBadgeRef} className="tracking-wider">
           FRAME 00 / 60 · 30 FPS
         </span>
         {bpSpec && (
-          <span className="hidden sm:inline text-slate-300 font-sans font-semibold">
+          <span className="hidden sm:inline text-neutral-300 font-sans font-semibold">
             · 180 cm · 22-Bone IK
           </span>
         )}
       </div>
 
       {/* Minimal Top-Right Active Mode Label */}
-      <div className="pointer-events-none absolute top-3 right-3 hidden sm:flex items-center text-[10px] font-semibold text-slate-200 bg-[#0B1120]/80 px-2.5 py-1 rounded-lg border border-white/10">
+      <div className="pointer-events-none absolute top-3 right-3 hidden sm:flex items-center text-[10px] font-semibold text-neutral-200 bg-[#0D0F10]/85 px-2.5 py-1 rounded-lg border border-white/10">
         {displayMode === 'skeleton'
           ? 'Mode Tulang · Kerangka 3D'
           : displayMode === 'xray'

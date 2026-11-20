@@ -273,54 +273,54 @@ export default function NutrisiAiPage() {
     >
       {/* Dynamic Calorie & Protein Budget Summary Strip (swipeable on small phones, 4-col grid on desktop) */}
       <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4 mb-6 overflow-x-auto sm:overflow-visible snap-x snap-mandatory pb-1 sm:pb-0 -mx-1 px-1 sm:mx-0 sm:px-0">
-        <MotionCard className="min-w-[230px] sm:min-w-0 snap-start rounded-2xl bg-[#141418] text-white p-4 sm:p-5 border border-[#27272E] shadow-card">
+        <MotionCard className="min-w-[230px] sm:min-w-0 snap-start rounded-2xl bg-[#0D0F10] text-white p-4 sm:p-5 border border-[#23272A] shadow-card">
           <p className="text-xs text-neutral-400">Sisa Budget Kalori (+Lari)</p>
-          <p className="text-2xl sm:text-3xl font-extrabold text-[#F59E0B] font-telemetry mt-1">
+          <p className="text-2xl sm:text-3xl font-extrabold text-[#84E818] font-telemetry mt-1">
             {remainingCalories.toLocaleString('id-ID')}{' '}
-            <span className="text-sm font-normal">kkal</span>
+            <span className="text-sm font-normal text-neutral-300">kkal</span>
           </p>
           <p className="text-[11px] text-neutral-400 mt-2 font-telemetry">
             Target {profile.dailyCalorieTarget} + {todayRunBurnKcal} lari − {totalCaloriesIn} masuk
           </p>
         </MotionCard>
 
-        <MotionCard className="min-w-[230px] sm:min-w-0 snap-start rounded-2xl bg-white dark:bg-[#141418] p-4 sm:p-5 border border-[#E5E5E0] dark:border-[#27272E] shadow-card">
-          <p className="text-xs text-[#6B7280] dark:text-neutral-400">Total Protein Harian</p>
-          <p className="text-2xl sm:text-3xl font-extrabold text-[#111111] dark:text-white font-telemetry mt-1">
+        <MotionCard className="min-w-[230px] sm:min-w-0 snap-start rounded-2xl bg-white dark:bg-[#131618] p-4 sm:p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
+          <p className="text-xs text-[#646A6E] dark:text-neutral-400">Total Protein Harian</p>
+          <p className="text-2xl sm:text-3xl font-extrabold text-[#0D0F10] dark:text-white font-telemetry mt-1">
             {totalProteinG}g{' '}
-            <span className="text-sm font-normal text-[#6B7280]">
+            <span className="text-sm font-normal text-[#646A6E]">
               / {profile.dailyProteinTargetG}g
             </span>
           </p>
           <MotionProgressBar
             percent={(totalProteinG / Math.max(1, profile.dailyProteinTargetG)) * 100}
             className="h-1.5 mt-2.5"
-            barClassName="bg-gradient-to-r from-[#10B981] to-[#34D399]"
+            barClassName="bg-[#84E818]"
           />
-          <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1.5">
+          <p className="text-[11px] text-[#3D7A00] dark:text-[#84E818] font-semibold mt-1.5">
             {remainingProteinG > 0
               ? `Sisa protein: ${remainingProteinG}g lagi`
               : 'Target Golden Rule Protein Tercapai'}
           </p>
         </MotionCard>
 
-        <MotionCard className="min-w-[200px] sm:min-w-0 snap-start rounded-2xl bg-white dark:bg-[#141418] p-4 sm:p-5 border border-[#E5E5E0] dark:border-[#27272E] shadow-card">
-          <p className="text-xs text-[#6B7280] dark:text-neutral-400">Karbohidrat &amp; Serat</p>
-          <p className="text-2xl sm:text-3xl font-extrabold text-[#111111] dark:text-white font-telemetry mt-1">
+        <MotionCard className="min-w-[200px] sm:min-w-0 snap-start rounded-2xl bg-white dark:bg-[#131618] p-4 sm:p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
+          <p className="text-xs text-[#646A6E] dark:text-neutral-400">Karbohidrat &amp; Serat</p>
+          <p className="text-2xl sm:text-3xl font-extrabold text-[#0D0F10] dark:text-white font-telemetry mt-1">
             {totalCarbsG}g{' '}
-            <span className="text-sm font-normal text-[#6B7280]">· {totalFiberG}g serat</span>
+            <span className="text-sm font-normal text-[#646A6E]">· {totalFiberG}g serat</span>
           </p>
-          <p className="text-[11px] text-[#6B7280] dark:text-neutral-400 mt-2">
+          <p className="text-[11px] text-[#646A6E] dark:text-neutral-400 mt-2">
             Glikogen otot &amp; pencernaan
           </p>
         </MotionCard>
 
-        <MotionCard className="min-w-[190px] sm:min-w-0 snap-start rounded-2xl bg-white dark:bg-[#141418] p-4 sm:p-5 border border-[#E5E5E0] dark:border-[#27272E] shadow-card">
-          <p className="text-xs text-[#6B7280] dark:text-neutral-400">Lemak Harian</p>
-          <p className="text-2xl sm:text-3xl font-extrabold text-[#111111] dark:text-white font-telemetry mt-1">
+        <MotionCard className="min-w-[190px] sm:min-w-0 snap-start rounded-2xl bg-white dark:bg-[#131618] p-4 sm:p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
+          <p className="text-xs text-[#646A6E] dark:text-neutral-400">Lemak Harian</p>
+          <p className="text-2xl sm:text-3xl font-extrabold text-[#0D0F10] dark:text-white font-telemetry mt-1">
             {totalFatG}g
           </p>
-          <p className="text-[11px] text-[#6B7280] dark:text-neutral-400 mt-2">
+          <p className="text-[11px] text-[#646A6E] dark:text-neutral-400 mt-2">
             Utamakan lemak sehat &amp; kurangi gorengan
           </p>
         </MotionCard>
@@ -329,17 +329,17 @@ export default function NutrisiAiPage() {
       {/* SCANNER + AI ANALYSIS RESULT */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-6">
         {/* Left 6 Cols: Camera / Photo Upload + Live Gemini Query Input */}
-        <div className="lg:col-span-6 rounded-2xl bg-white dark:bg-[#161616] p-4 sm:p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card space-y-4">
+        <div className="lg:col-span-6 rounded-2xl bg-white dark:bg-[#131618] p-4 sm:p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card space-y-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-sm font-bold text-[#111111] dark:text-white">
+              <h2 className="text-sm font-bold text-[#0D0F10] dark:text-white">
                 Pemindai &amp; Kalkulator Gizi Real-Time
               </h2>
-              <p className="text-xs text-[#6B7280] dark:text-neutral-400 mt-0.5">
+              <p className="text-xs text-[#646A6E] dark:text-neutral-400 mt-0.5">
                 Langsung via API Gemini tanpa estimasi fallback palsu
               </p>
             </div>
-            <ScanSearch className="w-5 h-5 text-[#F97316] shrink-0" />
+            <ScanSearch className="w-5 h-5 text-[#3D7A00] dark:text-[#84E818] shrink-0" />
           </div>
 
           <input
@@ -402,9 +402,9 @@ export default function NutrisiAiPage() {
               whileTap={{ scale: 0.97 }}
               transition={MOTION_SPRING}
               onClick={() => fileInputRef.current?.click()}
-              className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#141418] dark:bg-[#27272F] text-white text-xs font-bold flex items-center gap-2 hover:opacity-95 transition cursor-pointer"
+              className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#0D0F10] dark:bg-[#1E2225] text-white text-xs font-bold flex items-center gap-2 hover:opacity-95 transition cursor-pointer"
             >
-              <Camera className="w-4 h-4 text-[#F59E0B] shrink-0" />
+              <Camera className="w-4 h-4 text-[#84E818] shrink-0" />
               <span>Ambil Foto / Unggah</span>
             </motion.button>
 
@@ -414,7 +414,7 @@ export default function NutrisiAiPage() {
               transition={MOTION_SPRING}
               onClick={() => runFoodAnalysis(previewDataUrl || undefined, foodHint)}
               disabled={isAnalyzing}
-              className="min-h-[44px] px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black text-xs font-extrabold flex items-center gap-2 hover:opacity-95 transition disabled:opacity-60 cursor-pointer"
+              className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#84E818] hover:bg-[#76D610] text-[#0D0F10] text-xs font-extrabold flex items-center gap-2 transition disabled:opacity-60 cursor-pointer"
             >
               <Cpu className={`w-4 h-4 shrink-0 ${isAnalyzing ? 'animate-spin' : ''}`} />
               <span>{isAnalyzing ? 'Menghubungi Gemini AI...' : 'Analisis Real-Time'}</span>
@@ -538,14 +538,14 @@ export default function NutrisiAiPage() {
 
                 {/* Transparent Real-Time Model & Token Usage Telemetry (Clean unboxed typography, zero pill clutter) */}
                 {analysisMeta && (
-                  <div className="mb-3 py-2 px-3 rounded-xl bg-[#F7F7F5] dark:bg-[#0E0E11] border border-[#E6E6E2] dark:border-[#27272F] text-[11px] font-telemetry text-[#52525B] dark:text-neutral-300 space-y-1">
+                  <div className="mb-3 py-2 px-3 rounded-xl bg-[#F7F8F6] dark:bg-[#0B0D0E] border border-[#E6E8E4] dark:border-[#23272A] text-[11px] font-telemetry text-[#646A6E] dark:text-neutral-300 space-y-1">
                     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
-                      <span className="font-bold text-[#111114] dark:text-white">
-                        Model: <span className="text-[#F97316]">{analysisMeta.model}</span>
+                      <span className="font-bold text-[#0D0F10] dark:text-white">
+                        Model: <span className="text-[#3D7A00] dark:text-[#84E818]">{analysisMeta.model}</span>
                       </span>
                       <span>
                         Latensi:{' '}
-                        <strong className="text-[#111114] dark:text-white">
+                        <strong className="text-[#0D0F10] dark:text-white">
                           {analysisMeta.latencyMs.toLocaleString('id-ID')} ms
                         </strong>
                       </span>
@@ -553,7 +553,7 @@ export default function NutrisiAiPage() {
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
                       <span>
                         Total Token:{' '}
-                        <strong className="text-[#111114] dark:text-white">
+                        <strong className="text-[#0D0F10] dark:text-white">
                           {analysisMeta.usage.totalTokenCount.toLocaleString('id-ID')}
                         </strong>
                       </span>
@@ -599,17 +599,17 @@ export default function NutrisiAiPage() {
 
                 {/* Macro Breakdown Boxes — responsive 2 cols on 320px, 5 cols on sm+ */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3 text-center font-telemetry">
-                  <div className="col-span-2 sm:col-span-1 p-2.5 rounded-xl bg-[#141418] text-white">
+                  <div className="col-span-2 sm:col-span-1 p-2.5 rounded-xl bg-[#0D0F10] text-white">
                     <span className="text-[10px] font-sans text-neutral-400 block">Kalori</span>
-                    <span className="text-base sm:text-sm font-extrabold text-[#F59E0B]">
+                    <span className="text-base sm:text-sm font-extrabold text-[#84E818]">
                       {Math.round(analysisResult.calories_kcal)}
                     </span>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-[#F7F7F5] dark:bg-[#0E0E11] border border-[#E6E6E2] dark:border-[#27272F]">
-                    <span className="text-[10px] font-sans text-[#52525B] dark:text-neutral-400 block">
+                  <div className="p-2.5 rounded-xl bg-[#F7F8F6] dark:bg-[#0B0D0E] border border-[#E6E8E4] dark:border-[#23272A]">
+                    <span className="text-[10px] font-sans text-[#646A6E] dark:text-neutral-400 block">
                       Protein
                     </span>
-                    <span className="text-sm font-extrabold text-[#F97316]">
+                    <span className="text-sm font-extrabold text-[#3D7A00] dark:text-[#84E818]">
                       {Math.round(analysisResult.protein_g)}g
                     </span>
                   </div>
@@ -661,24 +661,24 @@ export default function NutrisiAiPage() {
                 {/* Itemized Ingredients Breakdown */}
                 {analysisResult.ingredients_breakdown &&
                   analysisResult.ingredients_breakdown.length > 0 && (
-                    <div className="mb-3 rounded-xl bg-[#F7F7F5] dark:bg-[#0E0E11] border border-[#E6E6E2] dark:border-[#27272F] p-3">
-                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#111114] dark:text-white mb-2">
-                        <ListChecks className="w-3.5 h-3.5 text-[#F97316] shrink-0" />
+                    <div className="mb-3 rounded-xl bg-[#F7F8F6] dark:bg-[#0B0D0E] border border-[#E6E8E4] dark:border-[#23272A] p-3">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#0D0F10] dark:text-white mb-2">
+                        <ListChecks className="w-3.5 h-3.5 text-[#3D7A00] dark:text-[#84E818] shrink-0" />
                         <span>Rincian Komponen Bahan</span>
                       </div>
                       <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
                         {analysisResult.ingredients_breakdown.map((ing, i) => (
                           <div
                             key={`${ing.item}-${i}`}
-                            className="flex items-center justify-between gap-2 text-xs border-b border-[#E6E6E2]/60 dark:border-[#27272F]/60 last:border-none pb-1 last:pb-0"
+                            className="flex items-center justify-between gap-2 text-xs border-b border-[#E6E8E4]/60 dark:border-[#23272A]/60 last:border-none pb-1 last:pb-0"
                           >
-                            <span className="text-[#111114] dark:text-neutral-200 font-medium min-w-0 truncate">
+                            <span className="text-[#0D0F10] dark:text-neutral-200 font-medium min-w-0 truncate">
                               {ing.item}{' '}
-                              <span className="text-[#52525B] dark:text-neutral-400">
+                              <span className="text-[#646A6E] dark:text-neutral-400">
                                 ({ing.amount})
                               </span>
                             </span>
-                            <span className="font-telemetry font-semibold text-[#52525B] dark:text-neutral-300 shrink-0">
+                            <span className="font-telemetry font-semibold text-[#646A6E] dark:text-neutral-300 shrink-0">
                               {Math.round(ing.calories_kcal)} kkal · {Math.round(ing.protein_g)}g P
                             </span>
                           </div>
@@ -687,8 +687,8 @@ export default function NutrisiAiPage() {
                     </div>
                   )}
 
-                <div className="p-3.5 rounded-xl bg-[#FEF3C7]/60 dark:bg-[#0E0E11] border border-[#F59E0B]/30 text-xs text-[#111114] dark:text-neutral-200 leading-relaxed mb-4 break-words">
-                  <strong className="text-[#92400E] dark:text-[#F59E0B]">Saran Praktis: </strong>
+                <div className="p-3.5 rounded-xl bg-[#EEFCD8]/70 dark:bg-[#19240E]/60 border border-[#84E818]/35 text-xs text-[#0D0F10] dark:text-neutral-200 leading-relaxed mb-4 break-words">
+                  <strong className="text-[#2F6100] dark:text-[#84E818]">Saran Praktis: </strong>
                   {analysisResult.local_indonesian_tips}
                 </div>
 
@@ -698,7 +698,7 @@ export default function NutrisiAiPage() {
                   whileTap={{ scale: 0.98 }}
                   transition={MOTION_SPRING}
                   onClick={handleAddResultToLog}
-                  className="w-full min-h-[44px] py-3 rounded-xl bg-gradient-to-r from-[#F97316] to-[#F59E0B] text-black font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 hover:opacity-95 cursor-pointer"
+                  className="w-full min-h-[44px] py-3 rounded-xl bg-[#84E818] hover:bg-[#76D610] text-[#0D0F10] font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {addedToast ? (
                     <>
@@ -723,12 +723,12 @@ export default function NutrisiAiPage() {
                 className="space-y-4"
               >
                 <div>
-                  <h3 className="text-sm font-semibold text-[#111111] dark:text-white">
+                  <h3 className="text-sm font-semibold text-[#0D0F10] dark:text-white">
                     Rekomendasi Penutup Target Protein Harian
                   </h3>
-                  <p className="text-xs text-[#6B7280] dark:text-neutral-400 mt-0.5">
+                  <p className="text-xs text-[#646A6E] dark:text-neutral-400 mt-0.5">
                     Sisa protein hari ini:{' '}
-                    <strong className="text-[#F97316]">{remainingProteinG}g</strong> · Pilih saran
+                    <strong className="text-[#3D7A00] dark:text-[#84E818]">{remainingProteinG}g</strong> · Pilih saran
                     makanan tinggi protein lokal:
                   </p>
                 </div>
@@ -779,20 +779,20 @@ export default function NutrisiAiPage() {
       </div>
 
       {/* DAILY MEAL LOG TABLE */}
-      <div className="rounded-2xl bg-white dark:bg-[#161616] p-4 sm:p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card">
+      <div className="rounded-2xl bg-white dark:bg-[#131618] p-4 sm:p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
           <div className="flex items-center gap-2">
-            <Utensils className="w-4 h-4 text-[#F97316]" />
-            <h2 className="text-sm font-semibold text-[#111111] dark:text-white">
+            <Utensils className="w-4 h-4 text-[#3D7A00] dark:text-[#84E818]" />
+            <h2 className="text-sm font-semibold text-[#0D0F10] dark:text-white">
               Log Makanan Harian ({nutritionLogs.length} Entri)
             </h2>
           </div>
-          <span className="text-xs font-bold text-[#F97316] tabular-nums">
+          <span className="text-xs font-bold text-[#3D7A00] dark:text-[#84E818] tabular-nums">
             Total: {totalCaloriesIn} kkal · {totalProteinG}g Protein
           </span>
         </div>
 
-        <div className="divide-y divide-[#EFEFEF] dark:divide-[#262626]">
+        <div className="divide-y divide-[#E6E8E4] dark:divide-[#23272A]">
           <AnimatePresence initial={false}>
             {nutritionLogs.map((item) => (
               <motion.div
@@ -805,8 +805,8 @@ export default function NutrisiAiPage() {
                 className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
               >
                 <div className="space-y-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-[#6B7280] dark:text-neutral-400">
-                    <span className="font-bold text-[#F97316]">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-[#646A6E] dark:text-neutral-400">
+                    <span className="font-bold text-[#3D7A00] dark:text-[#84E818]">
                       {mealTypeLabel[item.mealType]}
                     </span>
                     <span>·</span>
@@ -818,18 +818,18 @@ export default function NutrisiAiPage() {
                       Skor {item.healthScore}/10
                     </span>
                   </div>
-                  <p className="text-sm font-bold text-[#111111] dark:text-white break-words">
+                  <p className="text-sm font-bold text-[#0D0F10] dark:text-white break-words">
                     {item.foodName}
                   </p>
-                  <p className="text-xs text-[#6B7280] dark:text-neutral-400">{item.tips}</p>
+                  <p className="text-xs text-[#646A6E] dark:text-neutral-400">{item.tips}</p>
                 </div>
 
                 <div className="flex items-center gap-4 shrink-0 tabular-nums">
                   <div className="text-right">
-                    <p className="text-sm font-extrabold text-[#111111] dark:text-white">
+                    <p className="text-sm font-extrabold text-[#0D0F10] dark:text-white">
                       {item.caloriesKcal} kkal
                     </p>
-                    <p className="text-xs text-[#F97316] font-bold">
+                    <p className="text-xs text-[#3D7A00] dark:text-[#84E818] font-bold">
                       {item.proteinG}g P · {item.carbsG}g K · {item.fatG}g L
                     </p>
                   </div>
