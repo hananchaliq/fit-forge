@@ -311,7 +311,7 @@ function WorkoutStudioContent() {
                     <motion.span
                       layoutId="workout-plan-mode-pill"
                       transition={MOTION_SPRING}
-                      className="absolute inset-0 rounded-lg bg-[#0D0F10] dark:bg-[#84E818] shadow-xs"
+                      className="absolute inset-0 rounded-lg bg-[#0D0F10] dark:bg-[#F7F8F6] shadow-xs"
                     />
                   )}
                   <span className="relative z-10">{mode.label}</span>
@@ -348,7 +348,7 @@ function WorkoutStudioContent() {
         </div>
 
         {/* Desktop Blueprint 3D Core Trio Quick-Switch (01. PUSH-UP · 02. SQUAT · 03. PULL-UP) */}
-        <div className="hidden lg:flex items-center gap-1.5 bg-white dark:bg-[#131618] border border-[#E6E8E4] dark:border-[#23272A] p-1.5 rounded-2xl shadow-xs">
+        <div className="hidden lg:flex items-center gap-1.5 bg-white dark:bg-[#131618] border border-[#E6E8E4] dark:border-[#23272A] p-1.5 rounded-xl shadow-xs">
           <span className="px-2 text-[11px] font-extrabold uppercase tracking-wider text-[#646A6E] dark:text-neutral-400">
             Blueprint:
           </span>
@@ -390,7 +390,7 @@ function WorkoutStudioContent() {
       {/* =====================================================================
           UNIFIED STUDIO 3D VIEWPORT CARD (ZERO COLLISION / ZERO LAYOUT SHIFT)
          ===================================================================== */}
-      <div className="w-full rounded-3xl bg-[#0B0D0E] border border-[#23272A] overflow-hidden shadow-2xl mb-6">
+      <div className="w-full rounded-xl bg-[#0B0D0E] border border-[#23272A] overflow-hidden shadow-2xl mb-6">
         {/* 1. Studio Top Bar */}
         <div className="px-3.5 sm:px-5 py-3 bg-[#0D0F10] border-b border-[#23272A] flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">

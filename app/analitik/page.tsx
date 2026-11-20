@@ -48,20 +48,20 @@ export default function AnalitikPage() {
     >
       {/* 4 Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="rounded-2xl bg-[#0D0F10] text-white p-5 border border-[#23272A] shadow-card">
-          <div className="flex items-center justify-between text-xs text-neutral-400">
+        <div className="rounded-xl bg-[#0D0F10] dark:bg-[#F7F8F6] text-white dark:text-[#0D0F10] p-5 border border-[#23272A] dark:border-[#DDE1DA] shadow-card">
+          <div className="flex items-center justify-between text-xs text-neutral-400 dark:text-[#5A6068]">
             <span>Total Jarak Lari Tercatat</span>
-            <TrendingUp className="w-4 h-4 text-[#84E818]" />
+            <TrendingUp className="w-4 h-4 text-[#84E818] dark:text-[#448500]" />
           </div>
-          <p className="text-3xl font-extrabold text-white font-telemetry mt-2">
+          <p className="text-3xl font-extrabold text-white dark:text-[#0D0F10] font-telemetry mt-2">
             <CountUpMetric value={totalRunKm} decimals={1} suffix=" km" />
           </p>
-          <p className="text-xs text-[#84E818] font-semibold mt-1">
+          <p className="text-xs text-[#84E818] dark:text-[#3D7A00] font-semibold mt-1">
             {runSessions.length} sesi lari di database
           </p>
         </div>
 
-        <div className="rounded-2xl bg-white dark:bg-[#131618] p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
+        <div className="rounded-xl bg-white dark:bg-[#131618] p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
           <div className="flex items-center justify-between text-xs text-[#646A6E] dark:text-neutral-400">
             <span>Volume Beban Tercatat</span>
             <Dumbbell className="w-4 h-4 text-[#3D7A00] dark:text-[#84E818]" />
@@ -74,7 +74,7 @@ export default function AnalitikPage() {
           </p>
         </div>
 
-        <div className="rounded-2xl bg-white dark:bg-[#131618] p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
+        <div className="rounded-xl bg-white dark:bg-[#131618] p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
           <div className="flex items-center justify-between text-xs text-[#646A6E] dark:text-neutral-400">
             <span>Asupan Protein Hari Ini</span>
             <Flame className="w-4 h-4 text-[#3D7A00] dark:text-[#84E818]" />
@@ -87,7 +87,7 @@ export default function AnalitikPage() {
           </p>
         </div>
 
-        <div className="rounded-2xl bg-white dark:bg-[#131618] p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
+        <div className="rounded-xl bg-white dark:bg-[#131618] p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
           <div className="flex items-center justify-between text-xs text-[#646A6E] dark:text-neutral-400">
             <span>Streak Golden Rules</span>
             <Award className="w-4 h-4 text-[#3D7A00] dark:text-[#84E818]" />
@@ -103,7 +103,7 @@ export default function AnalitikPage() {
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
-        <div className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card">
+        <div className="rounded-xl bg-white dark:bg-[#131618] p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
           <h2 className="text-sm font-semibold text-[#111111] dark:text-white mb-1">
             Volume Latihan vs Kalori Terbakar (7 Hari Terakhir)
           </h2>

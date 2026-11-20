@@ -105,7 +105,7 @@ export default function PlanPosterPage() {
       {/* POSTER CONTAINER */}
       <div
         ref={posterRef}
-        className="rounded-3xl bg-white dark:bg-[#131618] border border-[#E6E8E4] dark:border-[#23272A] shadow-card p-4 sm:p-8 overflow-hidden"
+        className="rounded-xl bg-white dark:bg-[#131618] border border-[#E6E8E4] dark:border-[#23272A] shadow-card p-4 sm:p-7 overflow-hidden"
       >
         {/* Poster Header */}
         <div className="text-center border-b-2 border-[#0D0F10] dark:border-[#23272A] pb-5 mb-6">
@@ -133,7 +133,7 @@ export default function PlanPosterPage() {
             return (
               <div
                 key={day.key}
-                className="rounded-2xl border border-[#EFEFEF] dark:border-[#262626] bg-[#F8F9FA] dark:bg-[#0E0E0E] overflow-hidden"
+                className="rounded-lg border border-[#E6E8E4] dark:border-[#23272A] bg-[#F8F9FA] dark:bg-[#0E0E0E] overflow-hidden"
               >
                 <div className="flex flex-col lg:flex-row lg:items-stretch">
                   {/* Left Colored Day Tab */}

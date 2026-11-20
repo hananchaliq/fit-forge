@@ -286,14 +286,14 @@ export function MotionSegmentedControl<T extends string>({
   className = '',
   activeClassName = 'text-white dark:text-[#0D0F10]',
   inactiveClassName = 'text-[#5A6068] dark:text-[#9AA2AC] hover:text-[#0D0F10] dark:hover:text-white',
-  pillClassName = 'bg-[#0D0F10] dark:bg-[#84E818]',
+  pillClassName = 'bg-[#0D0F10] dark:bg-[#F7F8F6]',
   ariaLabel,
 }: MotionSegmentedControlProps<T>) {
   return (
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className={`inline-flex items-center p-1 rounded-xl bg-[#EFF1EE] dark:bg-[#131618] border border-[#E3E6E0] dark:border-[#23282D] ${className}`}
+      className={`inline-flex items-center p-1 rounded-lg bg-[#EFF1EE] dark:bg-[#131618] border border-[#E3E6E0] dark:border-[#23282D] ${className}`}
     >
       {options.map((opt) => {
         const active = opt.id === value;

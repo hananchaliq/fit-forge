@@ -533,11 +533,11 @@ export default function RunTrackerPage() {
       </AnimatePresence>
 
       {/* TOP HUD TELEMETRY (Fluid Tabular Numerals + 44px Controls) */}
-      <div className="rounded-3xl bg-[#0D0F10] text-white border border-[#23272A] p-4 sm:p-7 shadow-card mb-6">
+      <div className="rounded-xl bg-[#0D0F10] dark:bg-[#F7F8F6] text-white dark:text-[#0D0F10] border border-[#23272A] dark:border-[#DDE1DA] p-4 sm:p-6 shadow-card mb-6">
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6 items-center">
           {/* Primary Timer / Distance HUD */}
           <div className="col-span-2 min-w-0">
-            <span className="text-[11px] font-bold uppercase tracking-widest text-[#84E818] block truncate">
+            <span className="text-[11px] font-bold uppercase tracking-widest text-[#84E818] dark:text-[#3D7A00] block truncate">
               {status === 'running'
                 ? isSimulating
                   ? 'SIMULASI RUTE AKTIF (KALMAN 1D)'
@@ -545,45 +545,45 @@ export default function RunTrackerPage() {
                 : 'RINGKASAN SESI TERPILIH'}
             </span>
             <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-1.5">
-              <span className="text-fluid-metric font-extrabold tracking-tight font-telemetry text-white">
+              <span className="text-fluid-metric font-extrabold tracking-tight font-telemetry text-white dark:text-[#0D0F10]">
                 {displayDistKm}
-                <span className="text-lg sm:text-xl font-bold text-[#84E818] ml-1 font-sans">km</span>
+                <span className="text-lg sm:text-xl font-bold text-[#84E818] dark:text-[#3D7A00] ml-1 font-sans">km</span>
               </span>
-              <span className="text-xl sm:text-3xl font-bold font-telemetry text-neutral-300">
+              <span className="text-xl sm:text-3xl font-bold font-telemetry text-neutral-300 dark:text-[#4B525A]">
                 {displayDur}
               </span>
             </div>
           </div>
 
           <div className="min-w-0">
-            <p className="text-xs text-neutral-400 truncate">Pace Rata-Rata</p>
-            <p className="text-xl sm:text-3xl font-bold text-white font-telemetry mt-0.5">
+            <p className="text-xs text-neutral-400 dark:text-[#5A6068] truncate">Pace Rata-Rata</p>
+            <p className="text-xl sm:text-3xl font-bold text-white dark:text-[#0D0F10] font-telemetry mt-0.5">
               {displayAvgPace}
-              <span className="text-xs text-neutral-400 font-sans font-normal"> /km</span>
+              <span className="text-xs text-neutral-400 dark:text-[#5A6068] font-sans font-normal"> /km</span>
             </p>
           </div>
 
           <div className="min-w-0">
-            <p className="text-xs text-neutral-400 truncate">Kalori ({profile.weightKg}kg)</p>
-            <p className="text-xl sm:text-3xl font-bold text-[#84E818] font-telemetry mt-0.5">
+            <p className="text-xs text-neutral-400 dark:text-[#5A6068] truncate">Kalori ({profile.weightKg}kg)</p>
+            <p className="text-xl sm:text-3xl font-bold text-[#84E818] dark:text-[#3D7A00] font-telemetry mt-0.5">
               {displayKcal}
-              <span className="text-xs text-neutral-400 font-sans font-normal"> kkal</span>
+              <span className="text-xs text-neutral-400 dark:text-[#5A6068] font-sans font-normal"> kkal</span>
             </p>
           </div>
 
           <div className="col-span-2 lg:col-span-1 min-w-0">
-            <p className="text-xs text-neutral-400 truncate">Elevasi &amp; Filter GPS</p>
-            <p className="text-xl sm:text-3xl font-bold text-emerald-400 font-telemetry mt-0.5">
+            <p className="text-xs text-neutral-400 dark:text-[#5A6068] truncate">Elevasi &amp; Filter GPS</p>
+            <p className="text-xl sm:text-3xl font-bold text-emerald-400 dark:text-[#15803D] font-telemetry mt-0.5">
               +{status === 'idle' ? selectedHistoryRun.elevationGainM : elevationGainM}m
             </p>
-            <p className="text-[11px] text-neutral-400 font-telemetry">
+            <p className="text-[11px] text-neutral-400 dark:text-[#5A6068] font-telemetry">
               Spike ditolak: {rejectedFixesCount} fix
             </p>
           </div>
         </div>
 
         {/* Action Control Bar (>= 44px touch targets) */}
-        <div className="mt-5 pt-5 border-t border-[#23272A] flex flex-wrap items-center justify-between gap-3">
+        <div className="mt-5 pt-5 border-t border-[#23272A] dark:border-[#DDE1DA] flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5">
             {status === 'idle' ? (
               <>
@@ -593,7 +593,7 @@ export default function RunTrackerPage() {
                   whileTap={{ scale: 0.96 }}
                   transition={MOTION_SPRING}
                   onClick={() => handleStartGpsRun(false)}
-                  className="min-h-[44px] px-4 sm:px-5 py-2.5 rounded-xl bg-[#84E818] hover:bg-[#76D610] text-[#0D0F10] font-extrabold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
+                  className="min-h-[44px] px-4 sm:px-5 py-2.5 rounded-lg bg-[#84E818] hover:bg-[#76D610] text-[#0D0F10] font-extrabold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
                 >
                   <Play className="w-4 h-4 fill-[#0D0F10] shrink-0" />
                   <span>Mulai Lari GPS</span>
@@ -605,7 +605,7 @@ export default function RunTrackerPage() {
                   whileTap={{ scale: 0.96 }}
                   transition={MOTION_SPRING}
                   onClick={() => handleStartGpsRun(true)}
-                  className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#1A1D20] hover:bg-[#23272A] border border-[#2C3135] text-white font-semibold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
+                  className="min-h-[44px] px-4 py-2.5 rounded-lg bg-[#1A1D20] dark:bg-[#0D0F10] hover:opacity-92 border border-[#2C3135] text-white font-semibold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
                 >
                   <Navigation className="w-4 h-4 text-[#84E818] shrink-0" />
                   <span>Simulasi Rute GBK</span>
@@ -617,7 +617,7 @@ export default function RunTrackerPage() {
                     whileTap={{ scale: 0.95 }}
                     transition={MOTION_SPRING}
                     onClick={() => deleteRunSession(selectedHistoryRun.id)}
-                    className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[#1A1D20] hover:bg-[#EF4444]/20 border border-[#2C3135] hover:border-[#EF4444] text-neutral-300 hover:text-[#EF4444] font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="min-h-[44px] px-3.5 py-2.5 rounded-lg bg-[#1A1D20] dark:bg-white hover:bg-[#EF4444]/15 border border-[#2C3135] dark:border-[#DDE1DA] hover:border-[#EF4444] text-neutral-300 dark:text-[#4B525A] hover:text-[#EF4444] font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition-colors cursor-pointer"
                     title="Hapus sesi lari yang sedang dipilih dari riwayat"
                   >
                     <Trash2 className="w-4 h-4 shrink-0" />
@@ -635,7 +635,7 @@ export default function RunTrackerPage() {
                   onClick={() =>
                     setStatus((s) => (s === 'running' ? 'paused' : 'running'))
                   }
-                  className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#1A1D20] hover:bg-[#23272A] text-white font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
+                  className="min-h-[44px] px-4 py-2.5 rounded-lg bg-[#1A1D20] dark:bg-[#0D0F10] hover:opacity-92 text-white font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
                 >
                   {status === 'running' ? (
                     <>
@@ -656,7 +656,7 @@ export default function RunTrackerPage() {
                   whileTap={{ scale: 0.96 }}
                   transition={MOTION_SPRING}
                   onClick={handleStopAndSaveRun}
-                  className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#DC2626] hover:opacity-95 text-white font-extrabold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
+                  className="min-h-[44px] px-5 py-2.5 rounded-lg bg-[#DC2626] hover:opacity-95 text-white font-extrabold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
                 >
                   <Square className="w-4 h-4 fill-white" />
                   <span>Selesai &amp; Simpan</span>
@@ -667,7 +667,7 @@ export default function RunTrackerPage() {
                   whileTap={{ scale: 0.96 }}
                   transition={MOTION_SPRING}
                   onClick={handleCancelRun}
-                  className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#1A1D20] hover:bg-[#23272A] border border-[#2C3135] text-neutral-300 hover:text-white font-semibold text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer"
+                  className="min-h-[44px] px-4 py-2.5 rounded-lg bg-[#1A1D20] dark:bg-white hover:opacity-92 border border-[#2C3135] dark:border-[#DDE1DA] text-neutral-300 dark:text-[#0D0F10] font-semibold text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer"
                 >
                   <X className="w-4 h-4 text-[#EF4444]" />
                   <span>Batal</span>

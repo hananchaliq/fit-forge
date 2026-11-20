@@ -140,24 +140,24 @@ export default function JadwalPage() {
       </AnimatePresence>
 
       {/* SECTION 1: ALADHAN PRAYER TIMES + COUNTDOWN + CHECK-IN */}
-      <div className="rounded-3xl bg-[#0D0F10] text-white border border-[#23272A] p-6 shadow-card mb-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-[#23272A]">
+      <div className="rounded-xl bg-[#0D0F10] dark:bg-[#F7F8F6] text-white dark:text-[#0D0F10] border border-[#23272A] dark:border-[#DDE1DA] p-5 sm:p-6 shadow-card mb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-[#23272A] dark:border-[#E3E6E0]">
           <div>
-            <div className="flex items-center gap-2 text-xs font-bold text-[#84E818]">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#84E818] dark:text-[#3D7A00]">
               <Clock className="w-4 h-4" />
               <span>JADWAL SHOLAT KEMENAG RI · {prayerSchedule.city.toUpperCase()}</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold mt-1">
               Berikutnya: Sholat {nowDate ? `${nextPrayer.label} (${nextPrayer.timeStr} WIB)` : '...'}
             </h2>
-            <p className="text-xs text-neutral-400 mt-0.5">
+            <p className="text-xs text-neutral-400 dark:text-[#5A6068] mt-0.5">
               {prayerSchedule.dateReadable} · {prayerSchedule.hijriReadable} · Ibadah selesai hari ini: {completedPrayersCount}/5
             </p>
           </div>
 
-          <div className="rounded-2xl bg-[#131618] border border-[#23272A] px-5 py-3 text-right">
-            <span className="text-[11px] text-neutral-400 block">Hitung Mundur Adzan</span>
-            <span className="text-3xl sm:text-4xl font-extrabold text-[#84E818] tabular-nums">
+          <div className="rounded-lg bg-[#131618] dark:bg-white border border-[#23272A] dark:border-[#DDE1DA] px-5 py-3 text-right">
+            <span className="text-[11px] text-neutral-400 dark:text-[#5A6068] block">Hitung Mundur Adzan</span>
+            <span className="text-3xl sm:text-4xl font-extrabold text-[#84E818] dark:text-[#3D7A00] tabular-nums">
               {nowDate ? `-${nextPrayer.formattedCountdown}` : '--:--:--'}
             </span>
           </div>
@@ -175,15 +175,15 @@ export default function JadwalPage() {
                 key={key}
                 whileHover={{ y: -3 }}
                 transition={MOTION_SPRING}
-                className={`rounded-2xl p-4 border transition-colors flex flex-col justify-between ${
+                className={`rounded-lg p-4 border transition-colors flex flex-col justify-between ${
                   isNext
-                    ? 'bg-[#1A1D20] border-[#84E818]'
-                    : 'bg-[#131618] border-[#23272A]'
+                    ? 'bg-[#1A1D20] dark:bg-white border-[#84E818]'
+                    : 'bg-[#131618] dark:bg-white/80 border-[#23272A] dark:border-[#E3E6E0]'
                 }`}
               >
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="text-sm font-bold text-white truncate">
+                    <span className="text-sm font-bold text-white dark:text-[#0D0F10] truncate">
                       {PRAYER_LABELS[key]}
                     </span>
                     <motion.button
@@ -198,15 +198,15 @@ export default function JadwalPage() {
                           },
                         })
                       }
-                      className={`min-w-[44px] min-h-[44px] -mr-1 flex items-center justify-center rounded-xl text-xs cursor-pointer transition-colors ${
-                        notifEnabled ? 'bg-[#84E818]/15 text-[#84E818]' : 'bg-[#1A1D20] text-neutral-500'
+                      className={`min-w-[44px] min-h-[44px] -mr-1 flex items-center justify-center rounded-lg text-xs cursor-pointer transition-colors ${
+                        notifEnabled ? 'bg-[#84E818]/15 text-[#84E818] dark:text-[#3D7A00]' : 'bg-[#1A1D20] dark:bg-[#EFF1EE] text-neutral-500'
                       }`}
                       aria-label={`Toggle pengingat sholat ${PRAYER_LABELS[key]}`}
                     >
                       <Bell className="w-4 h-4" />
                     </motion.button>
                   </div>
-                  <p className="text-2xl font-extrabold text-[#84E818] font-telemetry">
+                  <p className="text-2xl font-extrabold text-[#84E818] dark:text-[#3D7A00] font-telemetry">
                     {prayerSchedule[key]}
                   </p>
                 </div>
@@ -439,7 +439,7 @@ export default function JadwalPage() {
               whileTap={{ scale: 0.97 }}
               transition={MOTION_SPRING}
               onClick={() => handleTestSilentNotification('hydration')}
-              className="min-h-[44px] py-3 px-3 rounded-xl bg-[#0D0F10] hover:bg-[#1E2225] dark:bg-[#84E818] dark:hover:bg-[#76D610] text-white dark:text-[#0D0F10] text-xs font-extrabold cursor-pointer"
+              className="min-h-[44px] py-3 px-3 rounded-lg bg-[#0D0F10] hover:opacity-92 dark:bg-[#F7F8F6] text-white dark:text-[#0D0F10] text-xs font-extrabold cursor-pointer"
             >
               Tes Notifikasi Air +250ml (Mode B)
             </motion.button>
@@ -464,12 +464,12 @@ export default function JadwalPage() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.94, y: 12 }}
               transition={MOTION_SPRING}
-              className="w-full max-w-md rounded-3xl bg-[#161616] border-2 border-[#EF4444] p-7 text-center text-white shadow-2xl"
+              className="w-full max-w-md rounded-xl bg-[#161616] border-2 border-[#EF4444] p-7 text-center text-white shadow-2xl"
             >
               <motion.div
                 animate={{ scale: [1, 1.08, 1] }}
                 transition={{ repeat: Infinity, duration: 1.2, ease: 'easeInOut' }}
-                className="w-16 h-16 rounded-2xl bg-[#EF4444]/20 border border-[#EF4444] flex items-center justify-center mx-auto mb-4"
+                className="w-16 h-16 rounded-xl bg-[#EF4444]/20 border border-[#EF4444] flex items-center justify-center mx-auto mb-4"
               >
                 <Volume2 className="w-8 h-8 text-[#EF4444]" />
               </motion.div>

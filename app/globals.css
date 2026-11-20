@@ -60,11 +60,11 @@
   --text-metric-hero: clamp(2.25rem, 5.5vw, 3.6rem);
   --text-metric-card: clamp(1.5rem, 3vw, 2rem);
 
-  /* Spacing & Shape Scale (4px rhythm) */
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-card: 18px;
-  --radius-canvas: 24px;
+  /* Spacing & Shape Scale (4px architectural rhythm — crisp 12px cards, 8px controls, true circles) */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-card: 12px;
+  --radius-canvas: 14px;
   --radius-pill: 9999px;
 
   /* Architectural Elevation (Ultra-clean hairlines + whispered lift) */
@@ -200,15 +200,15 @@
 }
 
 .bottom-dock-safe {
-  bottom: calc(0.625rem + env(safe-area-inset-bottom, 0px));
+  bottom: 0px;
 }
 
 .bottom-sheet-safe {
-  bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
+  bottom: calc(4.25rem + env(safe-area-inset-bottom, 0px));
 }
 
 .main-mobile-safe {
-  padding-bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
 }
 
 .touch-target {

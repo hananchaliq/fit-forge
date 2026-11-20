@@ -3,8 +3,7 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { motion, useScroll, useTransform } from 'motion/react';
-import { signInWithPopup } from 'firebase/auth';
+import { motion, useScroll, useTransform, AnimatePresence } from 'motion/react';
 import {
   ArrowRight,
   ArrowUpRight,
@@ -26,8 +25,11 @@ import {
   Database,
   Layers,
   Clock,
+  Sun,
+  Moon,
+  Loader2,
 } from 'lucide-react';
-import { auth, googleProvider } from '@/lib/firebase';
+import { signInWithGoogleSafe } from '@/lib/firebase';
 import { useFitForgeStore } from '@/store/useFitForgeStore';
 import { BiomechanicalLoader } from '@/components/ui/BiomechanicalLoader';
 import { Canvas3DErrorBoundary } from '@/components/ui/Canvas3DErrorBoundary';
@@ -164,9 +166,16 @@ const emptySubscribe = () => () => {};
 
 export default function LandingPage() {
   const router = useRouter();
-  const { isAuthenticated, profile, setGuideOpen, hasCompletedOnboarding } =
-    useFitForgeStore();
+  const {
+    isAuthenticated,
+    profile,
+    darkMode,
+    toggleDarkMode,
+    setGuideOpen,
+    hasCompletedOnboarding,
+  } = useFitForgeStore();
   const [heroDisplayMode, setHeroDisplayMode] = useState<MannequinDisplayMode>('muscle');
+  const [authLoading, setAuthLoading] = useState(false);
   const heroMounted = useSyncExternalStore(
     emptySubscribe,
     () => true,
@@ -178,6 +187,12 @@ export default function LandingPage() {
   const haloScale = useTransform(scrollY, [0, 700], [1, 1.08]);
 
   useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('dark', darkMode);
+    }
+  }, [darkMode]);
+
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       if (params.get('autostart') === '1') {
@@ -187,12 +202,21 @@ export default function LandingPage() {
   }, [router]);
 
   const handleQuickGoogleLogin = async () => {
+    if (authLoading) return;
+    setAuthLoading(true);
     try {
-      await signInWithPopup(auth, googleProvider);
-      setGuideOpen(true);
-      router.push(hasCompletedOnboarding ? '/dashboard' : '/onboarding');
-    } catch {
-      router.push('/login');
+      const res = await signInWithGoogleSafe();
+      if (res.ok) {
+        setGuideOpen(true);
+        router.push(hasCompletedOnboarding ? '/dashboard' : '/onboarding');
+        return;
+      }
+      const params = new URLSearchParams();
+      if (res.code) params.set('authError', res.code);
+      if (res.isEmbeddedIframe) params.set('iframe', '1');
+      router.push(`/login?${params.toString()}`);
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -205,7 +229,7 @@ export default function LandingPage() {
           ===================================================================== */}
       <header className="sticky top-0 z-30 pt-safe bg-white/92 dark:bg-[#0B0D0E]/92 backdrop-blur-md border-b border-[#E6E8E4] dark:border-[#1E2328]">
         <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-8">
-          {/* Zone 1: Geometric Brand Mark */}
+          {/* Zone 1: Geometric Brand Mark (Obsidian in Light <-> Crisp White in Dark) */}
           <Link
             href="/"
             className="flex items-center gap-2.5 min-h-[44px] whitespace-nowrap shrink-0 group"
@@ -214,7 +238,7 @@ export default function LandingPage() {
               whileHover={{ rotate: -6, scale: 1.06 }}
               whileTap={{ scale: 0.94 }}
               transition={MOTION_SPRING}
-              className="w-8 h-8 rounded-lg bg-[#0D0F10] dark:bg-[#84E818] flex items-center justify-center shrink-0"
+              className="w-8 h-8 rounded-lg bg-[#0D0F10] dark:bg-[#F7F8F6] flex items-center justify-center shrink-0"
             >
               <span className="font-extrabold text-sm tracking-tighter text-[#84E818] dark:text-[#0D0F10]">
                 FF
@@ -248,18 +272,55 @@ export default function LandingPage() {
             ))}
           </nav>
 
-          {/* Zone 3: Single High-Contrast Obsidian Pill CTA with Electric Lime Arrow */}
-          <div className="flex items-center shrink-0">
+          {/* Zone 3: Theme Toggle + Polarity-Inverted Primary Pill CTA */}
+          <div className="flex items-center gap-2 shrink-0">
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.92 }}
+              transition={MOTION_SPRING}
+              onClick={toggleDarkMode}
+              aria-label={darkMode ? 'Beralih ke Mode Terang' : 'Beralih ke Mode Gelap'}
+              title={darkMode ? 'Mode Terang' : 'Mode Gelap'}
+              className="w-10 h-10 rounded-full bg-[#F5F7F4] dark:bg-[#131618] hover:bg-[#EAECE8] dark:hover:bg-[#1B1F23] border border-[#E3E6E0] dark:border-[#23282D] flex items-center justify-center transition cursor-pointer shrink-0 overflow-hidden"
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                {darkMode ? (
+                  <motion.span
+                    key="sun"
+                    initial={{ rotate: -60, opacity: 0, scale: 0.6 }}
+                    animate={{ rotate: 0, opacity: 1, scale: 1 }}
+                    exit={{ rotate: 60, opacity: 0, scale: 0.6 }}
+                    transition={MOTION_SPRING}
+                    className="inline-flex"
+                  >
+                    <Sun className="w-4 h-4 text-[#84E818]" />
+                  </motion.span>
+                ) : (
+                  <motion.span
+                    key="moon"
+                    initial={{ rotate: 60, opacity: 0, scale: 0.6 }}
+                    animate={{ rotate: 0, opacity: 1, scale: 1 }}
+                    exit={{ rotate: -60, opacity: 0, scale: 0.6 }}
+                    transition={MOTION_SPRING}
+                    className="inline-flex"
+                  >
+                    <Moon className="w-4 h-4 text-[#0D0F10]" />
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
+
             {isAuthenticated ? (
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} transition={MOTION_SPRING}>
                 <Link
                   href="/dashboard"
-                  className="group inline-flex items-center gap-2 min-h-[40px] px-4 sm:px-5 rounded-full bg-[#0D0F10] dark:bg-[#84E818] text-white dark:text-[#0D0F10] text-xs sm:text-sm font-bold hover:opacity-92 transition whitespace-nowrap shrink-0"
+                  className="group inline-flex items-center gap-2 min-h-[40px] px-4 sm:px-5 rounded-full bg-[#0D0F10] dark:bg-[#F7F8F6] text-white dark:text-[#0D0F10] text-xs sm:text-sm font-bold hover:opacity-92 transition whitespace-nowrap shrink-0"
                 >
-                  <span className="max-w-[120px] sm:max-w-none truncate">
+                  <span className="max-w-[110px] sm:max-w-none truncate">
                     {profile.displayName.split(' ')[0]}
                   </span>
-                  <ArrowRight className="w-4 h-4 text-[#84E818] dark:text-[#0D0F10] group-hover:translate-x-0.5 transition-transform shrink-0" />
+                  <ArrowRight className="w-4 h-4 text-[#84E818] dark:text-[#448500] group-hover:translate-x-0.5 transition-transform shrink-0" />
                 </Link>
               </motion.div>
             ) : (
@@ -268,11 +329,17 @@ export default function LandingPage() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.97 }}
                 transition={MOTION_SPRING}
+                disabled={authLoading}
                 onClick={handleQuickGoogleLogin}
-                className="group inline-flex items-center gap-2 min-h-[40px] px-4 sm:px-5 rounded-full bg-[#0D0F10] dark:bg-[#84E818] text-white dark:text-[#0D0F10] text-xs sm:text-sm font-bold hover:opacity-92 transition whitespace-nowrap shrink-0 cursor-pointer"
+                className="group inline-flex items-center gap-2 min-h-[40px] px-4 sm:px-5 rounded-full bg-[#0D0F10] dark:bg-[#F7F8F6] text-white dark:text-[#0D0F10] text-xs sm:text-sm font-bold hover:opacity-92 disabled:opacity-60 transition whitespace-nowrap shrink-0 cursor-pointer"
               >
-                <span>Mulai Sekarang</span>
-                <ArrowRight className="w-4 h-4 text-[#84E818] dark:text-[#0D0F10] group-hover:translate-x-1 transition-transform shrink-0" />
+                {authLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#84E818] dark:text-[#448500] shrink-0" />
+                ) : null}
+                <span>{authLoading ? 'Menghubungkan...' : 'Mulai Sekarang'}</span>
+                {!authLoading && (
+                  <ArrowRight className="w-4 h-4 text-[#84E818] dark:text-[#448500] group-hover:translate-x-1 transition-transform shrink-0" />
+                )}
               </motion.button>
             )}
           </div>
@@ -316,16 +383,16 @@ export default function LandingPage() {
                 Platform kebugaran terpadu yang menyatukan panduan anatomi 3D 22-tulang, pelacakan rute lari GPS berfilter Kalman, pemindai nutrisi masakan Indonesia berbasis Gemini AI real-time, serta jadwal sholat dan hidrasi.
               </p>
 
-              {/* CTA Row: Obsidian Primary Pill + Crisp White Outlined Secondary */}
+              {/* CTA Row: Polarity-Inverted Primary Pill + Crisp Outlined Secondary */}
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 {isAuthenticated ? (
                   <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} transition={MOTION_SPRING}>
                     <Link
                       href="/dashboard"
-                      className="group inline-flex items-center justify-center gap-3 min-h-[48px] px-6 rounded-full bg-[#0D0F10] dark:bg-[#84E818] text-white dark:text-[#0D0F10] font-bold text-sm shadow-sm hover:opacity-92 transition whitespace-nowrap"
+                      className="group inline-flex items-center justify-center gap-3 min-h-[48px] px-6 rounded-full bg-[#0D0F10] dark:bg-[#F7F8F6] text-white dark:text-[#0D0F10] font-bold text-sm shadow-sm hover:opacity-92 transition whitespace-nowrap"
                     >
                       <span>Buka Dashboard</span>
-                      <ArrowRight className="w-4 h-4 text-[#84E818] dark:text-[#0D0F10] group-hover:translate-x-1 transition-transform" />
+                      <ArrowRight className="w-4 h-4 text-[#84E818] dark:text-[#448500] group-hover:translate-x-1 transition-transform" />
                     </Link>
                   </motion.div>
                 ) : (
@@ -334,11 +401,17 @@ export default function LandingPage() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.97 }}
                     transition={MOTION_SPRING}
+                    disabled={authLoading}
                     onClick={handleQuickGoogleLogin}
-                    className="group inline-flex items-center justify-center gap-3 min-h-[48px] px-6 rounded-full bg-[#0D0F10] dark:bg-[#84E818] text-white dark:text-[#0D0F10] font-bold text-sm shadow-sm hover:opacity-92 transition whitespace-nowrap cursor-pointer"
+                    className="group inline-flex items-center justify-center gap-3 min-h-[48px] px-6 rounded-full bg-[#0D0F10] dark:bg-[#F7F8F6] text-white dark:text-[#0D0F10] font-bold text-sm shadow-sm hover:opacity-92 disabled:opacity-60 transition whitespace-nowrap cursor-pointer"
                   >
-                    <span>Mulai Latihan</span>
-                    <ArrowRight className="w-4 h-4 text-[#84E818] dark:text-[#0D0F10] group-hover:translate-x-1 transition-transform" />
+                    {authLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-[#84E818] dark:text-[#448500]" />
+                    ) : null}
+                    <span>{authLoading ? 'Menghubungkan...' : 'Mulai Latihan'}</span>
+                    {!authLoading && (
+                      <ArrowRight className="w-4 h-4 text-[#84E818] dark:text-[#448500] group-hover:translate-x-1 transition-transform" />
+                    )}
                   </motion.button>
                 )}
 
@@ -432,7 +505,7 @@ export default function LandingPage() {
                 initial={false}
                 whileHover={{ y: -3 }}
                 transition={MOTION_SPRING}
-                className="relative rounded-[28px] bg-[#0D0F10] border border-[#22272C] p-3 shadow-[0_24px_60px_rgba(13,15,16,0.16)] dark:shadow-[0_24px_60px_rgba(0,0,0,0.55)] overflow-hidden"
+                className="relative rounded-xl bg-[#0D0F10] dark:bg-[#14171A] border border-[#22272C] dark:border-[#2C333A] p-3 shadow-[0_24px_60px_rgba(13,15,16,0.16)] dark:shadow-[0_24px_60px_rgba(0,0,0,0.55)] overflow-hidden"
               >
                 {/* Subtle radial lime spotlight inside stage */}
                 <div
@@ -454,7 +527,7 @@ export default function LandingPage() {
                   </div>
 
                   <div
-                    className="inline-flex rounded-xl bg-white/[0.06] p-0.5 border border-white/10 shrink-0"
+                    className="inline-flex rounded-lg bg-white/[0.06] p-0.5 border border-white/10 shrink-0"
                     role="group"
                     aria-label="Mode tampilan mannequin 3D"
                   >
@@ -469,7 +542,7 @@ export default function LandingPage() {
                         key={m.key}
                         type="button"
                         onClick={() => setHeroDisplayMode(m.key)}
-                        className={`relative min-h-[32px] px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
+                        className={`relative min-h-[30px] px-2 sm:px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
                           heroDisplayMode === m.key
                             ? 'text-[#0D0F10]'
                             : 'text-neutral-300 hover:text-white'
@@ -479,7 +552,7 @@ export default function LandingPage() {
                           <motion.span
                             layoutId="hero-displaymode-pill"
                             transition={MOTION_SPRING}
-                            className="absolute inset-0 rounded-lg bg-[#84E818]"
+                            className="absolute inset-0 rounded-md bg-[#84E818]"
                           />
                         )}
                         {m.key === 'skeleton' && (
@@ -509,18 +582,18 @@ export default function LandingPage() {
                     )}
                   </Canvas3DErrorBoundary>
 
-                  {/* Translucent Dark Corner Glass Callout echoing Reference Image */}
+                  {/* Polarity-Inverted Corner Callout (Dark in Light Mode <-> White in Dark Mode) */}
                   <Link
                     href="/workout"
-                    className="group absolute bottom-3 right-3 z-20 w-[184px] rounded-2xl bg-[#16191D]/88 backdrop-blur-md border border-white/12 p-3 text-white hover:border-[#84E818]/60 transition-colors"
+                    className="group absolute bottom-3 right-3 z-20 w-[184px] rounded-xl bg-[#16191D]/90 dark:bg-[#F7F8F6]/94 backdrop-blur-md border border-white/12 dark:border-[#DDE1DA] p-3 text-white dark:text-[#0D0F10] hover:border-[#84E818] transition-colors"
                   >
                     <div className="flex items-center justify-between mb-2">
                       <span className="w-5 h-5 rounded-md bg-[#84E818] text-[#0D0F10] flex items-center justify-center">
                         <Activity className="w-3 h-3 stroke-[2.6]" />
                       </span>
-                      <ArrowRight className="w-3.5 h-3.5 text-neutral-300 group-hover:text-[#84E818] group-hover:translate-x-0.5 transition-all" />
+                      <ArrowRight className="w-3.5 h-3.5 text-neutral-300 dark:text-[#5A6068] group-hover:text-[#84E818] dark:group-hover:text-[#448500] group-hover:translate-x-0.5 transition-all" />
                     </div>
-                    <p className="text-[11px] font-semibold leading-snug text-neutral-100">
+                    <p className="text-[11px] font-semibold leading-snug text-neutral-100 dark:text-[#0D0F10]">
                       Ubah gerakan rutin menjadi progres otot terukur.
                     </p>
                   </Link>
@@ -534,7 +607,7 @@ export default function LandingPage() {
                       ? 'Mode X-Ray · Otot & Kerangka'
                       : 'Tekstur PBR · Gerak Sprint Fleksibel'}
                   </span>
-                  <span className="text-[#84E818] font-semibold">Geser untuk paralaks</span>
+                  <span className="text-[#84E818] font-semibold">Geser untuk putar 3D</span>
                 </div>
               </motion.div>
             </div>
@@ -611,11 +684,11 @@ export default function LandingPage() {
                 <MotionCard className="h-full">
                   <Link
                     href={mod.href}
-                    className="group h-full rounded-2xl bg-white dark:bg-[#131618] border border-[#E6E8E4] dark:border-[#23282D] hover:border-[#84E818] dark:hover:border-[#84E818]/70 p-6 transition-colors flex flex-col justify-between shadow-[0_2px_12px_rgba(13,15,16,0.03)] hover:shadow-[0_14px_30px_rgba(13,15,16,0.07)] min-w-0"
+                    className="group h-full rounded-xl bg-white dark:bg-[#131618] border border-[#E3E6E0] dark:border-[#23282D] hover:border-[#84E818] dark:hover:border-[#84E818]/70 p-6 transition-colors flex flex-col justify-between shadow-[0_2px_12px_rgba(13,15,16,0.03)] hover:shadow-[0_14px_30px_rgba(13,15,16,0.07)] min-w-0"
                   >
                     <div>
                       <div className="flex items-center justify-between mb-6">
-                        <MotionIconBox className="w-10 h-10 rounded-xl bg-[#F5F7F4] dark:bg-[#1B1F23] border border-[#E6E8E4] dark:border-[#2A3036] group-hover:bg-[#0D0F10] dark:group-hover:bg-[#84E818] group-hover:border-[#0D0F10] flex items-center justify-center transition-colors">
+                        <MotionIconBox className="w-10 h-10 rounded-lg bg-[#F5F7F4] dark:bg-[#1B1F23] border border-[#E3E6E0] dark:border-[#2A3036] group-hover:bg-[#0D0F10] dark:group-hover:bg-[#F7F8F6] group-hover:border-[#0D0F10] dark:group-hover:border-[#F7F8F6] flex items-center justify-center transition-colors">
                           <Icon className="w-4 h-4 text-[#0D0F10] dark:text-[#F5F7F5] group-hover:text-[#84E818] dark:group-hover:text-[#0D0F10] transition-colors" />
                         </MotionIconBox>
 
@@ -682,23 +755,23 @@ export default function LandingPage() {
               <MotionCard className="h-full">
                 <Link
                   href={card.href}
-                  className="group h-full rounded-[22px] bg-white dark:bg-[#131618] border border-[#E6E8E4] dark:border-[#23282D] hover:border-[#0D0F10] dark:hover:border-[#84E818]/70 p-4 flex flex-col justify-between transition-colors shadow-[0_2px_16px_rgba(13,15,16,0.035)]"
+                  className="group h-full rounded-xl bg-white dark:bg-[#131618] border border-[#E3E6E0] dark:border-[#23282D] hover:border-[#0D0F10] dark:hover:border-[#F7F8F6]/70 p-4 flex flex-col justify-between transition-colors shadow-[0_2px_16px_rgba(13,15,16,0.035)]"
                 >
-                  {/* High-Contrast Dark Visual Preview Frame matching Reference Cards 01 / 02 / 03 */}
-                  <div className="relative rounded-2xl bg-[#0D0F10] text-white p-5 h-[204px] flex flex-col justify-between overflow-hidden mb-5">
+                  {/* Polarity-Inverted Preview Frame: Obsidian in Light Mode <-> Crisp White in Dark Mode */}
+                  <div className="relative rounded-lg bg-[#0D0F10] dark:bg-[#F7F8F6] text-white dark:text-[#0D0F10] p-5 h-[204px] flex flex-col justify-between overflow-hidden mb-5">
                     <div
                       aria-hidden="true"
-                      className="pointer-events-none absolute -right-10 -bottom-10 w-44 h-44 rounded-full opacity-25 blur-[48px] group-hover:opacity-40 transition-opacity"
+                      className="pointer-events-none absolute -right-10 -bottom-10 w-44 h-44 rounded-full opacity-25 dark:opacity-35 blur-[48px] group-hover:opacity-45 transition-opacity"
                       style={{
                         background: 'radial-gradient(circle, #84E818 0%, transparent 70%)',
                       }}
                     />
 
                     <div className="relative z-10 flex items-center justify-between">
-                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-white text-[#0D0F10] font-telemetry font-extrabold text-xs">
+                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white dark:bg-[#0D0F10] text-[#0D0F10] dark:text-[#84E818] font-telemetry font-extrabold text-xs">
                         {card.index}
                       </span>
-                      <span className="text-[11px] font-telemetry text-neutral-400">
+                      <span className="text-[11px] font-telemetry text-neutral-400 dark:text-[#5A6068]">
                         {card.visualSub}
                       </span>
                     </div>
@@ -712,14 +785,16 @@ export default function LandingPage() {
                     {/* Mini Architectural Telemetry Bars + Corner Circular Action Arrow */}
                     <div className="relative z-10 flex items-end justify-between gap-3">
                       <div>
-                        <p className="text-[10px] uppercase tracking-wider text-neutral-400">
+                        <p className="text-[10px] uppercase tracking-wider text-neutral-400 dark:text-[#5A6068]">
                           {card.metricLabel}
                         </p>
                         <div className="flex items-baseline gap-2 mt-0.5">
-                          <span className="text-xl font-extrabold font-telemetry text-[#84E818]">
+                          <span className="text-xl font-extrabold font-telemetry text-[#84E818] dark:text-[#3D7A00]">
                             {card.metricVal}
                           </span>
-                          <span className="text-[11px] text-neutral-400">{card.metricSub}</span>
+                          <span className="text-[11px] text-neutral-400 dark:text-[#5A6068]">
+                            {card.metricSub}
+                          </span>
                         </div>
                       </div>
 
@@ -727,23 +802,23 @@ export default function LandingPage() {
                         {card.bars.map((h, bi) => (
                           <span
                             key={bi}
-                            className="w-1.5 rounded-full bg-white/15 overflow-hidden flex items-end h-full"
+                            className="w-1.5 rounded-full bg-white/15 dark:bg-[#0D0F10]/12 overflow-hidden flex items-end h-full"
                           >
                             <span
-                              className="w-full rounded-full bg-[#84E818] transition-transform duration-300 group-hover:scale-y-110 origin-bottom"
+                              className="w-full rounded-full bg-[#84E818] dark:bg-[#5BB808] transition-transform duration-300 group-hover:scale-y-110 origin-bottom"
                               style={{ height: `${h}%` }}
                             />
                           </span>
                         ))}
                       </div>
 
-                      <span className="absolute right-0 bottom-0 w-9 h-9 rounded-full bg-white text-[#0D0F10] group-hover:bg-[#84E818] flex items-center justify-center transition-colors">
+                      <span className="absolute right-0 bottom-0 w-9 h-9 rounded-full bg-white dark:bg-[#0D0F10] text-[#0D0F10] dark:text-white group-hover:bg-[#84E818] dark:group-hover:bg-[#84E818] dark:group-hover:text-[#0D0F10] flex items-center justify-center transition-colors">
                         <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                       </span>
                     </div>
                   </div>
 
-                  {/* Clean Card Body — Unboxed Metadata with · Separators */}
+                  {/* Clean Card Body */}
                   <div className="px-1.5 pb-1 flex-1 flex flex-col justify-between">
                     <div>
                       <h3 className="text-lg font-extrabold text-[#0D0F10] dark:text-white tracking-tight">
@@ -794,9 +869,9 @@ export default function LandingPage() {
                     <motion.div
                       whileHover={{ y: -3, borderColor: '#84E818' }}
                       transition={MOTION_SPRING}
-                      className="rounded-2xl bg-white dark:bg-[#131618] border border-[#E6E8E4] dark:border-[#23282D] p-4 flex flex-col items-center justify-center text-center gap-2.5 shadow-[0_1px_8px_rgba(13,15,16,0.025)]"
+                      className="rounded-xl bg-white dark:bg-[#131618] border border-[#E3E6E0] dark:border-[#23282D] p-4 flex flex-col items-center justify-center text-center gap-2.5 shadow-[0_1px_8px_rgba(13,15,16,0.025)]"
                     >
-                      <MotionIconBox className="w-10 h-10 rounded-xl bg-[#F5F7F4] dark:bg-[#1B1F23] flex items-center justify-center">
+                      <MotionIconBox className="w-10 h-10 rounded-lg bg-[#F5F7F4] dark:bg-[#1B1F23] flex items-center justify-center">
                         <Icon className="w-4 h-4 text-[#0D0F10] dark:text-[#84E818]" />
                       </MotionIconBox>
                       <span className="text-xs font-bold text-[#0D0F10] dark:text-neutral-200 whitespace-nowrap">
@@ -811,7 +886,7 @@ export default function LandingPage() {
 
           {/* Right: Core Capabilities Card with Animated Electric-Lime Bars & Counters */}
           <MotionReveal delay={0.1} className="lg:col-span-5">
-            <div className="rounded-3xl bg-white dark:bg-[#131618] border border-[#E6E8E4] dark:border-[#23282D] p-6 sm:p-7 shadow-[0_4px_24px_rgba(13,15,16,0.035)]">
+            <div className="rounded-xl bg-white dark:bg-[#131618] border border-[#E3E6E0] dark:border-[#23282D] p-6 sm:p-7 shadow-[0_4px_24px_rgba(13,15,16,0.035)]">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.08em] text-[#0D0F10] dark:text-white">
                   <span className="w-1.5 h-1.5 rounded-[2px] bg-[#84E818]" />
@@ -885,7 +960,7 @@ export default function LandingPage() {
                       whileInView={{ scale: 1, opacity: 1 }}
                       viewport={{ once: true, amount: 0.4 }}
                       transition={{ ...MOTION_SPRING, delay: idx * 0.09 }}
-                      className="w-5 h-5 rounded-md bg-[#0D0F10] dark:bg-[#84E818] text-[#84E818] dark:text-[#0D0F10] font-telemetry font-extrabold text-[10px] flex items-center justify-center shrink-0"
+                      className="w-5 h-5 rounded-md bg-[#0D0F10] dark:bg-[#F7F8F6] text-[#84E818] dark:text-[#0D0F10] font-telemetry font-extrabold text-[10px] flex items-center justify-center shrink-0"
                     >
                       {item.step}
                     </motion.span>
@@ -907,7 +982,7 @@ export default function LandingPage() {
       </section>
 
       {/* =====================================================================
-          CLOSING EDITORIAL CTA BAND — HIGH CONTRAST GALLERY WHITE
+          CLOSING EDITORIAL CTA BAND — POLARITY-INVERTED HIGH CONTRAST
           ===================================================================== */}
       <section className="relative z-10 bg-white dark:bg-[#101315] border-t border-[#E6E8E4] dark:border-[#1E2328]">
         <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
@@ -928,10 +1003,10 @@ export default function LandingPage() {
                 <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} transition={MOTION_SPRING}>
                   <Link
                     href="/dashboard"
-                    className="group inline-flex items-center justify-center gap-2.5 min-h-[48px] px-6 rounded-full bg-[#0D0F10] dark:bg-[#84E818] text-white dark:text-[#0D0F10] text-sm font-bold hover:opacity-92 transition whitespace-nowrap"
+                    className="group inline-flex items-center justify-center gap-2.5 min-h-[48px] px-6 rounded-full bg-[#0D0F10] dark:bg-[#F7F8F6] text-white dark:text-[#0D0F10] text-sm font-bold hover:opacity-92 transition whitespace-nowrap"
                   >
                     <span>Masuk Workspace</span>
-                    <ArrowRight className="w-4 h-4 text-[#84E818] dark:text-[#0D0F10] group-hover:translate-x-1 transition-transform" />
+                    <ArrowRight className="w-4 h-4 text-[#84E818] dark:text-[#448500] group-hover:translate-x-1 transition-transform" />
                   </Link>
                 </motion.div>
 
@@ -954,7 +1029,7 @@ export default function LandingPage() {
       <footer className="relative z-10 border-t border-[#E6E8E4] dark:border-[#1E2328] bg-[#F7F8F6] dark:bg-[#0B0D0E] py-8 main-mobile-safe md:pb-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-[1280px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#5A6068] dark:text-[#9AA2AC]">
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
-            <span className="w-6 h-6 rounded-md bg-[#0D0F10] dark:bg-[#84E818] text-[#84E818] dark:text-[#0D0F10] font-extrabold text-[10px] inline-flex items-center justify-center">
+            <span className="w-6 h-6 rounded-md bg-[#0D0F10] dark:bg-[#F7F8F6] text-[#84E818] dark:text-[#0D0F10] font-extrabold text-[10px] inline-flex items-center justify-center">
               FF
             </span>
             <span className="font-bold text-[#0D0F10] dark:text-white">FitForge</span>
@@ -982,57 +1057,51 @@ export default function LandingPage() {
         </div>
       </footer>
 
-      {/* FLOATING MOBILE BOTTOM DOCK (< 768px) — CRISP OBSIDIAN + ELECTRIC LIME */}
-      <div className="md:hidden fixed bottom-dock-safe inset-x-2.5 z-40 pointer-events-none">
-        <nav
-          className="pointer-events-auto h-15 rounded-2xl bg-[#0D0F10]/96 border border-[#23282D] px-1.5 flex items-center justify-around shadow-[0_14px_32px_rgba(13,15,16,0.34)] select-none"
-          aria-label="Navigasi Cepat Mobile"
-        >
+      {/* EDGE-ANCHORED COMPACT MOBILE BOTTOM BAR (< 768px) — POLARITY INVERTED */}
+      <nav
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 pb-safe bg-[#0D0F10]/96 dark:bg-[#F7F8F6]/96 backdrop-blur-md border-t border-[#23282D] dark:border-[#DDE1DA] shadow-[0_-8px_24px_rgba(0,0,0,0.16)] select-none"
+        aria-label="Navigasi Cepat Mobile"
+      >
+        <div className="h-[60px] max-w-lg mx-auto px-2 flex items-center justify-around gap-1">
           <Link
             href="/dashboard"
-            className="flex-1 min-w-[44px] min-h-[48px] flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold text-neutral-300 hover:text-white"
+            className="flex-1 min-w-[44px] min-h-[48px] flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold text-neutral-300 dark:text-[#5A6068] hover:text-white dark:hover:text-[#0D0F10]"
           >
-            <LayoutDashboard className="w-4 h-4 text-[#84E818]" />
+            <LayoutDashboard className="w-4 h-4 text-[#84E818] dark:text-[#448500]" />
             <span>Home</span>
           </Link>
           <Link
             href="/workout"
-            className="flex-1 min-w-[44px] min-h-[48px] flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold text-neutral-300 hover:text-white"
+            className="flex-1 min-w-[44px] min-h-[48px] flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold text-neutral-300 dark:text-[#5A6068] hover:text-white dark:hover:text-[#0D0F10]"
           >
-            <Box className="w-4 h-4 text-neutral-200" />
+            <Box className="w-4 h-4 text-neutral-200 dark:text-[#0D0F10]" />
             <span>Studio 3D</span>
           </Link>
           <Link
             href="/run"
-            className="relative -mt-6 flex flex-col items-center px-1 shrink-0"
+            className="flex flex-col items-center justify-center min-w-[56px] min-h-[48px] px-1 shrink-0 active:scale-95 transition-transform"
             aria-label="Mulai Lari GPS"
           >
-            <motion.div
-              whileTap={{ scale: 0.92 }}
-              className="w-12 h-12 rounded-2xl bg-[#84E818] text-[#0D0F10] border-2 border-[#0D0F10] shadow-[0_6px_20px_rgba(132,232,24,0.42)] flex items-center justify-center"
-            >
-              <MapPin className="w-5 h-5 stroke-[2.5]" />
-            </motion.div>
-            <span className="text-[10px] font-extrabold text-[#84E818] mt-0.5 whitespace-nowrap">
-              Lari GPS
+            <span className="w-10 h-10 rounded-full bg-[#84E818] text-[#0D0F10] shadow-[0_4px_14px_rgba(132,232,24,0.42)] flex items-center justify-center">
+              <MapPin className="w-[18px] h-[18px] stroke-[2.5]" />
             </span>
           </Link>
           <Link
             href="/nutrisi"
-            className="flex-1 min-w-[44px] min-h-[48px] flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold text-neutral-300 hover:text-white"
+            className="flex-1 min-w-[44px] min-h-[48px] flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold text-neutral-300 dark:text-[#5A6068] hover:text-white dark:hover:text-[#0D0F10]"
           >
-            <Utensils className="w-4 h-4 text-neutral-200" />
+            <Utensils className="w-4 h-4 text-neutral-200 dark:text-[#0D0F10]" />
             <span>Nutrisi</span>
           </Link>
           <Link
             href="/plan"
-            className="flex-1 min-w-[44px] min-h-[48px] flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold text-neutral-300 hover:text-white"
+            className="flex-1 min-w-[44px] min-h-[48px] flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold text-neutral-300 dark:text-[#5A6068] hover:text-white dark:hover:text-[#0D0F10]"
           >
-            <CalendarRange className="w-4 h-4 text-neutral-200" />
+            <CalendarRange className="w-4 h-4 text-neutral-200 dark:text-[#0D0F10]" />
             <span>Plan 7H</span>
           </Link>
-        </nav>
-      </div>
+        </div>
+      </nav>
     </div>
   );
 }

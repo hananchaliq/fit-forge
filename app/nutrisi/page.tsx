@@ -273,18 +273,18 @@ export default function NutrisiAiPage() {
     >
       {/* Dynamic Calorie & Protein Budget Summary Strip (swipeable on small phones, 4-col grid on desktop) */}
       <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4 mb-6 overflow-x-auto sm:overflow-visible snap-x snap-mandatory pb-1 sm:pb-0 -mx-1 px-1 sm:mx-0 sm:px-0">
-        <MotionCard className="min-w-[230px] sm:min-w-0 snap-start rounded-2xl bg-[#0D0F10] text-white p-4 sm:p-5 border border-[#23272A] shadow-card">
-          <p className="text-xs text-neutral-400">Sisa Budget Kalori (+Lari)</p>
-          <p className="text-2xl sm:text-3xl font-extrabold text-[#84E818] font-telemetry mt-1">
+        <MotionCard className="min-w-[230px] sm:min-w-0 snap-start rounded-xl bg-[#0D0F10] dark:bg-[#F7F8F6] text-white dark:text-[#0D0F10] p-4 sm:p-5 border border-[#23272A] dark:border-[#DDE1DA] shadow-card">
+          <p className="text-xs text-neutral-400 dark:text-[#5A6068]">Sisa Budget Kalori (+Lari)</p>
+          <p className="text-2xl sm:text-3xl font-extrabold text-[#84E818] dark:text-[#3D7A00] font-telemetry mt-1">
             {remainingCalories.toLocaleString('id-ID')}{' '}
-            <span className="text-sm font-normal text-neutral-300">kkal</span>
+            <span className="text-sm font-normal text-neutral-300 dark:text-[#525860]">kkal</span>
           </p>
-          <p className="text-[11px] text-neutral-400 mt-2 font-telemetry">
+          <p className="text-[11px] text-neutral-400 dark:text-[#5A6068] mt-2 font-telemetry">
             Target {profile.dailyCalorieTarget} + {todayRunBurnKcal} lari − {totalCaloriesIn} masuk
           </p>
         </MotionCard>
 
-        <MotionCard className="min-w-[230px] sm:min-w-0 snap-start rounded-2xl bg-white dark:bg-[#131618] p-4 sm:p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
+        <MotionCard className="min-w-[230px] sm:min-w-0 snap-start rounded-xl bg-white dark:bg-[#131618] p-4 sm:p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
           <p className="text-xs text-[#646A6E] dark:text-neutral-400">Total Protein Harian</p>
           <p className="text-2xl sm:text-3xl font-extrabold text-[#0D0F10] dark:text-white font-telemetry mt-1">
             {totalProteinG}g{' '}
@@ -304,7 +304,7 @@ export default function NutrisiAiPage() {
           </p>
         </MotionCard>
 
-        <MotionCard className="min-w-[200px] sm:min-w-0 snap-start rounded-2xl bg-white dark:bg-[#131618] p-4 sm:p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
+        <MotionCard className="min-w-[200px] sm:min-w-0 snap-start rounded-xl bg-white dark:bg-[#131618] p-4 sm:p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
           <p className="text-xs text-[#646A6E] dark:text-neutral-400">Karbohidrat &amp; Serat</p>
           <p className="text-2xl sm:text-3xl font-extrabold text-[#0D0F10] dark:text-white font-telemetry mt-1">
             {totalCarbsG}g{' '}
@@ -315,7 +315,7 @@ export default function NutrisiAiPage() {
           </p>
         </MotionCard>
 
-        <MotionCard className="min-w-[190px] sm:min-w-0 snap-start rounded-2xl bg-white dark:bg-[#131618] p-4 sm:p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
+        <MotionCard className="min-w-[190px] sm:min-w-0 snap-start rounded-xl bg-white dark:bg-[#131618] p-4 sm:p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card">
           <p className="text-xs text-[#646A6E] dark:text-neutral-400">Lemak Harian</p>
           <p className="text-2xl sm:text-3xl font-extrabold text-[#0D0F10] dark:text-white font-telemetry mt-1">
             {totalFatG}g
@@ -329,7 +329,7 @@ export default function NutrisiAiPage() {
       {/* SCANNER + AI ANALYSIS RESULT */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-6">
         {/* Left 6 Cols: Camera / Photo Upload + Live Gemini Query Input */}
-        <div className="lg:col-span-6 rounded-2xl bg-white dark:bg-[#131618] p-4 sm:p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card space-y-4">
+        <div className="lg:col-span-6 rounded-xl bg-white dark:bg-[#131618] p-4 sm:p-5 border border-[#E6E8E4] dark:border-[#23272A] shadow-card space-y-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-sm font-bold text-[#0D0F10] dark:text-white">

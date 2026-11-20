@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { Hand, Lock, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 import { AnimationClipName, MuscleGroup } from '@/data/exerciseClipMap';
 import { BLUEPRINT_EXERCISES } from '@/data/blueprintPack';
 import { createProceduralPBRTextures, disposeSceneResources } from '@/lib/pbrTextures';
@@ -352,10 +353,13 @@ const _ringD1 = new THREE.Vector3();
 const _ringAnt = new THREE.Vector3();
 const _ringN1 = new THREE.Vector3();
 const _ringN2 = new THREE.Vector3();
+const _ringBisector = new THREE.Vector3();
 
 /**
  * Evaluates a smooth 2-bone limb centerline and orthonormal frame with a Quadratic Bezier
  * skinning blend zone (`[jointS - blendHalfWidth, jointS + blendHalfWidth]`) across elbow/knee.
+ * Includes outward anatomical bisector volume preservation so sharp bends (up to 145 deg)
+ * wrap cleanly around the joint center without collapsing or exposing internal bones.
  */
 function evaluateTwoBoneSkinnedRing(
   s: number,
@@ -414,12 +418,23 @@ function evaluateTwoBoneSkinnedRing(
   }
   computeOrthonormalFrame(_ringTang, _ringAnt, outX, outY, outZ);
 
-  if (s > sStart && s < sEnd && jointBulgeForward !== 0) {
+  if (s > sStart && s < sEnd) {
     _ringN1.copy(_ringSeg1).normalize();
     _ringN2.copy(_ringSeg2).normalize();
     const bendFactor = Math.max(0, 0.5 * (1 - _ringN1.dot(_ringN2)));
     const bell = Math.sin(((s - sStart) / (2 * blendHalfWidth)) * Math.PI);
-    outCenter.addScaledVector(outZ, jointBulgeForward * bendFactor * bell);
+
+    // Push skin ring gently outward along the true convex joint apex (olecranon / patella)
+    // to counteract Bezier chord shortening so the bone/joint sphere never pokes through
+    _ringBisector.subVectors(_ringN1, _ringN2);
+    if (_ringBisector.lengthSq() > 1e-5) {
+      _ringBisector.normalize();
+      outCenter.addScaledVector(_ringBisector, 0.018 * bendFactor * bell);
+    }
+
+    if (jointBulgeForward !== 0) {
+      outCenter.addScaledVector(outZ, jointBulgeForward * bendFactor * bell);
+    }
   }
 }
 
@@ -443,6 +458,8 @@ export function TrainerStudio3D({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const frameBadgeRef = useRef<HTMLSpanElement | null>(null);
   const [webGLSupported, setWebGLSupported] = useState(true);
+  const [isCoarseTouch, setIsCoarseTouch] = useState(false);
+  const [touchOrbitActive, setTouchOrbitActive] = useState(false);
 
   const stateRef = useRef({
     exerciseId,
@@ -500,7 +517,29 @@ export function TrainerStudio3D({
     controls: OrbitControls;
     updateMuscleMaterials: () => void;
     applyCameraPreset: (preset: CameraPreset) => void;
+    zoomBy: (factor: number) => void;
+    setOrbitEnabled: (enabled: boolean, isTouch: boolean) => void;
   } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(pointer: coarse)');
+    const syncPointer = () => setIsCoarseTouch(mq.matches || window.innerWidth < 768);
+    syncPointer();
+    mq.addEventListener?.('change', syncPointer);
+    window.addEventListener('resize', syncPointer);
+    return () => {
+      mq.removeEventListener?.('change', syncPointer);
+      window.removeEventListener('resize', syncPointer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (sceneRef.current) {
+      const enabled = !isCoarseTouch || touchOrbitActive;
+      sceneRef.current.setOrbitEnabled(enabled, isCoarseTouch);
+    }
+  }, [isCoarseTouch, touchOrbitActive]);
 
   useEffect(() => {
     if (sceneRef.current) {
@@ -572,11 +611,14 @@ export function TrainerStudio3D({
     scene.background = new THREE.Color(0x060b16);
     scene.fog = new THREE.FogExp2(0x060b16, 0.044);
 
-    const pmremGenerator = new THREE.PMREMGenerator(renderer);
-    const envTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environment = envTexture;
-    scene.environmentIntensity = 0.48;
-    pmremGenerator.dispose();
+    let envTexture: THREE.Texture | null = null;
+    if (!isSoftwareGl) {
+      const pmremGenerator = new THREE.PMREMGenerator(renderer);
+      envTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+      scene.environment = envTexture;
+      scene.environmentIntensity = 0.48;
+      pmremGenerator.dispose();
+    }
 
     const camera = new THREE.PerspectiveCamera(34, width / height, 0.1, 50);
     const auxCamera = new THREE.PerspectiveCamera(34, width / height, 0.1, 50);
@@ -660,17 +702,18 @@ export function TrainerStudio3D({
 
     const skinMat = new THREE.MeshPhysicalMaterial({
       color: MANNEQUIN_BASE_HEX,
-      roughness: 0.64,
+      map: pbr.skinAlbedoMap,
+      roughness: 0.68,
       metalness: 0.02,
-      clearcoat: 0.04,
-      clearcoatRoughness: 0.68,
-      sheen: 0.28,
-      sheenRoughness: 0.72,
+      clearcoat: 0.03,
+      clearcoatRoughness: 0.72,
+      sheen: 0.30,
+      sheenRoughness: 0.74,
       sheenColor: new THREE.Color(0xf7e8d6),
       normalMap: pbr.skinNormalMap,
-      normalScale: new THREE.Vector2(0.42, 0.42),
+      normalScale: new THREE.Vector2(0.76, 0.76),
       bumpMap: pbr.skinBumpMap,
-      bumpScale: 0.0035,
+      bumpScale: 0.0055,
       roughnessMap: pbr.skinRoughnessMap,
       vertexColors: true,
     });
@@ -678,41 +721,44 @@ export function TrainerStudio3D({
     // Identical matte-satin skin WITHOUT vertexColors for sculpted composite hands & feet
     const skinMatNoVC = new THREE.MeshPhysicalMaterial({
       color: MANNEQUIN_BASE_HEX,
-      roughness: 0.64,
+      map: pbr.skinAlbedoMap,
+      roughness: 0.68,
       metalness: 0.02,
-      clearcoat: 0.04,
-      clearcoatRoughness: 0.68,
-      sheen: 0.28,
-      sheenRoughness: 0.72,
+      clearcoat: 0.03,
+      clearcoatRoughness: 0.72,
+      sheen: 0.30,
+      sheenRoughness: 0.74,
       sheenColor: new THREE.Color(0xf7e8d6),
       normalMap: pbr.skinNormalMap,
-      normalScale: new THREE.Vector2(0.42, 0.42),
+      normalScale: new THREE.Vector2(0.76, 0.76),
       bumpMap: pbr.skinBumpMap,
-      bumpScale: 0.0035,
+      bumpScale: 0.0055,
       roughnessMap: pbr.skinRoughnessMap,
     });
 
     const shortsMat = new THREE.MeshPhysicalMaterial({
       color: CHARCOAL_FABRIC_HEX,
-      roughness: 0.84,
+      map: pbr.fabricAlbedoMap,
+      roughness: 0.86,
       metalness: 0.03,
-      sheen: 0.22,
-      sheenRoughness: 0.76,
+      sheen: 0.24,
+      sheenRoughness: 0.78,
       sheenColor: new THREE.Color(0x475569),
       normalMap: pbr.fabricNormalMap,
-      normalScale: new THREE.Vector2(0.58, 0.58),
+      normalScale: new THREE.Vector2(0.84, 0.84),
       bumpMap: pbr.fabricBumpMap,
-      bumpScale: 0.005,
+      bumpScale: 0.0065,
       roughnessMap: pbr.fabricRoughnessMap,
       vertexColors: true,
     });
 
     const shortsTrimMat = new THREE.MeshStandardMaterial({
       color: 0x343b48,
-      roughness: 0.72,
+      map: pbr.fabricAlbedoMap,
+      roughness: 0.76,
       metalness: 0.06,
       normalMap: pbr.fabricNormalMap,
-      normalScale: new THREE.Vector2(0.4, 0.4),
+      normalScale: new THREE.Vector2(0.55, 0.55),
       roughnessMap: pbr.fabricRoughnessMap,
       vertexColors: true,
     });
@@ -802,17 +848,18 @@ export function TrainerStudio3D({
     muscleIds.forEach((id) => {
       muscleMaterials[id] = new THREE.MeshPhysicalMaterial({
         color: MANNEQUIN_BASE_HEX,
-        roughness: 0.64,
+        map: pbr.skinAlbedoMap,
+        roughness: 0.68,
         metalness: 0.02,
-        clearcoat: 0.04,
-        clearcoatRoughness: 0.68,
-        sheen: 0.28,
-        sheenRoughness: 0.72,
+        clearcoat: 0.03,
+        clearcoatRoughness: 0.72,
+        sheen: 0.30,
+        sheenRoughness: 0.74,
         sheenColor: new THREE.Color(0xf7e8d6),
         normalMap: pbr.skinNormalMap,
-        normalScale: new THREE.Vector2(0.5, 0.5),
+        normalScale: new THREE.Vector2(0.78, 0.78),
         bumpMap: pbr.skinBumpMap,
-        bumpScale: 0.004,
+        bumpScale: 0.0055,
         roughnessMap: pbr.skinRoughnessMap,
         vertexColors: true,
       });
@@ -820,36 +867,38 @@ export function TrainerStudio3D({
 
     const shortsGlutesMat = new THREE.MeshPhysicalMaterial({
       color: CHARCOAL_FABRIC_HEX,
-      roughness: 0.84,
+      map: pbr.fabricAlbedoMap,
+      roughness: 0.86,
       metalness: 0.03,
       clearcoat: 0.02,
       normalMap: pbr.fabricNormalMap,
-      normalScale: new THREE.Vector2(0.55, 0.55),
+      normalScale: new THREE.Vector2(0.82, 0.82),
       bumpMap: pbr.fabricBumpMap,
-      bumpScale: 0.004,
+      bumpScale: 0.006,
       roughnessMap: pbr.fabricRoughnessMap,
       vertexColors: true,
     });
 
     const boneMat = new THREE.MeshPhysicalMaterial({
       color: 0xf4ecda,
-      roughness: 0.44,
-      metalness: 0.06,
-      clearcoat: 0.12,
-      clearcoatRoughness: 0.48,
+      map: pbr.boneAlbedoMap,
+      roughness: 0.48,
+      metalness: 0.05,
+      clearcoat: 0.10,
+      clearcoatRoughness: 0.52,
       emissive: new THREE.Color(0x3a2e1a),
-      emissiveIntensity: 0.16,
+      emissiveIntensity: 0.14,
       normalMap: pbr.boneNormalMap,
-      normalScale: new THREE.Vector2(0.45, 0.45),
+      normalScale: new THREE.Vector2(0.72, 0.72),
       roughnessMap: pbr.boneRoughnessMap,
     });
 
     const jointBeaconMat = new THREE.MeshPhysicalMaterial({
-      color: 0xf97316,
-      emissive: new THREE.Color(0xea580c),
+      color: 0x84e818,
+      emissive: new THREE.Color(0x4ea306),
       emissiveIntensity: 0.62,
-      roughness: 0.25,
-      metalness: 0.32,
+      roughness: 0.24,
+      metalness: 0.28,
       clearcoat: 0.4,
     });
 
@@ -1456,30 +1505,30 @@ export function TrainerStudio3D({
       };
 
       const skullGroup = new THREE.Group();
-      const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.068, 20, 18), boneMat);
-      cranium.scale.set(0.94, 1.06, 1.08);
+      const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.056, 20, 18), boneMat);
+      cranium.scale.set(0.92, 1.04, 1.05);
       cranium.position.set(0, 0.165, -0.003);
       skullGroup.add(cranium);
 
-      const mandible = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.032, 0.052, 14), boneMat);
-      mandible.scale.set(1.0, 1.0, 1.12);
-      mandible.position.set(0, 0.108, 0.016);
+      const mandible = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.025, 0.046, 14), boneMat);
+      mandible.scale.set(1.0, 1.0, 1.08);
+      mandible.position.set(0, 0.112, 0.012);
       skullGroup.add(mandible);
 
       const orbitMat = new THREE.MeshStandardMaterial({ color: 0x16120c, roughness: 0.95 });
-      const orbitGeo = new THREE.SphereGeometry(0.015, 10, 10);
+      const orbitGeo = new THREE.SphereGeometry(0.012, 10, 10);
       const orbitL = new THREE.Mesh(orbitGeo, orbitMat);
-      orbitL.position.set(-0.023, 0.156, 0.058);
+      orbitL.position.set(-0.019, 0.156, 0.047);
       orbitL.scale.set(1.1, 0.85, 0.45);
       const orbitR = new THREE.Mesh(orbitGeo, orbitMat);
-      orbitR.position.set(0.023, 0.156, 0.058);
+      orbitR.position.set(0.019, 0.156, 0.047);
       orbitR.scale.set(1.1, 0.85, 0.45);
       skullGroup.add(orbitL, orbitR);
       group.add(skullGroup);
 
       const vertebrae: THREE.Mesh[] = [];
       for (let i = 0; i < 8; i++) {
-        const vGeo = new THREE.CylinderGeometry(0.022, 0.024, 0.038, 12);
+        const vGeo = new THREE.CylinderGeometry(0.017, 0.018, 0.036, 12);
         const v = new THREE.Mesh(vGeo, boneMat);
         group.add(v);
         vertebrae.push(v);
@@ -1487,77 +1536,79 @@ export function TrainerStudio3D({
 
       const ribcageGroup = new THREE.Group();
       const ribRadii = [
-        { rx: 0.118, rz: 0.082, y: 0.09 },
-        { rx: 0.136, rz: 0.095, y: 0.045 },
-        { rx: 0.142, rz: 0.098, y: 0.0 },
-        { rx: 0.134, rz: 0.092, y: -0.045 },
-        { rx: 0.118, rz: 0.080, y: -0.088 },
+        { rx: 0.092, rz: 0.062, y: 0.086 },
+        { rx: 0.106, rz: 0.072, y: 0.042 },
+        { rx: 0.110, rz: 0.074, y: 0.0 },
+        { rx: 0.104, rz: 0.070, y: -0.042 },
+        { rx: 0.092, rz: 0.060, y: -0.082 },
       ];
       ribRadii.forEach((r) => {
-        const rib = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.075, 10, 28), boneMat);
+        const rib = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.072, 10, 28), boneMat);
         rib.rotation.x = Math.PI / 2;
-        rib.scale.set(r.rx, r.rz, 0.12);
-        rib.position.set(0, r.y, 0.004);
+        rib.scale.set(r.rx, r.rz, 0.11);
+        rib.position.set(0, r.y, 0.002);
         ribcageGroup.add(rib);
       });
-      const sternum = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.165, 0.016), boneMat);
-      sternum.position.set(0, 0.01, 0.094);
+      const sternum = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.150, 0.011), boneMat);
+      sternum.position.set(0, 0.008, 0.072);
       ribcageGroup.add(sternum);
       group.add(ribcageGroup);
 
       const pelvisGroup = new THREE.Group();
-      const iliumL = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.015, 10, 20), boneMat);
-      iliumL.position.set(-0.072, 0.01, 0);
+      const iliumL = new THREE.Mesh(new THREE.TorusGeometry(0.050, 0.011, 10, 20), boneMat);
+      iliumL.position.set(-0.056, 0.008, 0);
       iliumL.rotation.y = Math.PI * 0.25;
-      iliumL.scale.set(0.95, 1.15, 0.7);
-      const iliumR = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.015, 10, 20), boneMat);
-      iliumR.position.set(0.072, 0.01, 0);
+      iliumL.scale.set(0.92, 1.10, 0.68);
+      const iliumR = new THREE.Mesh(new THREE.TorusGeometry(0.050, 0.011, 10, 20), boneMat);
+      iliumR.position.set(0.056, 0.008, 0);
       iliumR.rotation.y = -Math.PI * 0.25;
-      iliumR.scale.set(0.95, 1.15, 0.7);
-      const sacrum = new THREE.Mesh(new THREE.ConeGeometry(0.038, 0.095, 10), boneMat);
+      iliumR.scale.set(0.92, 1.10, 0.68);
+      const sacrum = new THREE.Mesh(new THREE.ConeGeometry(0.030, 0.080, 10), boneMat);
       sacrum.rotation.x = Math.PI;
-      sacrum.position.set(0, -0.01, -0.025);
+      sacrum.position.set(0, -0.008, -0.020);
       pelvisGroup.add(iliumL, iliumR, sacrum);
       group.add(pelvisGroup);
 
-      const clavicleL = makeLongBone(0.011, 0.010);
-      const clavicleR = makeLongBone(0.011, 0.010);
-      const humerusL = makeLongBone(0.018, 0.014);
-      const humerusR = makeLongBone(0.018, 0.014);
-      const radiusL = makeLongBone(0.011, 0.009);
-      const ulnaL = makeLongBone(0.010, 0.008);
-      const radiusR = makeLongBone(0.011, 0.009);
-      const ulnaR = makeLongBone(0.010, 0.008);
-      const handBoneL = makeLongBone(0.012, 0.008);
-      const handBoneR = makeLongBone(0.012, 0.008);
-      const femurL = makeLongBone(0.022, 0.018);
-      const femurR = makeLongBone(0.022, 0.018);
-      const tibiaL = makeLongBone(0.017, 0.013);
-      const fibulaL = makeLongBone(0.008, 0.007);
-      const tibiaR = makeLongBone(0.017, 0.013);
-      const fibulaR = makeLongBone(0.008, 0.007);
+      const clavicleL = makeLongBone(0.009, 0.008);
+      const clavicleR = makeLongBone(0.009, 0.008);
+      const humerusL = makeLongBone(0.014, 0.011);
+      const humerusR = makeLongBone(0.014, 0.011);
+      const radiusL = makeLongBone(0.008, 0.006);
+      const ulnaL = makeLongBone(0.0075, 0.0055);
+      const radiusR = makeLongBone(0.008, 0.006);
+      const ulnaR = makeLongBone(0.0075, 0.0055);
+      const handBoneL = makeLongBone(0.008, 0.005);
+      const handBoneR = makeLongBone(0.008, 0.005);
+      const femurL = makeLongBone(0.017, 0.014);
+      const femurR = makeLongBone(0.017, 0.014);
+      const tibiaL = makeLongBone(0.013, 0.010);
+      const fibulaL = makeLongBone(0.006, 0.005);
+      const tibiaR = makeLongBone(0.013, 0.010);
+      const fibulaR = makeLongBone(0.006, 0.005);
 
-      const jNeck = makeJointSphere(0.022);
-      const jLumbar = makeJointSphere(0.024);
-      const jShoulderL = makeJointSphere(0.025);
-      const jShoulderR = makeJointSphere(0.025);
-      const jElbowL = makeJointSphere(0.020);
-      const jElbowR = makeJointSphere(0.020);
-      const jWristL = makeJointSphere(0.015);
-      const jWristR = makeJointSphere(0.015);
-      const jHipL = makeJointSphere(0.027);
-      const jHipR = makeJointSphere(0.027);
-      const jKneeL = makeJointSphere(0.023);
-      const jKneeR = makeJointSphere(0.023);
-      const jAnkleL = makeJointSphere(0.018);
-      const jAnkleR = makeJointSphere(0.018);
+      const jNeck = makeJointSphere(0.016);
+      const jLumbar = makeJointSphere(0.018);
+      const jShoulderL = makeJointSphere(0.019);
+      const jShoulderR = makeJointSphere(0.019);
+      const jElbowL = makeJointSphere(0.015);
+      const jElbowR = makeJointSphere(0.015);
+      const jWristL = makeJointSphere(0.011);
+      const jWristR = makeJointSphere(0.011);
+      const jHipL = makeJointSphere(0.020);
+      const jHipR = makeJointSphere(0.020);
+      const jKneeL = makeJointSphere(0.017);
+      const jKneeR = makeJointSphere(0.017);
+      const jAnkleL = makeJointSphere(0.013);
+      const jAnkleR = makeJointSphere(0.013);
 
       const upVec = new THREE.Vector3(0, 1, 0);
       const tmpDir = new THREE.Vector3();
       const tmpMid = new THREE.Vector3();
-      const tmpSide = new THREE.Vector3();
+      const tmpSideStart = new THREE.Vector3();
+      const tmpSideEnd = new THREE.Vector3();
       const tmpA = new THREE.Vector3();
       const tmpB = new THREE.Vector3();
+      const tmpHandEnd = new THREE.Vector3();
 
       const alignBone = (mesh: THREE.Mesh, start: THREE.Vector3, end: THREE.Vector3) => {
         tmpDir.subVectors(end, start);
@@ -1568,21 +1619,24 @@ export function TrainerStudio3D({
         mesh.quaternion.setFromUnitVectors(upVec, tmpDir.divideScalar(len));
       };
 
-      const alignParallelPair = (
+      const alignTaperedParallelPair = (
         m1: THREE.Mesh,
         m2: THREE.Mesh,
         start: THREE.Vector3,
         end: THREE.Vector3,
         offsetDir: THREE.Vector3,
-        offsetAmt: number
+        proxOffset: number,
+        distOffset: number
       ) => {
-        tmpSide.copy(offsetDir).normalize().multiplyScalar(offsetAmt);
-        tmpA.copy(start).add(tmpSide);
-        tmpB.copy(end).add(tmpSide);
+        tmpSideStart.copy(offsetDir).normalize().multiplyScalar(proxOffset);
+        tmpSideEnd.copy(offsetDir).normalize().multiplyScalar(distOffset);
+
+        tmpA.copy(start).add(tmpSideStart);
+        tmpB.copy(end).add(tmpSideEnd);
         alignBone(m1, tmpA, tmpB);
 
-        tmpA.copy(start).sub(tmpSide);
-        tmpB.copy(end).sub(tmpSide);
+        tmpA.copy(start).sub(tmpSideStart);
+        tmpB.copy(end).sub(tmpSideEnd);
         alignBone(m2, tmpA, tmpB);
       };
 
@@ -1625,7 +1679,7 @@ export function TrainerStudio3D({
           const u = (i + 0.5) / vertebrae.length;
           spineCenterTmp.lerpVectors(params.pelvisBottom, params.shoulderCenter, u);
           const arch = Math.sin(u * Math.PI) * params.spineArchOffset;
-          spineCenterTmp.addScaledVector(params.torsoAnterior, arch - 0.025);
+          spineCenterTmp.addScaledVector(params.torsoAnterior, arch - 0.022);
           vertebrae[i].position.copy(spineCenterTmp);
           vertebrae[i].quaternion.setFromRotationMatrix(torsoBasisMat);
         }
@@ -1644,15 +1698,17 @@ export function TrainerStudio3D({
 
         alignBone(humerusL, params.shoulderL, params.elbowL);
         alignBone(humerusR, params.shoulderR, params.elbowR);
-        alignParallelPair(radiusL, ulnaL, params.elbowL, params.handL, params.torsoRight, 0.011);
-        alignParallelPair(radiusR, ulnaR, params.elbowR, params.handR, params.torsoRight, 0.011);
-        alignBone(handBoneL, params.handL, params.handTipL);
-        alignBone(handBoneR, params.handR, params.handTipR);
+        alignTaperedParallelPair(radiusL, ulnaL, params.elbowL, params.handL, params.torsoRight, 0.0085, 0.0042);
+        alignTaperedParallelPair(radiusR, ulnaR, params.elbowR, params.handR, params.torsoRight, 0.0085, 0.0042);
+        tmpHandEnd.lerpVectors(params.handL, params.handTipL, 0.62);
+        alignBone(handBoneL, params.handL, tmpHandEnd);
+        tmpHandEnd.lerpVectors(params.handR, params.handTipR, 0.62);
+        alignBone(handBoneR, params.handR, tmpHandEnd);
 
         alignBone(femurL, params.hipL, params.kneeL);
         alignBone(femurR, params.hipR, params.kneeR);
-        alignParallelPair(tibiaL, fibulaL, params.kneeL, params.footL, params.torsoRight, 0.012);
-        alignParallelPair(tibiaR, fibulaR, params.kneeR, params.footR, params.torsoRight, 0.012);
+        alignTaperedParallelPair(tibiaL, fibulaL, params.kneeL, params.footL, params.torsoRight, 0.0095, 0.0052);
+        alignTaperedParallelPair(tibiaR, fibulaR, params.kneeR, params.footR, params.torsoRight, 0.0095, 0.0052);
 
         jNeck.position.copy(params.shoulderCenter);
         jLumbar.position.lerpVectors(params.hipsPos, params.shoulderCenter, 0.32);
@@ -1670,7 +1726,23 @@ export function TrainerStudio3D({
         jAnkleR.position.copy(params.footR);
       };
 
+      group.renderOrder = 1;
       return { group, updatePose };
+    };
+
+    // Helper: creates a smooth vertex-colored anatomical socket bridge sphere so shoulder & hip
+    // sockets stay 100% sealed across extreme overhead presses, squats, and high-knee poses
+    const makeSocketCollarMesh = (radius: number, material: THREE.Material) => {
+      const geo = new THREE.SphereGeometry(radius, 18, 14);
+      const count = geo.attributes.position.count;
+      const white = new Float32Array(count * 3);
+      white.fill(0.95);
+      geo.setAttribute('color', new THREE.BufferAttribute(white, 3));
+      const mesh = new THREE.Mesh(geo, material);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.renderOrder = 2;
+      return mesh;
     };
 
     const characterRoot = new THREE.Group();
@@ -1687,14 +1759,29 @@ export function TrainerStudio3D({
     const footMeshR = buildBarefootGroup('right');
     const skeletonRig = buildAnatomicalSkeleton();
 
+    const shoulderCapL = makeSocketCollarMesh(0.062, muscleMaterials.shoulders);
+    const shoulderCapR = makeSocketCollarMesh(0.062, muscleMaterials.shoulders);
+    const hipCapL = makeSocketCollarMesh(0.086, shortsMat);
+    const hipCapR = makeSocketCollarMesh(0.086, shortsMat);
+
+    axialBody.mesh.renderOrder = 2;
+    armL.mesh.renderOrder = 2;
+    armR.mesh.renderOrder = 2;
+    legL.mesh.renderOrder = 2;
+    legR.mesh.renderOrder = 2;
+
     characterRoot.add(
       axialBody.mesh,
       armL.mesh,
       armR.mesh,
+      shoulderCapL,
+      shoulderCapR,
       handRigL.group,
       handRigR.group,
       legL.mesh,
       legR.mesh,
+      hipCapL,
+      hipCapR,
       footMeshL,
       footMeshR,
       skeletonRig.group
@@ -2308,6 +2395,12 @@ export function TrainerStudio3D({
         .addScaledVector(torsoRight, HIP_HALF_WIDTH)
         .addScaledVector(torsoUp, HIP_OFFSET_UP);
 
+      // Position seamless shoulder & hip socket blend collars tucked cleanly into torso/pelvis
+      shoulderCapL.position.copy(shoulderL).addScaledVector(torsoRight, 0.012);
+      shoulderCapR.position.copy(shoulderR).addScaledVector(torsoRight, -0.012);
+      hipCapL.position.copy(hipL).addScaledVector(torsoRight, 0.014).addScaledVector(torsoUp, -0.012);
+      hipCapR.position.copy(hipR).addScaledVector(torsoRight, -0.014).addScaledVector(torsoUp, -0.012);
+
       // 3. Constrained Arm IK (Elbow strictly 0°..150°, zero dislocation) + Sculpted 3D Hands
       const armIkL = solveConstrainedTwoBoneIK(
         shoulderL,
@@ -2356,13 +2449,13 @@ export function TrainerStudio3D({
         evaluateTwoBoneSkinnedRing(
           s,
           armElbowJointS,
-          0.09,
+          0.064,
           shoulderL,
           elbowL,
           wristL,
           armAntRootL,
           armAntEndL,
-          -0.006,
+          -0.005,
           outCenter,
           outX,
           outY,
@@ -2374,13 +2467,13 @@ export function TrainerStudio3D({
         evaluateTwoBoneSkinnedRing(
           s,
           armElbowJointS,
-          0.09,
+          0.064,
           shoulderR,
           elbowR,
           wristR,
           armAntRootR,
           armAntEndR,
-          -0.006,
+          -0.005,
           outCenter,
           outX,
           outY,
@@ -2467,13 +2560,13 @@ export function TrainerStudio3D({
         evaluateTwoBoneSkinnedRing(
           s,
           legKneeJointS,
-          0.09,
+          0.064,
           hipL,
           kneeL,
           ankleL,
           legAntRootL,
           legAntEndL,
-          0.011,
+          0.008,
           outCenter,
           outX,
           outY,
@@ -2485,13 +2578,13 @@ export function TrainerStudio3D({
         evaluateTwoBoneSkinnedRing(
           s,
           legKneeJointS,
-          0.09,
+          0.064,
           hipR,
           kneeR,
           ankleR,
           legAntRootR,
           legAntEndR,
-          0.011,
+          0.008,
           outCenter,
           outX,
           outY,
@@ -2619,11 +2712,37 @@ export function TrainerStudio3D({
       return pose.cameraGroup;
     };
 
+    const zoomBy = (factor: number) => {
+      cameraTransition = null;
+      const offset = camera.position.clone().sub(controls.target);
+      const nextLen = Math.max(
+        controls.minDistance,
+        Math.min(controls.maxDistance, offset.length() * factor)
+      );
+      offset.setLength(nextLen);
+      camera.position.copy(controls.target).add(offset);
+      controls.update();
+    };
+
+    const setOrbitEnabled = (enabled: boolean, isTouch: boolean) => {
+      controls.enabled = enabled;
+      controls.enablePan = !isTouch;
+      renderer.domElement.style.touchAction = enabled ? 'none' : 'pan-y';
+    };
+
+    // Apply initial touch-safe scroll mode on narrow/coarse pointer viewports
+    const initCoarse =
+      typeof window !== 'undefined' &&
+      (window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768);
+    setOrbitEnabled(!initCoarse, initCoarse);
+
     sceneRef.current = {
       camera,
       controls,
       updateMuscleMaterials,
       applyCameraPreset,
+      zoomBy,
+      setOrbitEnabled,
     };
 
     if (stateRef.current.onReady) {
@@ -2644,7 +2763,7 @@ export function TrainerStudio3D({
     function afterDraw(cb: () => void) {
       const gl = renderer.getContext() as WebGL2RenderingContext;
       if (!gl || typeof gl.fenceSync !== 'function') {
-        rafId = window.setTimeout(cb, 80);
+        rafId = window.setTimeout(cb, 160);
         return;
       }
       const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
@@ -2653,13 +2772,13 @@ export function TrainerStudio3D({
         if (disposed || isContextLost) return;
         const state = sync && gl.getSyncParameter(sync, gl.SYNC_STATUS);
         if (state === gl.UNSIGNALED) {
-          rafId = window.setTimeout(poll, 5);
+          rafId = window.setTimeout(poll, 12);
         } else {
           if (sync) gl.deleteSync(sync);
-          rafId = window.setTimeout(cb, 80);
+          rafId = window.setTimeout(cb, 160);
         }
       };
-      rafId = window.setTimeout(poll, 5);
+      rafId = window.setTimeout(poll, 12);
     }
 
     const scheduleNext = () => {
@@ -2834,7 +2953,7 @@ export function TrainerStudio3D({
       controls.dispose();
       disposeSceneResources(scene);
       pbr.dispose();
-      envTexture.dispose();
+      envTexture?.dispose();
       renderer.dispose();
     };
   }, []);
@@ -2864,7 +2983,11 @@ export function TrainerStudio3D({
       <div
         ref={containerRef}
         data-testid="trainer-studio-3d-canvas"
-        className="w-full h-full cursor-grab active:cursor-grabbing"
+        className={`w-full h-full ${
+          !isCoarseTouch || touchOrbitActive
+            ? 'cursor-grab active:cursor-grabbing touch-none'
+            : 'touch-pan-y'
+        }`}
       />
 
       {/* Minimal Top-Left Frame Telemetry */}
@@ -2887,6 +3010,64 @@ export function TrainerStudio3D({
           ? 'Mode X-Ray · Otot + Tulang'
           : 'Mannequin PBR · Otot Aktif'}
       </div>
+
+      {/* Mobile Scroll-Safe 3D Orbit Lock Toggle */}
+      {isCoarseTouch && !quadView && (
+        <button
+          type="button"
+          onClick={() => setTouchOrbitActive((v) => !v)}
+          className={`absolute bottom-3 left-3 z-10 inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-full text-[11px] font-bold border transition cursor-pointer ${
+            touchOrbitActive
+              ? 'bg-[#84E818] text-[#0D0F10] border-[#84E818]'
+              : 'bg-[#0D0F10]/88 text-white border-white/15'
+          }`}
+        >
+          {touchOrbitActive ? (
+            <>
+              <Lock className="w-3.5 h-3.5" />
+              <span>Kunci 3D (Scroll Halaman)</span>
+            </>
+          ) : (
+            <>
+              <Hand className="w-3.5 h-3.5 text-[#84E818]" />
+              <span>Putar 3D</span>
+            </>
+          )}
+        </button>
+      )}
+
+      {/* Portable Cross-Device Camera Controls (+ / - / Reset) */}
+      {!quadView && (
+        <div className="absolute bottom-3 right-3 z-10 flex items-center gap-1 bg-[#0D0F10]/88 border border-white/12 rounded-lg p-1 backdrop-blur-sm">
+          <button
+            type="button"
+            onClick={() => sceneRef.current?.zoomBy(0.84)}
+            aria-label="Perbesar Kamera 3D"
+            title="Perbesar (Zoom In)"
+            className="w-8 h-8 rounded-md flex items-center justify-center text-neutral-200 hover:bg-white/10 hover:text-[#84E818] transition cursor-pointer"
+          >
+            <ZoomIn className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => sceneRef.current?.zoomBy(1.18)}
+            aria-label="Perkecil Kamera 3D"
+            title="Perkecil (Zoom Out)"
+            className="w-8 h-8 rounded-md flex items-center justify-center text-neutral-200 hover:bg-white/10 hover:text-[#84E818] transition cursor-pointer"
+          >
+            <ZoomOut className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => sceneRef.current?.applyCameraPreset(cameraPreset)}
+            aria-label="Reset Kamera 3D"
+            title="Reset Kamera"
+            className="w-8 h-8 rounded-md flex items-center justify-center text-neutral-200 hover:bg-white/10 hover:text-[#84E818] transition cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* 4-Angle Blueprint Quadrant Labels when quadView is active */}
       {quadView && (

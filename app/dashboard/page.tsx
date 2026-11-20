@@ -121,33 +121,37 @@ export default function DashboardPage() {
     >
       {/* ROW 1 — 4 EDITORIAL-ATHLETIC KPI CARDS (Card 1 is Layered Obsidian Hero) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-        {/* KPI 1: HERO OBSIDIAN CARD — Jarak Lari Mingguan */}
+        {/* KPI 1: POLARITY-INVERTED HERO CARD — Obsidian in Light Mode <-> Crisp White in Dark Mode */}
         <motion.div
           whileHover={{ y: -3 }}
           transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-          className="rounded-2xl bg-[#0D0F10] athletic-grain text-white p-5 border border-[#23282D] shadow-card flex flex-col justify-between min-w-0"
+          className="rounded-xl bg-[#0D0F10] dark:bg-[#F7F8F6] athletic-grain text-white dark:text-[#0D0F10] p-5 border border-[#23282D] dark:border-[#DDE1DA] shadow-card flex flex-col justify-between min-w-0"
         >
           <div className="flex items-center justify-between gap-2">
-            <div className="w-9 h-9 rounded-xl bg-[#1A1E22] border border-[#2C3238] flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-lg bg-[#1A1E22] dark:bg-[#0D0F10] border border-[#2C3238] dark:border-[#0D0F10] flex items-center justify-center shrink-0">
               <MapPin className="w-4 h-4 text-[#84E818]" />
             </div>
-            <span className="text-xs font-semibold text-[#84E818] font-telemetry truncate">
+            <span className="text-xs font-semibold text-[#84E818] dark:text-[#3D7A00] font-telemetry truncate">
               {totalRunKmWeek > 0 ? `${runSessions.length} sesi aktif` : '0.0 km minggu ini'}
             </span>
           </div>
 
           <div className="my-3.5 min-w-0">
-            <p className="text-xs font-medium text-neutral-400">Jarak Lari Mingguan</p>
+            <p className="text-xs font-medium text-neutral-400 dark:text-[#5A6068]">
+              Jarak Lari Mingguan
+            </p>
             <div className="flex items-baseline justify-between gap-2 mt-1">
-              <p className="text-[30px] sm:text-[34px] leading-none font-extrabold tracking-tight font-telemetry text-white">
+              <p className="text-[30px] sm:text-[34px] leading-none font-extrabold tracking-tight font-telemetry text-white dark:text-[#0D0F10]">
                 <CountUpMetric value={totalRunKmWeek} decimals={1} />{' '}
-                <span className="text-sm font-sans font-semibold text-neutral-400">km</span>
+                <span className="text-sm font-sans font-semibold text-neutral-400 dark:text-[#5A6068]">
+                  km
+                </span>
               </p>
               <svg className="w-20 h-8 overflow-visible shrink-0" viewBox="0 0 80 28" aria-hidden="true">
                 <path
                   d="M2 22 L15 18 L28 24 L42 12 L55 15 L68 5 L78 8"
                   fill="none"
-                  stroke="#84E818"
+                  stroke="#65C80B"
                   strokeWidth="2.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -156,11 +160,11 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2.5 border-t border-white/10 text-xs text-neutral-400">
+          <div className="flex items-center justify-between pt-2.5 border-t border-white/10 dark:border-[#0D0F10]/10 text-xs text-neutral-400 dark:text-[#5A6068]">
             <span className="truncate">{runSessions.length} sesi tercatat</span>
             <Link
               href="/run"
-              className="min-h-[44px] -my-2 px-1 flex items-center text-[#84E818] font-bold hover:underline shrink-0"
+              className="min-h-[44px] -my-2 px-1 flex items-center text-[#84E818] dark:text-[#3D7A00] font-bold hover:underline shrink-0"
             >
               Lacak GPS →
             </Link>
@@ -174,7 +178,7 @@ export default function DashboardPage() {
           className="surface-card surface-card-interactive p-5 flex flex-col justify-between min-w-0"
         >
           <div className="flex items-center justify-between gap-2">
-            <div className="w-9 h-9 rounded-xl bg-[#ECFCD8] dark:bg-[#1B1F23] flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-lg bg-[#ECFCD8] dark:bg-[#1B1F23] flex items-center justify-center shrink-0">
               <Dumbbell className="w-4 h-4 text-[#3D7A00] dark:text-[#84E818]" />
             </div>
             <span className="text-xs font-semibold text-[#3D7A00] dark:text-[#84E818] font-telemetry truncate">
@@ -223,7 +227,7 @@ export default function DashboardPage() {
           className="surface-card surface-card-interactive p-5 flex flex-col justify-between min-w-0"
         >
           <div className="flex items-center justify-between gap-2">
-            <div className="w-9 h-9 rounded-xl bg-[#F3FCE6] dark:bg-[#1B1F23] flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-lg bg-[#F3FCE6] dark:bg-[#1B1F23] flex items-center justify-center shrink-0">
               <Flame className="w-4 h-4 text-[#3D7A00] dark:text-[#84E818]" />
             </div>
             <span className="text-xs font-semibold text-[#3D7A00] dark:text-[#84E818] font-telemetry truncate">
@@ -270,7 +274,7 @@ export default function DashboardPage() {
           className="surface-card surface-card-interactive p-5 flex flex-col justify-between min-w-0"
         >
           <div className="flex items-center justify-between gap-2">
-            <div className="w-9 h-9 rounded-xl bg-[#E0F2FE] dark:bg-[#1B1F23] flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-lg bg-[#E0F2FE] dark:bg-[#1B1F23] flex items-center justify-center shrink-0">
               <Droplets className="w-4 h-4 text-[#075985] dark:text-sky-400" />
             </div>
             <span className="text-xs font-semibold text-[#075985] dark:text-sky-400 font-telemetry truncate">
@@ -294,7 +298,7 @@ export default function DashboardPage() {
               type="button"
               whileTap={{ scale: 0.94 }}
               onClick={() => addWaterMl(250)}
-              className="min-h-[42px] px-3.5 rounded-full bg-[#0D0F10] dark:bg-[#84E818] text-[#84E818] dark:text-[#0D0F10] text-xs font-extrabold hover:opacity-90 transition cursor-pointer shrink-0"
+              className="min-h-[40px] px-3.5 rounded-full bg-[#0D0F10] dark:bg-[#F7F8F6] text-[#84E818] dark:text-[#0D0F10] text-xs font-extrabold hover:opacity-90 transition cursor-pointer shrink-0"
             >
               +250ml
             </motion.button>
@@ -315,7 +319,7 @@ export default function DashboardPage() {
       {/* ROW 2 — (65%) WEEKLY PERFORMANCE OVERVIEW + (35%) DONUT MAKRO */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-6">
         {/* 65% Area Spline Chart (8 cols on 12-col grid) */}
-        <div className="lg:col-span-8 rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card">
+        <div className="lg:col-span-8 rounded-xl bg-white dark:bg-[#131618] p-5 border border-[#E3E6E0] dark:border-[#23282D] shadow-card">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
             <div>
               <div className="flex items-center gap-2">
@@ -330,7 +334,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 p-1 rounded-xl bg-[#F5F7F4] dark:bg-[#0E1113] border border-[#E6E8E4] dark:border-[#23282D]">
+              <div className="flex items-center gap-1 p-1 rounded-lg bg-[#F5F7F4] dark:bg-[#0E1113] border border-[#E3E6E0] dark:border-[#23282D]">
                 {(
                   [
                     { key: 'runKm', label: 'Jarak Lari' },
@@ -342,7 +346,7 @@ export default function DashboardPage() {
                     key={tab.key}
                     type="button"
                     onClick={() => setChartMetric(tab.key)}
-                    className={`relative px-2.5 py-1 rounded-lg text-xs font-semibold transition whitespace-nowrap cursor-pointer ${
+                    className={`relative px-2.5 py-1 rounded-md text-xs font-semibold transition whitespace-nowrap cursor-pointer ${
                       chartMetric === tab.key
                         ? 'text-white dark:text-[#0D0F10]'
                         : 'text-[#5A6068] hover:text-[#0D0F10] dark:text-neutral-400 dark:hover:text-white'
@@ -351,7 +355,7 @@ export default function DashboardPage() {
                     {chartMetric === tab.key && (
                       <motion.span
                         layoutId="dashboard-chart-metric-pill"
-                        className="absolute inset-0 rounded-lg bg-[#0D0F10] dark:bg-[#84E818] shadow-xs"
+                        className="absolute inset-0 rounded-md bg-[#0D0F10] dark:bg-[#F7F8F6] shadow-xs"
                         transition={{ type: 'spring', stiffness: 420, damping: 32 }}
                       />
                     )}
@@ -364,7 +368,7 @@ export default function DashboardPage() {
                 aria-label="Pilih rentang waktu grafik"
                 value={periodRange}
                 onChange={(e) => setPeriodRange(e.target.value as 'week' | 'month')}
-                className="min-w-[118px] pl-3 pr-7 py-1.5 rounded-xl bg-[#F5F7F4] dark:bg-[#0E1113] border border-[#E6E8E4] dark:border-[#23282D] text-xs font-semibold text-[#0D0F10] dark:text-white cursor-pointer"
+                className="min-w-[118px] pl-3 pr-7 py-1.5 rounded-lg bg-[#F5F7F4] dark:bg-[#0E1113] border border-[#E3E6E0] dark:border-[#23282D] text-xs font-semibold text-[#0D0F10] dark:text-white cursor-pointer"
               >
                 <option value="week">Minggu ini</option>
                 <option value="month">Bulan ini</option>
@@ -422,7 +426,7 @@ export default function DashboardPage() {
         </div>
 
         {/* 35% Donut Makro (4 cols on 12-col grid) */}
-        <div className="lg:col-span-4 rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card flex flex-col justify-between">
+        <div className="lg:col-span-4 rounded-xl bg-white dark:bg-[#131618] p-5 border border-[#E3E6E0] dark:border-[#23282D] shadow-card flex flex-col justify-between">
           <div>
             <h2 className="text-sm font-semibold text-[#111111] dark:text-white">
               Komposisi Makro Harian
@@ -500,7 +504,7 @@ export default function DashboardPage() {
       {/* ROW 3 — 3 COLUMNS (Matches ref-1 table/card layout) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Column 1: Rencana Latihan Hari Ini */}
-        <div className="rounded-2xl bg-white dark:bg-[#161616] p-5 border border-[#EFEFEF] dark:border-[#262626] shadow-card flex flex-col justify-between">
+        <div className="rounded-xl bg-white dark:bg-[#131618] p-5 border border-[#E3E6E0] dark:border-[#23282D] shadow-card flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -545,9 +549,9 @@ export default function DashboardPage() {
                       setSelectedExerciseId(ex.id);
                       router.push(`/workout?exercise=${ex.id}`);
                     }}
-                    className="min-h-[38px] px-3 py-1.5 rounded-full bg-[#0D0F10] hover:bg-[#1B1F23] dark:bg-[#84E818] dark:hover:opacity-90 text-white dark:text-[#0D0F10] text-xs font-bold flex items-center gap-1 shrink-0 cursor-pointer transition"
+                    className="min-h-[36px] px-3 py-1.5 rounded-full bg-[#0D0F10] hover:bg-[#1B1F23] dark:bg-[#F7F8F6] dark:hover:bg-white text-white dark:text-[#0D0F10] text-xs font-bold flex items-center gap-1 shrink-0 cursor-pointer transition"
                   >
-                    <Play className="w-3 h-3 text-[#84E818] fill-[#84E818] dark:text-[#0D0F10] dark:fill-[#0D0F10]" />
+                    <Play className="w-3 h-3 text-[#84E818] fill-[#84E818] dark:text-[#448500] dark:fill-[#448500]" />
                     <span>Mulai</span>
                   </button>
                 </div>
@@ -566,7 +570,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Column 2: Aktivitas & Makanan Terbaru */}
-        <div className="rounded-2xl bg-white dark:bg-[#131618] p-5 border border-[#E6E8E4] dark:border-[#23282D] shadow-card flex flex-col justify-between">
+        <div className="rounded-xl bg-white dark:bg-[#131618] p-5 border border-[#E3E6E0] dark:border-[#23282D] shadow-card flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -582,7 +586,7 @@ export default function DashboardPage() {
 
             <div className="divide-y divide-[#EFEFEF] dark:divide-[#23282D]">
               {runSessions.length === 0 && workouts.length === 0 && nutritionLogs.length === 0 && (
-                <div className="py-6 px-3 text-center rounded-xl bg-[#F7F8F6] dark:bg-[#0E1113] border border-dashed border-[#DFE2DC] dark:border-[#262B30] my-1">
+                <div className="py-6 px-3 text-center rounded-lg bg-[#F7F8F6] dark:bg-[#0E1113] border border-dashed border-[#DFE2DC] dark:border-[#262B30] my-1">
                   <p className="text-xs font-semibold text-[#0D0F10] dark:text-white">
                     Hari ini masih bersih dari nol
                   </p>
@@ -592,9 +596,9 @@ export default function DashboardPage() {
                   <div className="flex flex-wrap items-center justify-center gap-2">
                     <Link
                       href="/run"
-                      className="min-h-[36px] px-3.5 py-1.5 rounded-full bg-[#0D0F10] dark:bg-[#84E818] text-white dark:text-[#0D0F10] text-[11px] font-bold inline-flex items-center gap-1 hover:opacity-90 transition"
+                      className="min-h-[36px] px-3.5 py-1.5 rounded-full bg-[#0D0F10] dark:bg-[#F7F8F6] text-white dark:text-[#0D0F10] text-[11px] font-bold inline-flex items-center gap-1 hover:opacity-90 transition"
                     >
-                      <MapPin className="w-3 h-3 text-[#84E818] dark:text-[#0D0F10]" />
+                      <MapPin className="w-3 h-3 text-[#84E818] dark:text-[#448500]" />
                       <span>Mulai Lari</span>
                     </Link>
                     <Link
@@ -702,24 +706,27 @@ export default function DashboardPage() {
         </div>
 
         {/* Column 3: Waktu Sholat (Hitung Mundur) + Tombol +250ml + Checklist 5 Golden Rules */}
-        <div className="rounded-2xl bg-white dark:bg-[#131618] p-5 border border-[#E6E8E4] dark:border-[#23282D] shadow-card flex flex-col justify-between">
+        <div className="rounded-xl bg-white dark:bg-[#131618] p-5 border border-[#E3E6E0] dark:border-[#23282D] shadow-card flex flex-col justify-between">
           <div>
-            {/* Prayer Countdown Banner */}
-            <div className="rounded-xl bg-[#0D0F10] text-white p-3.5 border border-[#23282D] mb-4 flex items-center justify-between">
+            {/* Polarity-Inverted Prayer Countdown Banner */}
+            <div className="rounded-lg bg-[#0D0F10] dark:bg-[#F7F8F6] text-white dark:text-[#0D0F10] p-3.5 border border-[#23282D] dark:border-[#DDE1DA] mb-4 flex items-center justify-between">
               <div>
-                <div className="flex items-center gap-1.5 text-[11px] text-neutral-400">
-                  <Clock className="w-3.5 h-3.5 text-[#84E818]" />
+                <div className="flex items-center gap-1.5 text-[11px] text-neutral-400 dark:text-[#5A6068]">
+                  <Clock className="w-3.5 h-3.5 text-[#84E818] dark:text-[#448500]" />
                   <span>Sholat Berikutnya · {prayerSchedule.city}</span>
                 </div>
-                <p className="text-sm font-bold text-white mt-0.5">
+                <p className="text-sm font-bold text-white dark:text-[#0D0F10] mt-0.5">
                   {nowDate ? `${nextPrayer.label} (${nextPrayer.timeStr} WIB)` : 'Memuat Jadwal...'}
                 </p>
               </div>
               <div className="text-right">
-                <span className="text-base font-extrabold text-[#84E818] font-telemetry block">
+                <span className="text-base font-extrabold text-[#84E818] dark:text-[#3D7A00] font-telemetry block">
                   {nowDate ? `-${nextPrayer.formattedCountdown}` : '--:--:--'}
                 </span>
-                <Link href="/jadwal" className="text-[11px] text-neutral-400 hover:text-white underline">
+                <Link
+                  href="/jadwal"
+                  className="text-[11px] text-neutral-400 dark:text-[#5A6068] hover:text-white dark:hover:text-[#0D0F10] underline"
+                >
                   Detail Jadwal
                 </Link>
               </div>
@@ -738,7 +745,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => addWaterMl(250)}
-                className="inline-flex items-center gap-1 min-h-[40px] px-4 py-2 rounded-full bg-[#0D0F10] dark:bg-[#84E818] text-[#84E818] dark:text-[#0D0F10] text-xs font-bold hover:opacity-92 transition cursor-pointer shrink-0"
+                className="inline-flex items-center gap-1 min-h-[38px] px-4 py-2 rounded-full bg-[#0D0F10] dark:bg-[#F7F8F6] text-[#84E818] dark:text-[#0D0F10] text-xs font-bold hover:opacity-92 transition cursor-pointer shrink-0"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>250ml</span>
@@ -758,7 +765,7 @@ export default function DashboardPage() {
                       key={rule.key}
                       type="button"
                       onClick={() => toggleGoldenRule(rule.key)}
-                      className="w-full min-h-[42px] flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-[#F8F9FA] dark:bg-[#0E0E0E] hover:bg-neutral-100 dark:hover:bg-[#1E1E1E] border border-[#EFEFEF] dark:border-[#262626] text-left transition cursor-pointer"
+                      className="w-full min-h-[42px] flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[#F8F9FA] dark:bg-[#0E0E0E] hover:bg-neutral-100 dark:hover:bg-[#1E1E1E] border border-[#E3E6E0] dark:border-[#23282D] text-left transition cursor-pointer"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <CheckCircle2

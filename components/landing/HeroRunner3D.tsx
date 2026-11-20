@@ -257,71 +257,75 @@ export function HeroRunner3D({ displayMode = 'muscle' }: HeroRunner3DProps) {
     // Symmetrical Matte-Satin Anatomical Clay PBR Materials (Exact Match with Studio 3D)
     const skinMat = new THREE.MeshPhysicalMaterial({
       color: 0xdfc5a4,
-      roughness: 0.64,
+      map: pbr.skinAlbedoMap,
+      roughness: 0.68,
       metalness: 0.02,
-      clearcoat: 0.04,
-      clearcoatRoughness: 0.68,
-      sheen: 0.28,
-      sheenRoughness: 0.72,
+      clearcoat: 0.03,
+      clearcoatRoughness: 0.72,
+      sheen: 0.30,
+      sheenRoughness: 0.74,
       sheenColor: new THREE.Color(0xf7e8d6),
       normalMap: pbr.skinNormalMap,
-      normalScale: new THREE.Vector2(0.42, 0.42),
+      normalScale: new THREE.Vector2(0.76, 0.76),
       bumpMap: pbr.skinBumpMap,
-      bumpScale: 0.0035,
+      bumpScale: 0.0055,
       roughnessMap: pbr.skinRoughnessMap,
     });
 
     const activeAccentMat = new THREE.MeshPhysicalMaterial({
       color: 0xe53935,
+      map: pbr.skinAlbedoMap,
       emissive: new THREE.Color(0xb71c1c),
-      emissiveIntensity: 0.28,
-      roughness: 0.52,
+      emissiveIntensity: 0.26,
+      roughness: 0.56,
       metalness: 0.03,
-      clearcoat: 0.05,
-      clearcoatRoughness: 0.60,
-      sheen: 0.26,
-      sheenRoughness: 0.66,
+      clearcoat: 0.04,
+      clearcoatRoughness: 0.64,
+      sheen: 0.28,
+      sheenRoughness: 0.68,
       sheenColor: new THREE.Color(0xffb4a2),
       normalMap: pbr.skinNormalMap,
-      normalScale: new THREE.Vector2(0.50, 0.50),
+      normalScale: new THREE.Vector2(0.78, 0.78),
       bumpMap: pbr.skinBumpMap,
-      bumpScale: 0.004,
+      bumpScale: 0.0055,
       roughnessMap: pbr.skinRoughnessMap,
     });
 
     const charcoalFabricMat = new THREE.MeshPhysicalMaterial({
       color: 0x252a34,
-      roughness: 0.84,
+      map: pbr.fabricAlbedoMap,
+      roughness: 0.86,
       metalness: 0.03,
-      sheen: 0.22,
-      sheenRoughness: 0.76,
+      sheen: 0.24,
+      sheenRoughness: 0.78,
       sheenColor: new THREE.Color(0x475569),
       normalMap: pbr.fabricNormalMap,
-      normalScale: new THREE.Vector2(0.58, 0.58),
+      normalScale: new THREE.Vector2(0.84, 0.84),
       bumpMap: pbr.fabricBumpMap,
-      bumpScale: 0.005,
+      bumpScale: 0.0065,
       roughnessMap: pbr.fabricRoughnessMap,
     });
 
     const boneMat = new THREE.MeshPhysicalMaterial({
       color: 0xf4ecda,
-      roughness: 0.44,
-      metalness: 0.06,
-      clearcoat: 0.12,
-      clearcoatRoughness: 0.48,
+      map: pbr.boneAlbedoMap,
+      roughness: 0.48,
+      metalness: 0.05,
+      clearcoat: 0.10,
+      clearcoatRoughness: 0.52,
       emissive: new THREE.Color(0x3a2e1a),
-      emissiveIntensity: 0.18,
+      emissiveIntensity: 0.15,
       normalMap: pbr.boneNormalMap,
-      normalScale: new THREE.Vector2(0.45, 0.45),
+      normalScale: new THREE.Vector2(0.72, 0.72),
       roughnessMap: pbr.boneRoughnessMap,
     });
 
     const jointBeaconMat = new THREE.MeshPhysicalMaterial({
       color: 0x84e818,
-      emissive: new THREE.Color(0x5bb808),
+      emissive: new THREE.Color(0x4ea306),
       emissiveIntensity: 0.65,
       roughness: 0.24,
-      metalness: 0.30,
+      metalness: 0.28,
       clearcoat: 0.42,
     });
 
@@ -495,10 +499,10 @@ export function HeroRunner3D({ displayMode = 'muscle' }: HeroRunner3DProps) {
       const shoulderPivot = new THREE.Group();
       shoulderPivot.position.set(xSign * 0.192, 0.032, 0);
 
-      // Seamless rounded deltoid shoulder dome bridging torso & humerus
-      const deltoidCap = new THREE.Mesh(new THREE.SphereGeometry(0.068, 18, 14), activeAccentMat);
-      deltoidCap.scale.set(0.96, 1.04, 0.98);
-      deltoidCap.position.set(0, -0.008, 0);
+      // Seamless rounded deltoid shoulder dome tucked medially to bridge torso & humerus
+      const deltoidCap = new THREE.Mesh(new THREE.SphereGeometry(0.064, 18, 14), activeAccentMat);
+      deltoidCap.scale.set(0.98, 1.04, 0.98);
+      deltoidCap.position.set(-xSign * 0.008, -0.008, 0);
       shoulderPivot.add(deltoidCap);
 
       // Continuous Deltoid + Upper Arm Loft (symmetrical L/R matte-satin clay)
@@ -597,6 +601,12 @@ export function HeroRunner3D({ displayMode = 'muscle' }: HeroRunner3DProps) {
       const xSign = side === 'left' ? -1 : 1;
       const hipPivot = new THREE.Group();
       hipPivot.position.set(xSign * 0.098, -0.02, 0);
+
+      // Seamless trochanter hip socket bridge (prevents thigh/pelvis separation at high knee drive)
+      const hipCap = new THREE.Mesh(new THREE.SphereGeometry(0.086, 18, 14), charcoalFabricMat);
+      hipCap.scale.set(0.98, 1.02, 1.04);
+      hipCap.position.set(-xSign * 0.010, -0.006, -0.004);
+      hipPivot.add(hipCap);
 
       // Continuous Sculpted Thigh Loft (Shorts Hem -> Quadriceps/Hamstring -> Knee)
       const thighSections: LoftProfile[] = [
@@ -704,6 +714,8 @@ export function HeroRunner3D({ displayMode = 'muscle' }: HeroRunner3DProps) {
     // ============================================================================
     const skeletonGroup = new THREE.Group();
     skeletonGroup.visible = false;
+    skeletonGroup.renderOrder = 1;
+    runner.renderOrder = 2;
     scene.add(skeletonGroup);
 
     const makeBone = (rTop: number, rBot: number) => {
@@ -718,73 +730,73 @@ export function HeroRunner3D({ displayMode = 'muscle' }: HeroRunner3DProps) {
     };
 
     const skullGroup = new THREE.Group();
-    const skCranium = new THREE.Mesh(new THREE.SphereGeometry(0.064, 18, 16), boneMat);
-    skCranium.scale.set(0.92, 1.06, 1.05);
-    skCranium.position.set(0, 0.19, 0.004);
-    const skJaw = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.026, 0.052, 12), boneMat);
-    skJaw.position.set(0, 0.132, 0.016);
+    const skCranium = new THREE.Mesh(new THREE.SphereGeometry(0.054, 18, 16), boneMat);
+    skCranium.scale.set(0.90, 1.04, 1.02);
+    skCranium.position.set(0, 0.19, 0.002);
+    const skJaw = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.021, 0.044, 12), boneMat);
+    skJaw.position.set(0, 0.136, 0.012);
     skullGroup.add(skCranium, skJaw);
     skeletonGroup.add(skullGroup);
 
     const ribGroup = new THREE.Group();
     [
-      { rx: 0.11, rz: 0.075, y: 0.08 },
-      { rx: 0.132, rz: 0.09, y: 0.04 },
-      { rx: 0.136, rz: 0.092, y: 0.0 },
-      { rx: 0.124, rz: 0.084, y: -0.04 },
-      { rx: 0.108, rz: 0.072, y: -0.08 },
+      { rx: 0.088, rz: 0.058, y: 0.075 },
+      { rx: 0.104, rz: 0.070, y: 0.038 },
+      { rx: 0.108, rz: 0.072, y: 0.0 },
+      { rx: 0.098, rz: 0.065, y: -0.038 },
+      { rx: 0.084, rz: 0.055, y: -0.075 },
     ].forEach((r) => {
-      const rib = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.08, 8, 24), boneMat);
+      const rib = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.074, 8, 24), boneMat);
       rib.rotation.x = Math.PI / 2;
-      rib.scale.set(r.rx, r.rz, 0.12);
+      rib.scale.set(r.rx, r.rz, 0.11);
       rib.position.y = r.y;
       ribGroup.add(rib);
     });
-    const skSternum = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.155, 0.014), boneMat);
-    skSternum.position.set(0, 0.0, 0.086);
+    const skSternum = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.140, 0.010), boneMat);
+    skSternum.position.set(0, 0.0, 0.068);
     ribGroup.add(skSternum);
     skeletonGroup.add(ribGroup);
 
     const skPelvisGroup = new THREE.Group();
-    const skIliumL = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.014, 8, 18), boneMat);
-    skIliumL.position.set(-0.066, 0.01, 0);
+    const skIliumL = new THREE.Mesh(new THREE.TorusGeometry(0.048, 0.011, 8, 18), boneMat);
+    skIliumL.position.set(-0.054, 0.008, 0);
     skIliumL.rotation.y = Math.PI * 0.25;
-    const skIliumR = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.014, 8, 18), boneMat);
-    skIliumR.position.set(0.066, 0.01, 0);
+    const skIliumR = new THREE.Mesh(new THREE.TorusGeometry(0.048, 0.011, 8, 18), boneMat);
+    skIliumR.position.set(0.054, 0.008, 0);
     skIliumR.rotation.y = -Math.PI * 0.25;
     skPelvisGroup.add(skIliumL, skIliumR);
     skeletonGroup.add(skPelvisGroup);
 
     const skVertebrae: THREE.Mesh[] = Array.from({ length: 7 }, () => {
-      const v = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.022, 0.036, 10), boneMat);
+      const v = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.017, 0.034, 10), boneMat);
       skeletonGroup.add(v);
       return v;
     });
 
-    const skClavL = makeBone(0.011, 0.010);
-    const skClavR = makeBone(0.011, 0.010);
-    const skHumL = makeBone(0.017, 0.013);
-    const skHumR = makeBone(0.017, 0.013);
-    const skForeL = makeBone(0.014, 0.011);
-    const skForeR = makeBone(0.014, 0.011);
-    const skFemL = makeBone(0.021, 0.017);
-    const skFemR = makeBone(0.021, 0.017);
-    const skTibL = makeBone(0.016, 0.012);
-    const skTibR = makeBone(0.016, 0.012);
+    const skClavL = makeBone(0.009, 0.008);
+    const skClavR = makeBone(0.009, 0.008);
+    const skHumL = makeBone(0.014, 0.011);
+    const skHumR = makeBone(0.014, 0.011);
+    const skForeL = makeBone(0.010, 0.008);
+    const skForeR = makeBone(0.010, 0.008);
+    const skFemL = makeBone(0.017, 0.014);
+    const skFemR = makeBone(0.017, 0.014);
+    const skTibL = makeBone(0.013, 0.009);
+    const skTibR = makeBone(0.013, 0.009);
 
-    const jNeck = makeJoint(0.020);
-    const jShL = makeJoint(0.024);
-    const jShR = makeJoint(0.024);
-    const jElL = makeJoint(0.019);
-    const jElR = makeJoint(0.019);
-    const jWrL = makeJoint(0.014);
-    const jWrR = makeJoint(0.014);
-    const jHipL = makeJoint(0.026);
-    const jHipR = makeJoint(0.026);
-    const jKnL = makeJoint(0.022);
-    const jKnR = makeJoint(0.022);
-    const jAnL = makeJoint(0.017);
-    const jAnR = makeJoint(0.017);
+    const jNeck = makeJoint(0.015);
+    const jShL = makeJoint(0.018);
+    const jShR = makeJoint(0.018);
+    const jElL = makeJoint(0.014);
+    const jElR = makeJoint(0.014);
+    const jWrL = makeJoint(0.010);
+    const jWrR = makeJoint(0.010);
+    const jHipL = makeJoint(0.019);
+    const jHipR = makeJoint(0.019);
+    const jKnL = makeJoint(0.016);
+    const jKnR = makeJoint(0.016);
+    const jAnL = makeJoint(0.012);
+    const jAnR = makeJoint(0.012);
 
     const applyDisplayMode = (mode: MannequinDisplayMode) => {
       const isXray = mode === 'xray';
@@ -907,17 +919,39 @@ export function HeroRunner3D({ displayMode = 'muscle' }: HeroRunner3DProps) {
 
     let targetYaw = -0.58;
     let targetPitch = 0;
+    let dragYawOffset = 0;
+    let isDragging = false;
+    let lastDragX = 0;
+
+    const onPointerDown = (e: PointerEvent) => {
+      isDragging = true;
+      lastDragX = e.clientX;
+    };
+    const onPointerUp = () => {
+      isDragging = false;
+    };
     const onPointerMove = (e: PointerEvent) => {
-      const rect = container.getBoundingClientRect();
-      const nx = ((e.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
-      const ny = ((e.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1;
-      targetYaw = -0.58 + nx * 0.45;
-      targetPitch = ny * 0.10;
+      if (isDragging) {
+        const dx = e.clientX - lastDragX;
+        lastDragX = e.clientX;
+        dragYawOffset += dx * 0.012;
+        return;
+      }
+      if (e.pointerType === 'mouse') {
+        const rect = container.getBoundingClientRect();
+        const nx = ((e.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+        const ny = ((e.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1;
+        targetYaw = -0.58 + nx * 0.45;
+        targetPitch = ny * 0.09;
+      }
     };
     const onPointerLeave = () => {
+      isDragging = false;
       targetYaw = -0.58;
       targetPitch = 0;
     };
+    container.addEventListener('pointerdown', onPointerDown, { passive: true });
+    window.addEventListener('pointerup', onPointerUp, { passive: true });
     container.addEventListener('pointermove', onPointerMove, { passive: true });
     container.addEventListener('pointerleave', onPointerLeave, { passive: true });
 
@@ -989,24 +1023,24 @@ export function HeroRunner3D({ displayMode = 'muscle' }: HeroRunner3DProps) {
       headPivot.rotation.x = -0.34;
       headPivot.rotation.y = swing * 0.10;
 
-      leftLeg.hipPivot.rotation.x = -swing * 0.92 - 0.18;
-      leftLeg.kneePivot.rotation.x = 0.24 + liftL * 1.18 + Math.max(0, -swing) * 0.30;
-      leftLeg.footPivot.rotation.x = -0.18 + liftL * 0.34;
+      leftLeg.hipPivot.rotation.x = -swing * 0.84 - 0.14;
+      leftLeg.kneePivot.rotation.x = 0.22 + liftL * 1.05 + Math.max(0, -swing) * 0.24;
+      leftLeg.footPivot.rotation.x = -0.14 + liftL * 0.28;
 
-      rightLeg.hipPivot.rotation.x = swing * 0.92 - 0.18;
-      rightLeg.kneePivot.rotation.x = 0.24 + liftR * 1.18 + Math.max(0, swing) * 0.30;
-      rightLeg.footPivot.rotation.x = -0.18 + liftR * 0.34;
+      rightLeg.hipPivot.rotation.x = swing * 0.84 - 0.14;
+      rightLeg.kneePivot.rotation.x = 0.22 + liftR * 1.05 + Math.max(0, swing) * 0.24;
+      rightLeg.footPivot.rotation.x = -0.14 + liftR * 0.28;
 
-      leftArm.shoulderPivot.rotation.x = swing * 0.96;
-      leftArm.shoulderPivot.rotation.z = -0.14;
-      leftArm.elbowPivot.rotation.x = -1.16 - Math.max(0, swing) * 0.38;
+      leftArm.shoulderPivot.rotation.x = swing * 0.88;
+      leftArm.shoulderPivot.rotation.z = -0.16;
+      leftArm.elbowPivot.rotation.x = -1.08 - Math.max(0, swing) * 0.30;
 
-      rightArm.shoulderPivot.rotation.x = -swing * 0.96;
-      rightArm.shoulderPivot.rotation.z = 0.14;
-      rightArm.elbowPivot.rotation.x = -1.16 - Math.max(0, -swing) * 0.38;
+      rightArm.shoulderPivot.rotation.x = -swing * 0.88;
+      rightArm.shoulderPivot.rotation.z = 0.16;
+      rightArm.elbowPivot.rotation.x = -1.08 - Math.max(0, -swing) * 0.30;
 
-      const autoYaw = prefersReducedMotion ? 0 : Math.sin(elapsed * 0.35) * 0.26;
-      runner.rotation.y += (targetYaw + autoYaw - runner.rotation.y) * 0.08;
+      const autoYaw = prefersReducedMotion || isDragging ? 0 : Math.sin(elapsed * 0.35) * 0.22;
+      runner.rotation.y += (targetYaw + dragYawOffset + autoYaw - runner.rotation.y) * 0.10;
       runner.rotation.x += (targetPitch - runner.rotation.x) * 0.08;
 
       const shadowScale = 1 - bounce * 0.65;
@@ -1081,6 +1115,8 @@ export function HeroRunner3D({ displayMode = 'muscle' }: HeroRunner3DProps) {
       observer?.disconnect();
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('resize', handleResize);
+      container.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointerup', onPointerUp);
       container.removeEventListener('pointermove', onPointerMove);
       container.removeEventListener('pointerleave', onPointerLeave);
       renderer.domElement.removeEventListener('webglcontextlost', onContextLost);
@@ -1094,7 +1130,7 @@ export function HeroRunner3D({ displayMode = 'muscle' }: HeroRunner3DProps) {
 
   if (!webGLOk) {
     return (
-      <div className="w-full h-full flex items-center justify-center rounded-3xl bg-[#111114] border border-[#27272E] text-neutral-400 text-xs p-6 text-center">
+      <div className="w-full h-full flex items-center justify-center rounded-xl bg-[#111114] border border-[#27272E] text-neutral-400 text-xs p-6 text-center">
         Pratinjau 3D membutuhkan WebGL aktif pada peramban Anda.
       </div>
     );
@@ -1104,7 +1140,7 @@ export function HeroRunner3D({ displayMode = 'muscle' }: HeroRunner3DProps) {
     <div
       ref={mountRef}
       data-testid="hero-runner-3d"
-      className="w-full h-full min-h-[320px] sm:min-h-[420px] select-none"
+      className="w-full h-full min-h-[320px] sm:min-h-[420px] select-none touch-pan-y cursor-grab active:cursor-grabbing"
     />
   );
 }

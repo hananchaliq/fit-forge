@@ -110,11 +110,11 @@ export function WelcomeGuideModal() {
       aria-modal="true"
       aria-labelledby="fitforge-guide-title"
     >
-      <div className="w-full max-w-2xl rounded-3xl bg-white dark:bg-[#131618] border border-[#E6E8E4] dark:border-[#262B30] text-[#0D0F10] dark:text-white shadow-2xl overflow-hidden">
+      <div className="w-full max-w-2xl rounded-xl bg-white dark:bg-[#131618] border border-[#E6E8E4] dark:border-[#262B30] text-[#0D0F10] dark:text-white shadow-2xl overflow-hidden">
         {/* Top Header */}
         <div className="px-6 py-4 bg-[#F7F8F6] dark:bg-[#0B0D0E] border-b border-[#E6E8E4] dark:border-[#23282D] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#0D0F10] dark:bg-[#84E818] text-[#84E818] dark:text-[#0D0F10] flex items-center justify-center font-black">
+            <div className="w-8 h-8 rounded-lg bg-[#0D0F10] dark:bg-[#F7F8F6] text-[#84E818] dark:text-[#0D0F10] flex items-center justify-center font-black">
               <BookOpen className="w-4 h-4 stroke-[2.5]" />
             </div>
             <div>
@@ -172,7 +172,7 @@ export function WelcomeGuideModal() {
             {currentStep.description}
           </p>
 
-          <div className="rounded-2xl bg-[#F7F8F6] dark:bg-[#0B0D0E] border border-[#E6E8E4] dark:border-[#23282D] p-4 space-y-2.5 mb-5">
+          <div className="rounded-lg bg-[#F7F8F6] dark:bg-[#0B0D0E] border border-[#E6E8E4] dark:border-[#23282D] p-4 space-y-2.5 mb-5">
             {currentStep.bullets.map((b, i) => (
               <div key={i} className="flex items-start gap-2.5 text-xs sm:text-sm text-[#2A3036] dark:text-neutral-200">
                 <CheckCircle2 className="w-4 h-4 text-[#448500] dark:text-[#84E818] shrink-0 mt-0.5" />
@@ -217,7 +217,7 @@ export function WelcomeGuideModal() {
               <button
                 type="button"
                 onClick={dismissGuide}
-                className="px-4 py-2 rounded-full bg-[#0D0F10] dark:bg-[#84E818] text-white dark:text-[#0D0F10] text-xs font-extrabold hover:opacity-92 transition cursor-pointer"
+                className="px-4 py-2 rounded-full bg-[#0D0F10] dark:bg-[#F7F8F6] text-white dark:text-[#0D0F10] text-xs font-extrabold hover:opacity-92 transition cursor-pointer"
               >
                 Mengerti &amp; Mulai Gunakan
               </button>

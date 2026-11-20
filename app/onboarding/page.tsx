@@ -198,17 +198,17 @@ export default function OnboardingPage() {
                   key={item}
                   type="button"
                   onClick={() => setGoal(item)}
-                  className={`p-3 rounded-xl border text-left text-xs font-semibold transition cursor-pointer ${
+                  className={`p-3 rounded-lg border text-left text-xs font-semibold transition cursor-pointer ${
                     goal === item
-                      ? 'bg-[#0D0F10] border-[#84E818] text-white'
+                      ? 'bg-[#0D0F10] dark:bg-[#F7F8F6] border-[#84E818] text-white dark:text-[#0D0F10]'
                       : 'bg-[#F7F8F6] dark:bg-[#0B0D0E] border-[#E6E8E4] dark:border-[#23272A] text-[#646A6E] dark:text-neutral-400 hover:text-[#0D0F10] dark:hover:text-white'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className={goal === item ? 'text-[#84E818]' : 'text-[#3D7A00] dark:text-[#84E818]'}>
+                    <span className={goal === item ? 'text-[#84E818] dark:text-[#3D7A00]' : 'text-[#3D7A00] dark:text-[#84E818]'}>
                       Target
                     </span>
-                    {goal === item && <CheckCircle2 className="w-4 h-4 text-[#84E818]" />}
+                    {goal === item && <CheckCircle2 className="w-4 h-4 text-[#84E818] dark:text-[#3D7A00]" />}
                   </div>
                   <p>{item}</p>
                 </button>
@@ -267,7 +267,7 @@ export default function OnboardingPage() {
                 <button
                   type="button"
                   onClick={handleDetectGps}
-                  className="px-3 py-2.5 rounded-xl bg-[#0D0F10] hover:bg-[#1E2225] border border-[#23272A] text-xs font-semibold text-[#84E818] flex items-center gap-1 shrink-0 cursor-pointer"
+                  className="px-3 py-2.5 rounded-lg bg-[#0D0F10] dark:bg-[#F7F8F6] hover:opacity-90 border border-[#23272A] dark:border-[#DDE1DA] text-xs font-semibold text-[#84E818] dark:text-[#3D7A00] flex items-center gap-1 shrink-0 cursor-pointer"
                 >
                   <MapPin className="w-3.5 h-3.5" />
                   <span>GPS</span>
@@ -296,10 +296,10 @@ export default function OnboardingPage() {
 
           <button
             type="submit"
-            className="w-full min-h-[48px] py-3.5 rounded-full bg-[#0D0F10] hover:bg-[#1E2225] dark:bg-[#84E818] dark:hover:bg-[#76D610] text-white dark:text-[#0D0F10] font-bold text-sm transition flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full min-h-[48px] py-3.5 rounded-full bg-[#0D0F10] hover:opacity-92 dark:bg-[#F7F8F6] text-white dark:text-[#0D0F10] font-bold text-sm transition flex items-center justify-center gap-2 cursor-pointer"
           >
             <span>Simpan Profil &amp; Buka FitForge</span>
-            <ArrowRight className="w-4 h-4 text-[#84E818] dark:text-[#0D0F10]" />
+            <ArrowRight className="w-4 h-4 text-[#84E818] dark:text-[#448500]" />
           </button>
         </form>
       </div>
